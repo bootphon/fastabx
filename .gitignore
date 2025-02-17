@@ -7,3 +7,4 @@ __pycache__
 *.code-workspace
 .envrc
 build
+doc/source/examples

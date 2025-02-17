@@ -1,4 +1,4 @@
-# Fast ABX
+# Fast ABX discrimination test
 
 ## Motivation
 
