@@ -8,13 +8,11 @@ from fastabx.subsample import Subsampler
 from fastabx.utils import Environment
 from fastabx.verify import verify_dataset_labels, verify_task_conditions
 
-__all__ = ["Task"]
-
 
 class Task:
     """The ABX task class.
 
-    A Task builds all the Cells given 'on', 'by' and 'across' conditions.
+    A Task builds all the :py:class:`.Cell` given ``on``, ``by`` and ``across`` conditions.
     It can be subsampled to limit the number of cells.
     """
 

@@ -40,7 +40,7 @@ class PooledDataset(Dataset):
 
 
 def pooling(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
-    """Apply pooling on a dataset.
+    """Pool the :py:class:`.Dataset` using the pooling method given by ``pooling_name``.
 
     The pooled dataset is a new one, with data stored in memory.
     For simplicity, we iterate through the original dataset and

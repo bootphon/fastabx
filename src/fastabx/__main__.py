@@ -24,13 +24,13 @@ def main() -> None:
     score = zerospeech_abx(
         args.item,
         args.features,
-        args.speaker,
-        args.context,
-        args.distance,
-        args.frequency,
-        args.max_size_group,
-        args.max_x_across,
-        args.seed,
+        speaker=args.speaker,
+        context=args.context,
+        distance=args.distance,
+        frequency=args.frequency,
+        max_size_group=args.max_size_group,
+        max_x_across=args.max_x_across,
+        seed=args.seed,
     )
     print(f"ABX error rate: {score:.3%}")  # noqa: T201
 

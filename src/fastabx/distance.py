@@ -84,7 +84,7 @@ def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
 
 
 def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute the distance matrices between all A and X, and all B and X in the cell."""
+    """Compute the distance matrices between all A and X, and all B and X in the ``cell``, for a given ``distance``."""
     (a, sa), (b, sb), (x, sx) = (cell.a.data, cell.a.sizes), (cell.b.data, cell.b.sizes), (cell.x.data, cell.x.sizes)
     if cell.use_dtw:
         dxa = dtw_batch(distance(x, a), sx, sa, symmetric=cell.is_symmetric)
@@ -95,7 +95,7 @@ def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torc
 
 
 def abx_on_cell(cell: Cell, distance: Distance) -> float:
-    """Compute the ABX of a `cell` using the given `distance`."""
+    """Compute the ABX of a ``cell`` using the given ``distance``."""
     dxa, dxb = distance_on_cell(cell, distance)
     if cell.is_symmetric:
         dxa.fill_diagonal_(dxb.max() + 1)

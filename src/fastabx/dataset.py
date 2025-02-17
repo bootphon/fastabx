@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from fastabx.utils import Environment
 
-__all__ = ["Dataset"]
+type FeatureMaker = Callable[[str | Path], torch.Tensor]
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ def load_data_from_item(
     paths: dict[str, Path],
     metadata: pl.DataFrame,
     frequency: int,
-    feature_maker: Callable[[str | Path], torch.Tensor],
+    feature_maker: FeatureMaker,
     *,
     normalize: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
@@ -139,7 +139,11 @@ def load_data_from_item(
 
 @dataclass(frozen=True)
 class Dataset:
-    """A dataset is made of labels and a data accessor."""
+    """Simple interface to a dataset.
+
+    :param labels: ``pl.DataFrame`` containing the labels of the datapoints.
+    :param accessor: ``DataAccessor`` to access the data.
+    """
 
     labels: pl.DataFrame
     accessor: DataAccessor
@@ -153,7 +157,7 @@ class Dataset:
         item: str | Path,
         root: str | Path,
         frequency: int,
-        feature_maker: Callable[[str | Path], torch.Tensor],
+        feature_maker: FeatureMaker,
         *,
         normalize: bool = True,
         extension: str = ".pt",

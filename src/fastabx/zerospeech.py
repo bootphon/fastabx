@@ -5,31 +5,47 @@ from typing import Literal
 
 import torch
 
-from fastabx.dataset import Dataset
+from fastabx.dataset import Dataset, FeatureMaker
 from fastabx.score import Score
 from fastabx.subsample import Subsampler
 from fastabx.task import Task
 
-__all__ = ["zerospeech_abx"]
-
 
 def zerospeech_abx(  # noqa: PLR0913
     item: str | Path,
-    features: str | Path,
-    speaker: Literal["within", "across"],
+    root: str | Path,
+    *,
+    speaker: Literal["within", "across"] = "within",
     context: Literal["within", "any"] = "within",
     distance: Literal["cosine", "euclidean", "kl_symmetric", "identical"] = "cosine",
     frequency: int = 50,
+    feature_maker: FeatureMaker = torch.load,
     max_size_group: int = 10,
     max_x_across: int = 5,
+    extension: str = ".pt",
     seed: int = 0,
 ) -> float:
     """Compute the ABX similarly to the ZeroSpeech 2021 challenge.
 
     On triphone or phoneme, described by an item file.
     Within or across speaker, and within context or ignoring context.
+
+    :param item: the item file
+    :param root: the root directory containing either the features or the audio files
+    :param speaker: the speaker mode, either "within" or "across"
+    :param context: the context mode, either "within" or "any"
+    :param distance: the distance metric, either "cosine", "euclidean", "kl_symmetric" or "identical"
+    :param frequency: the feature frequency of the features / the output of the feature maker, in Hz. Default is 50 Hz
+    :param feature_maker: the feature maker. Defaults to just loading the file with torch.load
+    :param max_size_group: maximum number of instances of A, B, or X in each :py:class:`.Cell`. Default is 10.
+        Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`
+    :param max_x_across: in the "across" speaker mode, maximum number of X considered for given values of A and B.
+        Default is 5. Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`
+    :param extension: the filename extension of the files to process in ``root``, default is ".pt"
+    :param seed: the random seed for the subsampling, default is 0
     """
-    dataset = Dataset.from_item(item, features, frequency, torch.load)
+    normalize = distance in ("cosine", "angular")
+    dataset = Dataset.from_item(item, root, frequency, feature_maker, normalize=normalize, extension=extension)
     by: list[str] | None
     across: list[str] | None
     match (speaker, context):

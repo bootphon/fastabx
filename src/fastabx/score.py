@@ -10,8 +10,6 @@ from fastabx.distance import DistanceName, abx_on_cell, distance_function
 from fastabx.task import Task
 from fastabx.verify import format_score_levels, verify_score_levels
 
-__all__ = ["Score"]
-
 MIN_CELLS_FOR_TQDM = 50
 
 
@@ -26,7 +24,7 @@ def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
 
 
 class Score:
-    """Compute the score of a task using a given distance."""
+    """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``."""
 
     def __init__(self, task: Task, distance_name: DistanceName) -> None:
         scores, sizes = [], []
@@ -60,7 +58,10 @@ class Score:
             self.cells.write_csv(file)
 
     def collapse(self, *, levels: list[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
-        """Collapse the scored cells into the final score."""
+        """Collapse the scored cells into the final score.
+
+        :param levels: List of levels to collapse. The order matters a lot.
+        """
         if weighted:
             if levels is not None:
                 raise ValueError("Cannot set `weighted=True` and `levels` at the same time.")
