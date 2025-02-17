@@ -38,6 +38,8 @@ class DataAccessor(abc.ABC):
     A data accessor is a way to access a torch.Tensor given an index.
     """
 
+    device: torch.device = Environment().device
+
     @abc.abstractmethod
     def __getitem__(self, i: int) -> torch.Tensor:
         pass
@@ -59,7 +61,6 @@ class InMemoryAccessor(DataAccessor):
     """Data accessor where everything is in memory."""
 
     def __init__(self, indices: dict[int, tuple[int, int]], data: torch.Tensor) -> None:
-        self.device = Environment().device
         self.indices = indices
         self.data = data.to(self.device)
 
@@ -165,6 +166,24 @@ class Dataset:
         metadata = labels[["#file", "onset", "offset"]].with_row_index()
         paths = find_all_files(root, extension)
         indices, data = load_data_from_item(paths, metadata, frequency, feature_maker, normalize=normalize)
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+
+    @classmethod
+    def from_item_fairseq(
+        cls,
+        item: str | Path,
+        manifest: str | Path,
+        npy: str | Path,
+        len: str | Path,
+        *,
+        normalize: bool = True,
+    ) -> "Dataset":
+        labels = pl.read_csv(item, separator=" ")
+        if set(labels.columns) != {"#file", "onset", "offset", "#phone", "prev-phone", "next-phone", "speaker"}:
+            raise ValueError("Invalid item file")
+        metadata = labels[["#file", "onset", "offset"]].with_row_index()
+        data = torch.load(npy, mmap=True)
+
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
