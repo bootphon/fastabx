@@ -5,6 +5,7 @@ requires = [
     "torch==2.6.0",
     "numpy>=2.0.2",
     "ninja>=1.11",
+    "cython",
 ]
 build-backend = "setuptools.build_meta"
 

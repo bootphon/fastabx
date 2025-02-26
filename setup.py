@@ -4,11 +4,23 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 from setuptools import Extension, setup
 from torch.utils.cpp_extension import CUDA_HOME, BuildExtension, CppExtension, CUDAExtension
 
 
-def get_extension() -> Extension:
+def get_cython_extension() -> Extension:
+    """Cython DTW extension as a fallback."""
+    return Extension(
+        "fastabx._dtw_cython",
+        sources=["src/fastabx/csrc/dtw.pyx"],
+        extra_compile_args=["-O3", "-DNPY_NO_DEPRECATED_API=NPY_2_0_API_VERSION"],  # , "-DPy_LIMITED_API=0x030c0000"],
+        include_dirs=[np.get_include()],
+        # py_limited_api=True,
+    )
+
+
+def get_torch_extension() -> Extension:
     """Either CUDA or CPU extension."""
     use_cuda = CUDA_HOME is not None
     extension = CUDAExtension if use_cuda else CppExtension
@@ -31,7 +43,7 @@ def get_extension() -> Extension:
 
 
 setup(
-    ext_modules=[get_extension()],
-    cmdclass={"build_ext": BuildExtension},
-    options={"bdist_wheel": {"py_limited_api": "cp312"}},
+    ext_modules=[get_cython_extension()],
+    # cmdclass={"build_ext": BuildExtension},
+    # options={"bdist_wheel": {"py_limited_api": "cp312"}},
 )
