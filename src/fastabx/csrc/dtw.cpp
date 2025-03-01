@@ -23,7 +23,7 @@ PyObject* PyInit__C(void) {
 
 namespace fastabx {
 
-double dtw_cpu(torch::Tensor distances) {
+float _dtw_cpu(torch::Tensor distances) {
   const auto N = distances.size(0);
   const auto M = distances.size(1);
   const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
@@ -68,6 +68,11 @@ double dtw_cpu(torch::Tensor distances) {
   return cost_a[N - 1][M - 1] / path_len;
 }
 
+torch::Tensor dtw_cpu(torch::Tensor distances) {
+  const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
+  return torch::tensor(_dtw_cpu(distances), options);
+}
+
 torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Tensor sy, bool symmetric) {
   const auto nx = distances.size(0);
   const auto ny = distances.size(1);
@@ -86,7 +91,7 @@ torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Te
       const auto sub_distances = distances.index({i, j, torch::indexing::Slice(), torch::indexing::Slice()})
                                      .slice(0, 0, sx_a[i])
                                      .slice(1, 0, sy_a[j]);
-      out_a[i][j] = dtw_cpu(sub_distances);
+      out_a[i][j] = _dtw_cpu(sub_distances);
       if (symmetric && i != j) {
         out_a[j][i] = out_a[i][j];
       }
@@ -96,8 +101,8 @@ torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Te
 }
 
 TORCH_LIBRARY(fastabx, m) {
-  m.def("dtw(Tensor distances) -> float");
-  m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor");
+  m.def("dtw(Tensor distances) -> Tensor", {torch::Tag::pt2_compliant_tag});
+  m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor", {torch::Tag::pt2_compliant_tag});
 }
 
 TORCH_LIBRARY_IMPL(fastabx, CPU, m) {

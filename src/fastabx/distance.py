@@ -99,7 +99,7 @@ def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torc
     return dxa, dxb
 
 
-def abx_on_cell(cell: Cell, distance: Distance) -> float:
+def abx_on_cell(cell: Cell, distance: Distance) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``."""
     dxa, dxb = distance_on_cell(cell, distance)
     if cell.is_symmetric:
@@ -110,4 +110,4 @@ def abx_on_cell(cell: Cell, distance: Distance) -> float:
     dxa = dxa.view(nx, na, 1).expand(nx, na, nb)
     sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
     sc /= len(cell)
-    return float(1 - sc)
+    return 1 - sc

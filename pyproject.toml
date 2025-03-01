@@ -90,5 +90,8 @@ ignore = [
     "TRY003", # raise-vanilla-args
 ]
 
+[tool.ruff.lint.flake8-self]
+ignore-names = ["_check"]
+
 [tool.setuptools]
 license-files = [] # https://github.com/pypa/setuptools/issues/4759

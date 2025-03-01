@@ -97,7 +97,10 @@ __global__ void dtw_backtrack_kernel(
     out[y][x] = out[x][y];
 }
 
-double dtw_cuda(torch::Tensor distances) {
+torch::Tensor dtw_cuda(torch::Tensor distances) {
+  // Note: the warning raised here won't be converted to a Python UserWarning.
+  // This could be done with the HANDLE_TH_ERRORS macro, but since it uses pybind11,
+  // the extension cannot be compiled with the Limited API anymore.
   TORCH_WARN_ONCE("The 2D DTW implementation is usually faster on CPU than on GPU")
   const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
   const auto options_long = torch::TensorOptions().dtype(torch::kInt64).device(distances.device());
@@ -123,7 +126,7 @@ double dtw_cuda(torch::Tensor distances) {
       sx.packed_accessor32<int64_t, 1>(),
       sy.packed_accessor32<int64_t, 1>(),
       false);
-  return out.item<double>();
+  return out.squeeze();
 }
 
 torch::Tensor dtw_batch_cuda(torch::Tensor distances, torch::Tensor sx, torch::Tensor sy, bool symmetric) {

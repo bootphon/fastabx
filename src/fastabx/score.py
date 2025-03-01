@@ -34,7 +34,7 @@ class Score:
             scores.append(abx_on_cell(cell, distance))
             sizes.append(len(cell))
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
-            score=pl.Series(scores), size=pl.Series(sizes)
+            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes)
         )
 
     @property
