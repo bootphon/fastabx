@@ -30,7 +30,7 @@ def test_dtw(x: int, y: int, low: float, high_minus_low: float) -> None:
 
 
 @skipifnogpu
-@given(n=BATCH, x=BATCH, low=LOW, high_minus_low=HIGH_MINUS_LOW)
+@given(n=BATCH, x=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
 def test_dtw_batch_symmetric(n: int, x: int, low: float, high_minus_low: float) -> None:
     """Compare the output of dtw_batch between CPU and GPU implementations, symmetric case."""
     d = make_tensor((n, n, x, x), dtype=torch.float32, low=low, high=high_minus_low + low)
