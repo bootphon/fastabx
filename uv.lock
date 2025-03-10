@@ -324,7 +324,7 @@ wheels = [
 
 [[package]]
 name = "fastabx"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "cudf-polars-cu12", marker = "sys_platform == 'linux'" },

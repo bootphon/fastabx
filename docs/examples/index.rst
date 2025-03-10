@@ -6,4 +6,3 @@ Examples
 
     gaussians
     external
-    spiritlm

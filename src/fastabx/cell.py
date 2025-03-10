@@ -55,9 +55,9 @@ def cells_on_by(df: pl.LazyFrame, on: str, by: list[str]) -> pl.LazyFrame:
         .group_by([on, *by], maintain_order=True)
         .agg(pl.col("index"))
         .with_columns(len=pl.col("index").list.len())
-        .with_row_index(name="lookup")
+        .with_row_index(name="__lookup")
     )
-    lookup = df.select("lookup", "index")
+    lookup = df.select("__lookup", "index")
     cells = df.select(cs.exclude("index"))
     cells = (
         cells.join(cells, on=by or None, suffix="_b", how="inner" if by else "cross")  # A_by == B_by
@@ -65,9 +65,9 @@ def cells_on_by(df: pl.LazyFrame, on: str, by: list[str]) -> pl.LazyFrame:
         .select(cs.exclude(f"{on}_x", "len", "len_b"))
     )
     return (
-        cells.join(lookup, on="lookup", how="left")
-        .join(lookup.rename({"lookup": "lookup_b", "index": "index_b"}), on="lookup_b", how="left")
-        .select(cs.exclude("lookup", "lookup_b"))
+        cells.join(lookup, on="__lookup", how="left")
+        .join(lookup.rename({"__lookup": "__lookup_b", "index": "index_b"}), on="__lookup_b", how="left")
+        .select(cs.exclude("__lookup", "__lookup_b"))
     )
 
 
@@ -80,9 +80,9 @@ def cells_on_by_across(df: pl.LazyFrame, on: str, by: list[str], across: list[st
         .with_row_index()
         .group_by([on, *by, *across], maintain_order=True)
         .agg(pl.col("index"))
-        .with_row_index(name="lookup")
+        .with_row_index(name="__lookup")
     )
-    lookup = df.select("lookup", "index")
+    lookup = df.select("__lookup", "index")
     cells = df.select(cs.exclude("index"))
     cells = (
         cells.join(cells, on=by + across, suffix="_b", how="inner")  # A_{by, across} == B_{by, across}
@@ -96,10 +96,10 @@ def cells_on_by_across(df: pl.LazyFrame, on: str, by: list[str], across: list[st
         .select(cs.exclude(f"{on}_x"))
     )
     return (
-        cells.join(lookup, on="lookup", how="left")
-        .join(lookup.rename({"lookup": "lookup_b", "index": "index_b"}), on="lookup_b", how="left")
-        .join(lookup.rename({"lookup": "lookup_x", "index": "index_x"}), on="lookup_x", how="left")
-        .select(cs.exclude("lookup", "lookup_b", "lookup_x"))
+        cells.join(lookup, on="__lookup", how="left")
+        .join(lookup.rename({"__lookup": "__lookup_b", "index": "index_b"}), on="__lookup_b", how="left")
+        .join(lookup.rename({"__lookup": "__lookup_x", "index": "index_x"}), on="__lookup_x", how="left")
+        .select(cs.exclude("__lookup", "__lookup_b", "__lookup_x"))
     )
 
 

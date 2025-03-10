@@ -31,10 +31,10 @@ class Environment:
 def load_dtw_extension() -> None:
     """Load the DTW extension.
 
-    On Linux, we check that PyTorch has been installed with the correct CUDA version.
+    On Linux and Windows, we check that PyTorch has been installed with the correct CUDA version.
     """
     cuda_version = "12.4"
-    if sys.platform == "linux" and torch.version.cuda != cuda_version:
+    if sys.platform in ["linux", "win32"] and torch.version.cuda != cuda_version:
         msg = (
             f"On Linux, the DTW extension requires PyTorch with CUDA {cuda_version}. "
             "It it not compatible with other CUDA versions, or with the CPU only version of PyTorch, "
