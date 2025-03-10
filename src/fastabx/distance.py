@@ -49,36 +49,39 @@ def kl_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
     """KL distance. You might want to use kl_symmetric_distance in most cases."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
-    div = (a1.view(n1, 1, s1, 1, d) + epsilon) / (a2.view(1, n2, 1, s2, d) + epsilon)
-    prod = (a1.view(n1, 1, s1, 1, d)) * div.log()
-    return prod.sum(dim=4)
+    a1_view = a1.view(n1 * s1, 1, d)
+    a2_view = a2.view(1, n2 * s2, d)
+    div = (a1_view + epsilon) / (a2_view + epsilon)
+    return torch.sum(a1_view * div.log(), dim=2).view(n1, s1, n2, s2).transpose(1, 2)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
     """KL symmetric distance. The two tensors must correspond to probability distributions."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
-    div1 = (a1.view(n1, 1, s1, 1, d) + epsilon) / (a2.view(1, n2, 1, s2, d) + epsilon)
-    div2 = (a2.view(1, n2, 1, s2, d) + epsilon) / (a1.view(n1, 1, s1, 1, d) + epsilon)
-    prod1 = (a1.view(n1, 1, s1, 1, d)) * div1.log()
-    prod2 = (a2.view(1, n2, 1, s2, d)) * div2.log()
-    return (0.5 * prod1 + 0.5 * prod2).sum(dim=4)
+    a1_view = a1.view(n1 * s1, 1, d)
+    a2_view = a2.view(1, n2 * s2, d)
+    div1 = (a1_view + epsilon) / (a2_view + epsilon)
+    div2 = (a2_view + epsilon) / (a1_view + epsilon)
+    out1 = torch.sum(a1_view * div1.log(), dim=2)
+    out2 = torch.sum(a2_view * div2.log(), dim=2)
+    return (0.5 * out1 + 0.5 * out2).view(n1, s1, n2, s2).transpose(1, 2)
 
 
 def cosine_distance(a1: Tensor, a2: Tensor) -> Tensor:
     """Angular distance (default). WARNING: a1 and a2 must be normalized."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
-    prod = (a1.view(n1, 1, s1, 1, d)) * (a2.view(1, n2, 1, s2, d))
-    return torch.clamp(prod.sum(dim=4), -1, 1).acos() / math.pi
+    dot_prods = torch.mm(a1.view(n1 * s1, d), a2.view(n2 * s2, d).T).view(n1, s1, n2, s2).transpose(1, 2)
+    return torch.clamp(dot_prods, -1, 1).acos() / math.pi
 
 
 def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:
     """Euclidean distance."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
-    diff = a1.view(n1, 1, s1, 1, d) - a2.view(1, n2, 1, s2, d)
-    return torch.sqrt((diff**2).sum(dim=4))
+    dist = torch.cdist(a1.view(n1 * s1, d), a2.view(n2 * s2, d), compute_mode="donot_use_mm_for_euclid_dist")
+    return dist.view(n1, s1, n2, s2).transpose(1, 2)
 
 
 def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
