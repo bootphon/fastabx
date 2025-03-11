@@ -62,4 +62,5 @@ def zerospeech_abx(  # noqa: PLR0913
             raise ValueError("invalid speaker or context mode")
     subsampler = Subsampler(max_size_group, max_x_across, seed)
     task = Task(dataset, on="#phone", by=by, across=across, subsampler=subsampler)
-    return Score(task, distance).collapse(levels=[("next-phone", "prev-phone"), "speaker"])
+    levels = ([("next-phone", "prev-phone")] if context == "within" else []) + ["speaker"]
+    return Score(task, distance).collapse(levels=levels)

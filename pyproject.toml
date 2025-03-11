@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=75.0.0",
+    "setuptools>=75.0.0,<=75.8.2", # Temporary upper bound: https://github.com/pytorch/pytorch/issues/148877
     "setuptools-scm>=8.1.0",
     "torch==2.6.0",
     "numpy>=2.0.2",

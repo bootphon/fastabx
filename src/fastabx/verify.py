@@ -66,9 +66,9 @@ def verify_dataset_labels(df: pl.DataFrame) -> None:
             raise LabelSuffixError(col)
 
 
-def verify_subsampler_params(*sizes: int, seed: int) -> None:
+def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
     """All sizes must be positive integers."""
-    if not all(isinstance(s, int) and s > 1 for s in sizes):
+    if not all(isinstance(s, int) and s > 1 for s in sizes if s is not None):
         raise TypeError("sizes should be positive integers")
     if not isinstance(seed, int):
         raise TypeError("seed should be an integer")

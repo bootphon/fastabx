@@ -5,8 +5,8 @@ import pytest
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """CLI arguments."""
-    parser.addoption("--item", action="store", help="Path to the item file")
-    parser.addoption("--features", action="store", help="Path to the features directory")
+    parser.addoption("--item", action="store", default=None, help="Path to the item file")
+    parser.addoption("--features", action="store", default=None, help="Path to the features directory")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -20,7 +20,7 @@ def pytest_configure(config: pytest.Config) -> None:
             ("within", "within"): 0.01579,
             ("across", "within"): 0.02216,
             ("within", "any"): 0.07738,
-            # ("across", "any"): 0,
+            ("across", "any"): 0.08357,
         },
     }
     config.distance = "cosine"

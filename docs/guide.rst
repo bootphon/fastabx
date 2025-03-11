@@ -29,29 +29,31 @@ CLI
 
     ❯ fastabx --help
     usage: fastabx [-h] [--frequency FREQUENCY] [--speaker {within,across}] [--context {within,any}]
-            [--distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}]
-            [--max-size-group MAX_SIZE_GROUP] [--max-x-across MAX_X_ACROSS]
-            [--seed SEED]
-            item features
+                   [--distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}] [--max-size-group MAX_SIZE_GROUP]
+                   [--max-x-across MAX_X_ACROSS] [--seed SEED]
+                   item features
 
     ZeroSpeech ABX
 
     positional arguments:
-    item                  Path to the item file
-    features              Path to the features directory
+      item                  Path to the item file
+      features              Path to the features directory
 
     options:
-    -h, --help            show this help message and exit
-    --frequency FREQUENCY
-                            Feature frequency (in Hz)
-    --speaker {within,across}
-    --context {within,any}
-    --distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}
-    --max-size-group MAX_SIZE_GROUP
-                            Maximum size of a cell
-    --max-x-across MAX_X_ACROSS
-                            With 'across', maximum number of X given (A, B)
-    --seed SEED
+      -h, --help            show this help message and exit
+      --frequency FREQUENCY
+                            Feature frequency (in Hz) (default: 50)
+      --speaker {within,across}
+                            Speaker mode (default: within)
+      --context {within,any}
+                            Context mode (default: within)
+      --distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}
+                            Distance (default: cosine)
+      --max-size-group MAX_SIZE_GROUP
+                            Maximum number of A, B, or X in a cell (default: 10)
+      --max-x-across MAX_X_ACROSS
+                            With 'across', maximum number of X given (A, B) (default: 5)
+      --seed SEED           Random seed (default: 0)
 
 Motivation
 ==========
@@ -79,6 +81,8 @@ about how to built the triplets in a clever manner.
 
 The computation of the distances is similar as
 https://github.com/zerospeech/libri-light-abx2.
+The distances functions have been modified to be more memory
+efficient by avoiding large broadcastings.
 The important change is that now the DTW is computed in a PyTorch C++ extension,
 with CPU (using OpenMP) and CUDA backends. The speedup is most noticeable on
 large cells, such as those obtained when running the Phoneme ABX without

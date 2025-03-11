@@ -87,7 +87,7 @@ def cells_on_by_across(df: pl.LazyFrame, on: str, by: list[str], across: list[st
     cells = (
         cells.join(cells, on=by + across, suffix="_b", how="inner")  # A_{by, across} == B_{by, across}
         .filter(pl.col(on) != pl.col(f"{on}_b"))  # A_on != B_on
-        .join(cells, on=by or None, suffix="_x", how="inner")  # A_by, B_by == X_by
+        .join(cells, on=by or None, suffix="_x", how="inner" if by else "cross")  # A_by, B_by == X_by
         .filter(
             pl.col(on) == pl.col(f"{on}_x"),  # A_on == X_on
             pl.col(f"{on}_b") != pl.col(f"{on}_x"),  # B_on != X_on

@@ -29,6 +29,7 @@ def features(request: pytest.FixtureRequest) -> Path:
     return path
 
 
+@pytest.mark.skipif("not config.getoption('item') or not config.getoption('features')")
 @pytest.mark.parametrize("speaker", ["within", "across"])
 @pytest.mark.parametrize("context", ["within", "any"])
 def test_zerospeech(
@@ -45,12 +46,12 @@ def test_zerospeech(
     score = zerospeech_abx(
         item,
         features,
-        speaker,
-        context,
-        pytestconfig.distance,
-        pytestconfig.frequency,
-        pytestconfig.max_size_group,
-        pytestconfig.max_x_across,
-        pytestconfig.seed,
+        speaker=speaker,
+        context=context,
+        distance=pytestconfig.distance,
+        frequency=pytestconfig.frequency,
+        max_size_group=pytestconfig.max_size_group,
+        max_x_across=pytestconfig.max_x_across,
+        seed=pytestconfig.seed,
     )
     torch.testing.assert_close(score, reference, rtol=0, atol=1e-5)

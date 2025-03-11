@@ -34,9 +34,10 @@ class Subsampler:
 
     Each cell is limited to ``max_size_group`` items for A, B and X independently.
     When using "across" conditions, each group of (A, B) is limited to ``max_x_across`` possible values for X.
+    Subsampling for one or more conditions can be disabled by setting the corresponding argument to ``None``.
     """
 
-    def __init__(self, max_size_group: int = 10, max_x_across: int = 5, seed: int = 0) -> None:
+    def __init__(self, max_size_group: int | None, max_x_across: int | None, seed: int = 0) -> None:
         verify_subsampler_params(max_size_group, max_x_across, seed=seed)
         self.max_size_group = max_size_group
         self.max_x_across = max_x_across
@@ -44,14 +45,17 @@ class Subsampler:
 
     def __call__(self, lazy_cells: pl.LazyFrame, *, with_across: bool) -> pl.LazyFrame:
         """Subsample the cells."""
-        lazy_cells = subsample_each_cell(lazy_cells, self.max_size_group)
-        if with_across:
+        if self.max_size_group is not None:
+            lazy_cells = subsample_each_cell(lazy_cells, self.max_size_group)
+        if with_across and self.max_x_across is not None:
             lazy_cells = subsample_across_group(lazy_cells, self.max_x_across, self.seed)
         return lazy_cells
 
     def description(self, *, with_across: bool) -> str:
         """Return a description of the subsampling."""
-        desc = f"maximal cell size: {self.max_size_group}"
-        if with_across:
-            desc += f"maximal number of X for (A, B): {self.max_x_across}"
-        return desc
+        desc = []
+        if self.max_size_group is not None:
+            desc.append(f"maximal number of A, B, or X in a cell: {self.max_size_group}")
+        if with_across and self.max_x_across is not None:
+            desc.append(f"maximal number of X for (A, B): {self.max_x_across}")
+        return ",".join(desc)

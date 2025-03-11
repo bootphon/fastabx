@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from fastabx.dtw import dtw, dtw_batch
@@ -23,14 +23,16 @@ def make_tensor(shape: tuple[int, ...], *, dtype: torch.dtype, low: float, high:
 
 @skipifnogpu
 @given(x=DIM, y=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
+@settings(deadline=None)
 def test_dtw(x: int, y: int, low: float, high_minus_low: float) -> None:
     """Compare the output of dtw between CPU and GPU implementations."""
     d = make_tensor((x, y), dtype=torch.float32, low=low, high=high_minus_low + low)
-    torch.testing.assert_close(dtw(d), dtw(d.cuda()), rtol=rtol, atol=atol)
+    torch.testing.assert_close(dtw(d), dtw(d.cuda()).cpu(), rtol=rtol, atol=atol)
 
 
 @skipifnogpu
 @given(n=BATCH, x=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
+@settings(deadline=None)
 def test_dtw_batch_symmetric(n: int, x: int, low: float, high_minus_low: float) -> None:
     """Compare the output of dtw_batch between CPU and GPU implementations, symmetric case."""
     d = make_tensor((n, n, x, x), dtype=torch.float32, low=low, high=high_minus_low + low)
@@ -47,6 +49,7 @@ def test_dtw_batch_symmetric(n: int, x: int, low: float, high_minus_low: float) 
 
 @skipifnogpu
 @given(n=BATCH, m=BATCH, x=DIM, y=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
+@settings(deadline=None)
 def test_dtw_batch_not_symmetric(n: int, m: int, x: int, y: int, low: float, high_minus_low: float) -> None:  # noqa: PLR0913
     """Compare the output of dtw_batch between CPU and GPU implementations, non symmetric case."""
     d = make_tensor((n, m, x, y), dtype=torch.float32, low=low, high=high_minus_low + low)
