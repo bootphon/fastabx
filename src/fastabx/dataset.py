@@ -149,7 +149,7 @@ class Dataset:
     """Simple interface to a dataset.
 
     :param labels: ``pl.DataFrame`` containing the labels of the datapoints.
-    :param accessor: ``InDataAccessor`` to access the data.
+    :param accessor: ``InMemoryAccessor`` to access the data.
     """
 
     labels: pl.DataFrame
