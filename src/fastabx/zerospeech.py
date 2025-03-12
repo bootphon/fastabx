@@ -21,8 +21,8 @@ def zerospeech_abx(  # noqa: PLR0913
     distance: DistanceName = "cosine",
     frequency: int = 50,
     feature_maker: FeatureMaker = torch.load,
-    max_size_group: int = 10,
-    max_x_across: int = 5,
+    max_size_group: int | None = 10,
+    max_x_across: int | None = 5,
     extension: str = ".pt",
     seed: int = 0,
 ) -> float:
@@ -37,11 +37,11 @@ def zerospeech_abx(  # noqa: PLR0913
     :param context: the context mode, either "within" or "any"
     :param distance: the distance metric, either "cosine", "euclidean", "kl_symmetric" or "identical"
     :param frequency: the feature frequency of the features / the output of the feature maker, in Hz. Default is 50 Hz
-    :param feature_maker: the feature maker. Defaults to just loading the file with torch.load
+    :param feature_maker: the feature maker. Defaults to just loading the file with ``torch.load``
     :param max_size_group: maximum number of instances of A, B, or X in each :py:class:`.Cell`. Default is 10.
-        Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`
+        Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`. Disabled if set to ``None``
     :param max_x_across: in the "across" speaker mode, maximum number of X considered for given values of A and B.
-        Default is 5. Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`
+        Default is 5. Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`. Disabled if set to ``None``
     :param extension: the filename extension of the files to process in ``root``, default is ".pt"
     :param seed: the random seed for the subsampling, default is 0
     """
