@@ -33,7 +33,7 @@ class Score:
         if distance_name in ("cosine", "angular"):
             task.dataset.normalize_()
         for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
-            scores.append(abx_on_cell(cell, distance))
+            scores.append(abx_on_cell(cell, distance).item())
             sizes.append(len(cell))
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes)
