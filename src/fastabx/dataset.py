@@ -111,11 +111,15 @@ def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Ten
     return torch.cat([x, border], dim=1)
 
 
+class InvalidItemFileError(Exception):
+    """The item file does not have the correct columns."""
+
+
 def read_item(item: str | Path) -> pl.DataFrame:
     """Read an item file."""
     labels = pl.read_csv(item, separator=" ")
     if set(labels.columns) != {"#file", "onset", "offset", "#phone", "prev-phone", "next-phone", "speaker"}:
-        raise ValueError("Invalid item file")
+        raise InvalidItemFileError
     return labels
 
 
@@ -209,7 +213,7 @@ class Dataset:
         features_df = pl.from_numpy(np.asarray(features))
         labels_df = pl.from_dict(labels)
         if len(features_df) != len(labels_df):
-            raise ValueError("features and labels must have the same length")
+            raise ValueError
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
 
 

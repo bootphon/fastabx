@@ -24,6 +24,17 @@ def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
     return weights.dot(values).truediv(weights.sum()).fill_nan(None)
 
 
+class CollapseError(Exception):
+    """Something wrong happened when collapsing the ``Score``."""
+
+    def __init__(self, *, are_set: bool) -> None:
+        if are_set:
+            msg = "Cannot set `weighted=True` and `levels` at the same time."
+        else:
+            msg = "Either set `levels` or `weighted=True`."
+        super().__init__(msg)
+
+
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``."""
 
@@ -47,7 +58,8 @@ class Score:
 
     @cells.setter
     def cells(self, _: pl.DataFrame) -> None:
-        raise AttributeError("The `cells` attribute is read-only.")
+        msg = "The `cells` attribute is read-only."
+        raise AttributeError(msg)
 
     def __repr__(self) -> str:
         return f"Score({len(self.cells)} cells, {self.distance_name} distance)"
@@ -67,11 +79,11 @@ class Score:
         """
         if weighted:
             if levels is not None:
-                raise ValueError("Cannot set `weighted=True` and `levels` at the same time.")
+                raise CollapseError(are_set=True)
             return self.cells.select(pl_weighted_mean("score", "size")).item()  # type: ignore[no-any-return]
         if levels is None:
             if len(set(self.cells.columns) - {"index", "index_b", "score", "size"}) != 2:  # noqa: PLR2004
-                raise ValueError("Either set `levels` or `weighted=True`")
+                raise CollapseError(are_set=False)
             levels = []
 
         to_ignore = cs.starts_with("index") | cs.ends_with("_x") | cs.by_name("size")

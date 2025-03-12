@@ -1,5 +1,6 @@
 """Safety checks for the public API."""
 
+import enum
 from collections.abc import Sequence
 from itertools import chain
 
@@ -39,6 +40,17 @@ class EmptyDataPointsError(ValueError):
         )
 
 
+class DuplicateConditionsError(ValueError):
+    """Duplicate conditions found."""
+
+
+class InputTypeError(TypeError):
+    """All conditions should be strings."""
+
+    def __init__(self, expected: type, received: type) -> None:
+        super().__init__(f"Should be an instance of {expected}, not {received}")
+
+
 def verify_empty_datapoints(indices: dict[int, tuple[int, int]]) -> None:
     """Check if some datapoints are empty by checking the start and end indices."""
     empty = []
@@ -52,10 +64,10 @@ def verify_empty_datapoints(indices: dict[int, tuple[int, int]]) -> None:
 def verify_task_conditions(conditions: list[str]) -> None:
     """Conditions should be unique strings."""
     if len(conditions) != len(set(conditions)):
-        raise ValueError("Conditions should not contain duplicates")
+        raise DuplicateConditionsError
     for cond in conditions:
         if not isinstance(cond, str):
-            raise TypeError("Conditions should be strings")
+            raise InputTypeError(str, type(cond))
 
 
 def verify_dataset_labels(df: pl.DataFrame) -> None:
@@ -70,20 +82,67 @@ def verify_dataset_labels(df: pl.DataFrame) -> None:
 def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
     """All sizes must be positive integers."""
     if not all(isinstance(s, int) and s > 1 for s in sizes if s is not None):
-        raise TypeError("sizes should be positive integers")
+        msg = "sizes should be positive integers"
+        raise TypeError(msg)
     if not isinstance(seed, int):
-        raise TypeError("seed should be an integer")
+        raise InputTypeError(int, type(seed))
+
+
+class CellErrorType(enum.Enum):
+    """All types of errors coming from a ``Cell``."""
+
+    NDIM = enum.auto()
+    FEATURE_DIM = enum.auto()
+    SIZE = enum.auto()
+
+
+class InvalidCellError(ValueError):
+    """The cell is not built correctly."""
+
+    def __init__(self, error_type: CellErrorType) -> None:
+        match error_type:
+            case CellErrorType.NDIM:
+                msg = "A, B, and X should be tensors with 3 dimensions"
+            case CellErrorType.FEATURE_DIM:
+                msg = "A, B, and X should have the same feature dimension"
+            case CellErrorType.SIZE:
+                msg = "Invalid size specification"
+        super().__init__(msg)
 
 
 def verify_cell(a_sa: tuple[Tensor, Tensor], b_sb: tuple[Tensor, Tensor], x_sx: tuple[Tensor, Tensor]) -> None:
     """Assert the integrity of a cell."""
     (a, sa), (b, sb), (x, sx) = a_sa, b_sb, x_sx
     if not a.ndim == b.ndim == x.ndim == NDIM:
-        raise ValueError("A, B, and X should be tensors with 3 dimensions")
+        raise InvalidCellError(CellErrorType.NDIM)
     if not a.size(2) == b.size(2) == x.size(2):
-        raise ValueError("A, B, and X should have the same feature dimension")
+        raise InvalidCellError(CellErrorType.FEATURE_DIM)
     if not (a.size(0) == sa.size(0) and b.size(0) == sb.size(0) and x.size(0) == sx.size(0)):
-        raise ValueError("Invalid size specification")
+        raise InvalidCellError(CellErrorType.SIZE)
+
+
+class LevelsErrorType(enum.Enum):
+    """All types of errors coming that can arise from 'levels'."""
+
+    FORMAT = enum.auto()
+    DUPLICATES = enum.auto()
+    COLUMNS = enum.auto()
+
+
+class InvalidLevelsError(ValueError):
+    """Levels are not well formatted."""
+
+    def __init__(self, error_type: LevelsErrorType) -> None:
+        match error_type:
+            case LevelsErrorType.FORMAT:
+                msg = "'levels' should be list[tuple[str, ...] | str]"
+            case LevelsErrorType.DUPLICATES:
+                msg = "levels should not contain duplicates"
+            case LevelsErrorType.COLUMNS:
+                msg = "levels should be columns of the DataFrame"
+            case _:
+                msg = None
+        super().__init__(msg)
 
 
 def format_score_levels(levels: Sequence[tuple[str, ...] | str]) -> list[tuple[str, ...]]:
@@ -95,7 +154,7 @@ def format_score_levels(levels: Sequence[tuple[str, ...] | str]) -> list[tuple[s
         elif isinstance(level, tuple) and all(isinstance(x, str) for x in level):
             formatted.append(level)
         else:
-            raise ValueError("`levels` should be list[tuple[str, ...] | str]")
+            raise InvalidLevelsError(LevelsErrorType.FORMAT)
     return formatted
 
 
@@ -104,6 +163,6 @@ def verify_score_levels(columns: list[str], levels: list[tuple[str, ...]]) -> No
     all_levels = list(chain.from_iterable(levels))
     unique_levels = set(all_levels)
     if len(all_levels) != len(unique_levels):
-        raise ValueError("levels should not contain duplicates")
+        raise InvalidLevelsError(LevelsErrorType.DUPLICATES)
     if not unique_levels.issubset(set(columns)):
-        raise ValueError("levels should be columns of the DataFrame")
+        raise InvalidLevelsError(LevelsErrorType.COLUMNS)

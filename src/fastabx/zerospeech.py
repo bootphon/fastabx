@@ -12,6 +12,10 @@ from fastabx.subsample import Subsampler
 from fastabx.task import Task
 
 
+class InvalidSpeakerOrContextError(ValueError):
+    """The speaker or context conditions are not set correctly."""
+
+
 def zerospeech_abx(  # noqa: PLR0913
     item: str | Path,
     root: str | Path,
@@ -58,7 +62,7 @@ def zerospeech_abx(  # noqa: PLR0913
         case ("across", "any"):
             by, across = None, ["speaker"]
         case _:
-            raise ValueError("invalid speaker or context mode")
+            raise InvalidSpeakerOrContextError
     subsampler = Subsampler(max_size_group, max_x_across, seed)
     task = Task(dataset, on="#phone", by=by, across=across, subsampler=subsampler)
     levels = ([("next-phone", "prev-phone")] if context == "within" else []) + ["speaker"]

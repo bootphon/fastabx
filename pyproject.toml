@@ -85,9 +85,7 @@ ignore = [
     "D107",   # undocumented-public-init
     "D203",   # incorrect-blank-line-before-class
     "D213",   # multi-line-summary-second-line
-    "EM101",  # raw-string-in-exception
     "PD901",  # pandas-df-variable-name
-    "TRY003", # raise-vanilla-args
 ]
 
 [tool.ruff.lint.flake8-self]

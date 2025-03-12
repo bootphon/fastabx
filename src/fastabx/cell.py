@@ -71,10 +71,17 @@ def cells_on_by(df: pl.LazyFrame, on: str, by: list[str]) -> pl.LazyFrame:
     )
 
 
+class NoAcrossError(ValueError):
+    """To raise if you expect 'across' conditions but received none."""
+
+    def __init__(self) -> None:
+        super().__init__("across must be non-empty")
+
+
 def cells_on_by_across(df: pl.LazyFrame, on: str, by: list[str], across: list[str]) -> pl.LazyFrame:
     """Generate the cells for the ABX task given 'on', 'by' and 'across' conditions."""
     if not across:
-        raise ValueError("across must be non-empty")
+        raise NoAcrossError
     df = (
         df.select([on, *by, *across])
         .with_row_index()
