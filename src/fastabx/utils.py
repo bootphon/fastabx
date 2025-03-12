@@ -36,7 +36,7 @@ def load_dtw_extension() -> None:
     cuda_version = "12.4"
     if sys.platform in ["linux", "win32"] and torch.version.cuda != cuda_version:
         msg = (
-            f"On Linux, the DTW extension requires PyTorch with CUDA {cuda_version}. "
+            f"On Linux and Windows, the DTW extension requires PyTorch with CUDA {cuda_version}. "
             "It it not compatible with other CUDA versions, or with the CPU only version of PyTorch, "
             "even if you wanted to only use the CPU backend of the DTW. "
         )
