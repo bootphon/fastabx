@@ -1,5 +1,6 @@
 """Safety checks for the public API."""
 
+from collections.abc import Sequence
 from itertools import chain
 
 import polars as pl
@@ -85,7 +86,7 @@ def verify_cell(a_sa: tuple[Tensor, Tensor], b_sb: tuple[Tensor, Tensor], x_sx: 
         raise ValueError("Invalid size specification")
 
 
-def format_score_levels(levels: list[tuple[str, ...] | str]) -> list[tuple[str, ...]]:
+def format_score_levels(levels: Sequence[tuple[str, ...] | str]) -> list[tuple[str, ...]]:
     """Put all the levels in tuples."""
     formatted: list[tuple[str, ...]] = []
     for level in levels:

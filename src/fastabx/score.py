@@ -1,5 +1,6 @@
 """Score the ABX task for each cell and collapse the scores into a final score."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
@@ -59,7 +60,7 @@ class Score:
         else:
             self.cells.write_csv(file)
 
-    def collapse(self, *, levels: list[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
+    def collapse(self, *, levels: Sequence[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
         """Collapse the scored cells into the final score.
 
         :param levels: List of levels to collapse. The order matters a lot.
