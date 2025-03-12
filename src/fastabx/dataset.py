@@ -5,7 +5,7 @@ import math
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -97,19 +97,18 @@ def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
     return dict(sorted((p.stem, p) for p in Path(root).rglob(f"*{extension}")))
 
 
-def normalize_with_singularity(x: torch.Tensor) -> torch.Tensor:
+def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     """Normalize the given vector across the third dimension.
 
-    Extend all vectors by eps=1e-12 to put the null vector at the maximal
+    Extend all vectors by eps to put the null vector at the maximal
     cosine distance from any non-null vector.
     """
-    norm_x = (x**2).sum(dim=1, keepdim=True)
-    x /= torch.sqrt(norm_x)
-    zero_vals = (norm_x == 0).view(x.size(0))
-    x[zero_vals] = 1 / math.sqrt(x.size(1))
-    border_vect = torch.zeros((x.size(0), 1), dtype=x.dtype, device=x.device) + 1e-12
-    border_vect[zero_vals] = -2 * 1e12
-    return torch.cat([x, border_vect], dim=1)
+    norm = torch.norm(x, dim=1, keepdim=True)
+    zero_vals = norm == 0
+    x = torch.where(zero_vals, 1 / math.sqrt(x.size(1)), x / norm)
+    border = torch.full((x.size(0), 1), eps, dtype=x.dtype, device=x.device)
+    border = torch.where(zero_vals, -2 * eps, border)
+    return torch.cat([x, border], dim=1)
 
 
 def read_item(item: str | Path) -> pl.DataFrame:
@@ -125,8 +124,6 @@ def load_data_from_item(
     labels: pl.DataFrame,
     frequency: int,
     feature_maker: FeatureMaker,
-    *,
-    normalize: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory. Return a dictionary of indices and a tensor of data."""
     metadata = labels[["#file", "onset", "offset"]].with_row_index()
@@ -143,8 +140,6 @@ def load_data_from_item(
     data, device = [], Environment().device
     for fileid, start_indices, end_indices in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
         features = feature_maker(paths[fileid]).detach().to(device)
-        if normalize:
-            features = normalize_with_singularity(features)
         data += [features[start:end] for start, end in zip(start_indices, end_indices, strict=True)]
     return dict(enumerate(indices.rows())), torch.cat(data, dim=0)
 
@@ -154,30 +149,34 @@ class Dataset:
     """Simple interface to a dataset.
 
     :param labels: ``pl.DataFrame`` containing the labels of the datapoints.
-    :param accessor: ``DataAccessor`` to access the data.
+    :param accessor: ``InDataAccessor`` to access the data.
     """
 
     labels: pl.DataFrame
-    accessor: DataAccessor
+    accessor: InMemoryAccessor
 
     def __repr__(self) -> str:
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}"
 
+    def normalize_(self) -> Self:
+        """L2 normalization of the data."""
+        self.accessor.data = normalize_with_singularity(self.accessor.data)
+        return self
+
     @classmethod
-    def from_item(  # noqa: PLR0913
+    def from_item(
         cls,
         item: str | Path,
         root: str | Path,
         frequency: int,
         feature_maker: FeatureMaker,
         *,
-        normalize: bool = True,
         extension: str = ".pt",
     ) -> "Dataset":
         """Create a dataset from an item file."""
         labels = read_item(item)
         paths = find_all_files(root, extension)
-        indices, data = load_data_from_item(paths, labels, frequency, feature_maker, normalize=normalize)
+        indices, data = load_data_from_item(paths, labels, frequency, feature_maker)
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
