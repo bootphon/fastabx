@@ -131,8 +131,8 @@ def load_data_from_item(
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory. Return a dictionary of indices and a tensor of data."""
     metadata = labels[["#file", "onset", "offset"]].with_row_index()
-    start = (pl.col("onset") * frequency - 0.5).ceil().cast(pl.Int64).alias("start")
-    end = (pl.col("offset") * frequency - 0.5).floor().cast(pl.Int64).alias("end")
+    start = (pl.col("onset") * frequency - 0.5).round(2).ceil().cast(pl.Int64).alias("start")
+    end = (pl.col("offset") * frequency - 0.5).round(2).floor().cast(pl.Int64).alias("end")
     length = (end - start).alias("length")
     right = length.cum_sum().alias("right")
     left = length.cum_sum().shift(1).fill_null(0).alias("left")

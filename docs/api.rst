@@ -27,7 +27,7 @@ Score
 -----
 
 .. autoclass:: fastabx.Score
-   :members: collapse, write_csv
+   :members: collapse, details, write_csv
 
 Pooling
 -------

@@ -65,31 +65,37 @@ class Score:
         return f"Score({len(self.cells)} cells, {self.distance_name} distance)"
 
     def write_csv(self, file: str | Path) -> None:
-        """Write details of score to CSV file."""
+        """Write the results of all the cells to a CSV file."""
         nested = [name for name, dtype in self.cells.schema.items() if dtype == pl.List]
-        if nested:
-            self.cells.select(cs.exclude(nested)).write_csv(file)
-        else:
-            self.cells.write_csv(file)
+        (self.cells.select(cs.exclude(nested)) if nested else self.cells).write_csv(file)
+
+    def details(self, *, levels: Sequence[tuple[str, ...] | str]) -> pl.DataFrame:
+        """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs.
+
+        :param levels: List of levels to collapse. The order matters a lot.
+        """
+        if levels is None:
+            if len(set(self.cells.columns) - {"index", "index_b", "score", "size"}) != 2:  # noqa: PLR2004
+                raise CollapseError(are_set=False)
+            levels = []
+        cells = self.cells.select(~(cs.starts_with("index") | cs.ends_with("_x")))
+        levels_in_tuples = format_score_levels(levels)
+        verify_score_levels(cells.columns, levels_in_tuples)
+        for level in levels_in_tuples:
+            group_key = cs.exclude("score", "size", *level)
+            cells = cells.group_by(group_key, maintain_order=True).agg(pl.col("score").mean(), pl.col("size").sum())
+        return cells
 
     def collapse(self, *, levels: Sequence[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
         """Collapse the scored cells into the final score.
 
+        Use either `levels` or `weighted=True` to collapse the scores.
+
         :param levels: List of levels to collapse. The order matters a lot.
+        :param weighted: Whether to collapse the scores using a mean weighted by the size of the cells.
         """
         if weighted:
             if levels is not None:
                 raise CollapseError(are_set=True)
             return self.cells.select(pl_weighted_mean("score", "size")).item()  # type: ignore[no-any-return]
-        if levels is None:
-            if len(set(self.cells.columns) - {"index", "index_b", "score", "size"}) != 2:  # noqa: PLR2004
-                raise CollapseError(are_set=False)
-            levels = []
-
-        to_ignore = cs.starts_with("index") | cs.ends_with("_x") | cs.by_name("size")
-        cells = self.cells.select(~to_ignore)
-        levels_in_tuples = format_score_levels(levels)
-        verify_score_levels(cells.columns, levels_in_tuples)
-        for level in levels_in_tuples:
-            cells = cells.group_by(cs.exclude("score", *level), maintain_order=True).agg(score=pl.col("score").mean())
-        return cells["score"].mean()  # type: ignore[return-value]
+        return self.details(levels=levels)["score"].mean()  # type: ignore[return-value]
