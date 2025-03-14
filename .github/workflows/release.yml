@@ -10,10 +10,11 @@ jobs:
     name: Build wheel
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-22.04-arm, macos-14, windows-latest]
-        cuda-version: ['12.4.1']
+        os: [ubuntu-22.04, macos-14, windows-latest]
+        cuda-version: ["12.4.1"]
+      fail-fast: false
     env:
-      GLIBC_VERSION: '2_34'
+      GLIBC_VERSION: "2_34"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -38,22 +39,31 @@ jobs:
         with:
           swap-size-gb: 10
 
-      - name: Install CUDA {{ matrix.cuda-version }}
-        if: ${{ runner.os == 'Linux' || runner.os == 'Windows' }}
+      - name: Install CUDA ${{ matrix.cuda-version }} on Windows
+        if: ${{ runner.os == 'Windows' }}
+        id: cuda-toolkit-windows
+        shell: pwsh
+        run: scripts/setup_cuda.ps1
+        env:
+            INPUT_CUDA_VERSION: ${{ matrix.cuda-version }}
+
+      - name: Install CUDA ${{ matrix.cuda-version }} on Linux
+        if: ${{ runner.os == 'Linux' }}
         uses: Jimver/cuda-toolkit@v0.2.21
-        id: cuda-toolkit
+        id: cuda-toolkit-linux
         with:
           cuda: ${{ matrix.cuda-version }}
           method: "network"
           sub-packages: '["nvcc"]'
           linux-local-args: '["--toolkit"]'
 
+      - name: Set CUDA_HOME on Linux
+        if: ${{ runner.os == 'Linux' }}
+        run: echo "CUDA_HOME=${{steps.cuda-toolkit.outputs.CUDA_PATH}}" >> $GITHUB_ENV
+
       - name: Check CUDA installation
         if: ${{ runner.os == 'Linux' || runner.os == 'Windows' }}
-        run: |
-          nvcc -V
-          echo "CUDA_HOME=${{steps.cuda-toolkit.outputs.CUDA_PATH}}" >> $GITHUB_ENV
-          echo $CUDA_HOME
+        run: nvcc -V
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -112,8 +122,7 @@ jobs:
           mv ./artifacts/**/*.whl ./artifacts/dist-ubuntu-22.04/*.tar.gz ./dist
 
       - name: List artifacts
-        run:
-          find ./dist
+        run: find ./dist
 
       - name: Create Release
         env:

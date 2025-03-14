@@ -14,7 +14,7 @@ Install the package with pip:
 fastabx requires Python 3.12 or later, and PyTorch 2.6.0 [#torch]_ (with CUDA 12.4 on Linux and Windows).
 The pinned PyTorch version is the one available on PyPI.
 
-fastabx is available on Linux x86-64 and aarch64 (with glibc 2.34 or later [#glibc]_), macOS arm64, and Windows x86-64.
+fastabx is available on Linux x86-64 (with glibc 2.34 or later [#glibc]_), macOS arm64, and Windows x86-64.
 
 Build from source
 =================

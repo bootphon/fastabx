@@ -15,7 +15,7 @@ version = "0.1.5"
 description = "Fast ABX"
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [ {name = "Maxime Poli"} ]
+authors = [{ name = "Maxime Poli" }]
 license = { text = "MIT" } # To update to PEP 639 once support is added to setuptools
 keywords = ["speech", "machine learning"]
 classifiers = [
@@ -60,10 +60,7 @@ dev = [
     "types-tqdm>=4.67.0.20241221",
     "typos>=1.29.4",
 ]
-test = [
-    "hypothesis>=6.125.1",
-    "pytest>=8.3.4",
-]
+test = ["hypothesis>=6.125.1", "pytest>=8.3.4"]
 doc = [
     "furo>=2024.8.6",
     "matplotlib>=3.10.0",
@@ -73,6 +70,14 @@ doc = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.1",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [tool.ruff]
 line-length = 119
