@@ -1,6 +1,29 @@
 """DTW implementation using PyTorch C++ extensions, with CPU and CUDA backends."""
 
+import sys
+
 import torch
+
+TORCH_VERSION = "2.6.0"
+CUDA_VERSION = "12.4"
+
+if torch.__version__ != TORCH_VERSION:
+    msg = (
+        f"The DTW PyTorch backend has been built with {TORCH_VERSION}."
+        "Since there is no ABI/API compatibility between releases of PyTorch, "
+        f"you must install torch=={TORCH_VERSION} to use this backend."
+    )
+    raise ImportError(msg)
+
+if sys.platform in ["linux", "win32"] and torch.version.cuda != CUDA_VERSION:
+    msg = (
+        f"On Linux and Windows, the DTW PyTorch backend requires PyTorch with CUDA {CUDA_VERSION}. "
+        "It it not compatible with other CUDA versions, or with the CPU only version of PyTorch, "
+        "even if you wanted to only use the CPU backend of the DTW. "
+    )
+    raise ImportError(msg)
+
+from . import _C  # type: ignore[attr-defined] # noqa: E402, F401
 
 
 def dtw(distances: torch.Tensor) -> torch.Tensor:

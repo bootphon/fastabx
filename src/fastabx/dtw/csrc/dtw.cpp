@@ -11,7 +11,7 @@ extern "C" {
 PyObject* PyInit__C(void) {
   static struct PyModuleDef module_def = {
       PyModuleDef_HEAD_INIT,
-      "_C", /* name of module */
+      "dtw._C", /* name of module */
       NULL, /* module documentation, may be NULL */
       -1, /* size of per-interpreter state of the module,
              or -1 if the module keeps state in global variables. */
