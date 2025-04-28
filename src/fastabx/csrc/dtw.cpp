@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <omp.h>
 #include <Python.h>
-#include <torch/library.h>
-#include <torch/types.h>
+#include <torch/csrc/inductor/aoti_torch/c/shim.h>
+#include <torch/csrc/inductor/aoti_runtime/utils.h>
+#include <torch/csrc/stable/library.h>
 
 extern "C" {
 /* Creates a dummy empty _C module that can be imported from Python.
@@ -21,12 +23,13 @@ PyObject* PyInit__C(void) {
 }
 }
 
+using RAIIATH = torch::aot_inductor::RAIIAtenTensorHandle;
+
 namespace fastabx {
 
-float _dtw_cpu(torch::Tensor distances) {
+float _dtw_cpu(const RAIIATH distances) {
   const auto N = distances.size(0);
   const auto M = distances.size(1);
-  TORCH_CHECK(N > 0 && M > 0, "Empty input tensor");
 
   const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
   const auto distances_a = distances.accessor<float, 2>();
@@ -75,41 +78,41 @@ torch::Tensor dtw_cpu(torch::Tensor distances) {
   return torch::tensor(_dtw_cpu(distances), options);
 }
 
-torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Tensor sy, bool symmetric) {
-  const auto nx = distances.size(0);
-  const auto ny = distances.size(1);
-  const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
-  const auto sx_a = sx.accessor<int64_t, 1>();
-  const auto sy_a = sy.accessor<int64_t, 1>();
-  auto out = torch::zeros({nx, ny}, options);
-  auto out_a = out.accessor<float, 2>();
+// torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Tensor sy, bool symmetric) {
+//   const auto nx = distances.size(0);
+//   const auto ny = distances.size(1);
+//   const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
+//   const auto sx_a = sx.accessor<int64_t, 1>();
+//   const auto sy_a = sy.accessor<int64_t, 1>();
+//   auto out = torch::zeros({nx, ny}, options);
+//   auto out_a = out.accessor<float, 2>();
 
-#pragma omp parallel for schedule(dynamic)
-  for (int64_t i = 0; i < nx; i++) {
-    const int64_t start_j = symmetric ? i : 0;
-    for (int64_t j = start_j; j < ny; j++) {
-      if (symmetric && i == j)
-        continue;
-      const auto sub_distances = distances.index({i, j, torch::indexing::Slice(), torch::indexing::Slice()})
-                                     .slice(0, 0, sx_a[i])
-                                     .slice(1, 0, sy_a[j]);
-      out_a[i][j] = _dtw_cpu(sub_distances);
-      if (symmetric && i != j) {
-        out_a[j][i] = out_a[i][j];
-      }
-    }
-  }
-  return out;
+// #pragma omp parallel for schedule(dynamic)
+//   for (int64_t i = 0; i < nx; i++) {
+//     const int64_t start_j = symmetric ? i : 0;
+//     for (int64_t j = start_j; j < ny; j++) {
+//       if (symmetric && i == j)
+//         continue;
+//       const auto sub_distances = distances.index({i, j, torch::indexing::Slice(), torch::indexing::Slice()})
+//                                      .slice(0, 0, sx_a[i])
+//                                      .slice(1, 0, sy_a[j]);
+//       out_a[i][j] = _dtw_cpu(sub_distances);
+//       if (symmetric && i != j) {
+//         out_a[j][i] = out_a[i][j];
+//       }
+//     }
+//   }
+//   return out;
+// }
+
+STABLE_TORCH_LIBRARY_FRAGMENT(fastabx, m) {
+  m.def("dtw(Tensor distances) -> Tensor");
+  // m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor");
 }
 
-TORCH_LIBRARY(fastabx, m) {
-  m.def("dtw(Tensor distances) -> Tensor", {torch::Tag::pt2_compliant_tag});
-  m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor", {torch::Tag::pt2_compliant_tag});
-}
-
-TORCH_LIBRARY_IMPL(fastabx, CPU, m) {
+STABLE_TORCH_LIBRARY_IMPL(fastabx, CPU, m) {
   m.impl("dtw", &dtw_cpu);
-  m.impl("dtw_batch", &dtw_batch_cpu);
+  // m.impl("dtw_batch", &dtw_batch_cpu);
 }
 
 } // namespace fastabx

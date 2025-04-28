@@ -32,7 +32,7 @@ def get_extension() -> Extension:
     extension = CUDAExtension if use_cuda else CppExtension
     openmp_flags = get_openmp_flags()
     extra_compile_args = {
-        "cxx": ["-fdiagnostics-color=always", "-DPy_LIMITED_API=0x030C0000", "-O3"] + openmp_flags[0],
+        "cxx": ["-fdiagnostics-color=always", "-O3"] + openmp_flags[0],
         "nvcc": ["-O3"],
     }
     sources = [Path("src/fastabx/csrc/dtw.cpp")]

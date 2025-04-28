@@ -2,7 +2,7 @@
 requires = [
     "setuptools>=75.0.0,<=75.8.2", # Temporary upper bound: https://github.com/pytorch/pytorch/issues/148877
     "setuptools-scm>=8.1.0",
-    "torch==2.6.0",
+    "torch==2.7.0",
     "numpy>=2.0.2",
     "ninja>=1.11",
 ]
@@ -33,7 +33,7 @@ dependencies = [
     "cudf-polars-cu12>=24.12.0; sys_platform == 'linux'",
     "numpy>=2.1.3",
     "polars>=1.14.0",
-    "torch==2.6.0",
+    "torch==2.7.0",
     "tqdm>=4.67.1",
 ]
 
@@ -69,14 +69,6 @@ doc = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.1",
 ]
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
-
-[[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
-explicit = true
 
 [tool.ruff]
 line-length = 119
