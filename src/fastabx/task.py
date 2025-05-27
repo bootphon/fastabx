@@ -36,14 +36,14 @@ class Task:
         self.across = across or []
         verify_task_conditions([self.on, *self.by, *self.across])
         verify_dataset_labels(dataset.labels.select([self.on, *self.by, *self.across]))
-        self._subsampler_description = subsampler.description(with_across=bool(self.across)) if subsampler else ""
+        self._subsampler_description = subsampler.description() if subsampler else ""
 
         if self.across:
             cells = cells_on_by_across(self.dataset.labels.lazy(), self.on, self.by, self.across)
         else:
             cells = cells_on_by(self.dataset.labels.lazy(), self.on, self.by)
         if subsampler:
-            cells = subsampler(cells, with_across=bool(self.across))
+            cells = subsampler(cells)
         self.cells = cells.with_columns(
             description=cell_description(self.on, self.by, self.across),
             header=cell_header(self.on, self.by, self.across),
