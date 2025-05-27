@@ -8,7 +8,7 @@ import torch
 from fastabx.dataset import Dataset, FeatureMaker
 from fastabx.distance import DistanceName
 from fastabx.score import Score
-from fastabx.subsample import Subsampler
+from fastabx.subsample import librilight_subsampler
 from fastabx.task import Task
 
 
@@ -63,7 +63,7 @@ def zerospeech_abx(  # noqa: PLR0913
             by, across = None, ["speaker"]
         case _:
             raise InvalidSpeakerOrContextError
-    subsampler = Subsampler(max_size_group, max_x_across, seed)
+    subsampler = librilight_subsampler(seed, max_size_group, max_x_across if across is not None else None)
     task = Task(dataset, on="#phone", by=by, across=across, subsampler=subsampler)
     levels = ([("next-phone", "prev-phone")] if context == "within" else []) + ["speaker"]
     return Score(task, distance).collapse(levels=levels)
