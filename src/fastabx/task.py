@@ -62,7 +62,7 @@ class Task:
         self.is_symmetric = not bool(self.across)
         verify_task_conditions([self.on, *self.by, *self.across])
         verify_dataset_labels(self.dataset.labels.select([self.on, *self.by, *self.across]))
-        self._subsampler_description = subsampler.description(with_across=bool(self.across)) if subsampler else ""
+        self._subsampler_description = subsampler.description() if subsampler else ""
         self.cells = task_cells(self.dataset, self.on, self.by, self.across, subsampler) if cells is None else cells
 
     def __len__(self) -> int:
