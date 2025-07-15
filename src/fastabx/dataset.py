@@ -212,14 +212,14 @@ def load_data_from_item_with_times(
         .agg("index", "onset", "offset")
     )
     data, device, all_indices, right = [], torch.device("cuda" if torch.cuda.is_available() else "cpu"), {}, 0
-    decimals = by_file["onset"].dtype.inner.scale  # type: ignore[attr-defined]
+    decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
     for fileid, indices, onsets, offsets in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
         features = torch.load(paths_features[fileid], map_location=device).detach()
         times = torch.load(paths_times[fileid]).round(decimals=decimals)
         if times.ndim > 1:
             raise TimesArrayDimensionError
         for index, onset, offset in zip(indices, onsets, offsets, strict=True):
-            mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]
+            mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]  # ty: ignore[invalid-argument-type]
             if not mask.any():
                 raise TimesArrayFrontiersError(fileid, float(onset), float(offset))
             data.append(features[mask])

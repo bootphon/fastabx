@@ -57,7 +57,7 @@ class Score:
         scores, sizes = [], []
         self.distance_name = distance_name
         distance = distance_function(distance_name)
-        if distance_name in ("cosine", "angular"):
+        if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
         for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
             scores.append(abx_on_cell(cell, distance).item())
