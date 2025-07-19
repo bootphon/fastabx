@@ -24,9 +24,10 @@ __global__ void dtw_wavefront_kernel(
   const int64_t N = sx[x];
   const int64_t M = sy[y];
 
-  __shared__ float alpha[MAX_DIAG_LEN]; // Last diagonal
-  __shared__ float beta[MAX_DIAG_LEN]; // Second to last diagonal
-  __shared__ float gamma[MAX_DIAG_LEN]; // Buffer for the last diagonal
+  __shared__ float buffers[3][MAX_DIAG_LEN];
+  int alpha = 0; // Last diagonal
+  int beta = 1; // Second to last diagonal
+  int gamma = 2; // Buffer for the last diagonal
 
   for (int64_t diag = 0; diag <= N + M - 1; diag++) {
     const int64_t start_i = min(diag, N - 1);
@@ -36,22 +37,20 @@ __global__ void dtw_wavefront_kernel(
     for (int k = threadIdx.x; k < length; k += blockDim.x) {
       const int64_t i = start_i - k;
       const int64_t j = start_j + k;
-      const float c_up = (i > 0) ? alpha[j] : FLT_MAX;
-      const float c_left = (j > 0) ? alpha[j - 1] : FLT_MAX;
-      const float c_diag = (i > 0 && j > 0) ? beta[j - 1] : FLT_MAX;
+      const float c_up = (i > 0) ? buffers[alpha][j] : FLT_MAX;
+      const float c_left = (j > 0) ? buffers[alpha][j - 1] : FLT_MAX;
+      const float c_diag = (i > 0 && j > 0) ? buffers[beta][j - 1] : FLT_MAX;
       const float min_cost = (i == 0 && j == 0) ? 0 : min(c_left, min(c_diag, c_up));
       const float cij = distances[x][y][i][j] + min_cost;
       cost[x][y][i][j] = cij;
-      gamma[j] = cij;
+      buffers[gamma][j] = cij;
     }
     __syncthreads();
 
-    for (int k = threadIdx.x; k < length; k += blockDim.x) {
-      const int64_t j = start_j + k;
-      beta[j] = alpha[j];
-      alpha[j] = gamma[j];
-    }
-    __syncthreads();
+    int temp = beta;
+    beta = alpha;
+    alpha = gamma;
+    gamma = temp;
   }
 }
 
