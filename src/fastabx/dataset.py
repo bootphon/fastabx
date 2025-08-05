@@ -162,6 +162,19 @@ class FeaturesSizeError(ValueError):
         )
 
 
+class EmptyFeaturesError(ValueError):
+    """Raised when empty features are found when building the dataset."""
+
+    def __init__(self, df: pl.DataFrame) -> None:
+        super().__init__(
+            f"{len(df)} empty entries found. These entries are shorter than a single unit at the given frequency. "
+            f"First, check that the given frequency is correct. Then, if you intend to compute ABX on units this large"
+            f", you must first remove these entries from your item file. "
+            f"Refer to https://docs.cognitive-ml.fr/fastabx/advanced/slicing.html for details on how features are "
+            f"sliced. The empty entries are: \n{df}"
+        )
+
+
 def load_data_from_item[T](
     mapping: dict[str, T],
     labels: pl.DataFrame,
@@ -181,6 +194,13 @@ def load_data_from_item[T](
         for start, end in zip(start_indices, end_indices, strict=True):
             if start < 0 or end > features.size(0):
                 raise FeaturesSizeError(fileid, start, end, features.size(0))
+            if end <= start:
+                raise EmptyFeaturesError(
+                    lazy.filter(pl.col("end") <= pl.col("start"))
+                    .sort("index")
+                    .select("#file", "onset", "offset")
+                    .collect()
+                )
             data.append(features[start:end])
     return dict(enumerate(indices.rows())), torch.cat(data, dim=0)
 
