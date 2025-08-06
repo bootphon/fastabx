@@ -1,11 +1,11 @@
 #include <Python.h>
+#include <omp.h>
 #include <torch/csrc/inductor/aoti_torch/c/shim.h>
-#include <torch/csrc/inductor/aoti_torch/generated/c_shim_cpu.h>
 #include <torch/csrc/stable/library.h>
+#include <torch/csrc/stable/ops.h>
 #include <torch/csrc/stable/tensor.h>
 #include <torch/headeronly/util/Exception.h>
 #include <algorithm>
-#include <iostream>
 #include <vector>
 
 extern "C" {
@@ -30,21 +30,22 @@ using torch::stable::Tensor;
 
 namespace fastabx {
 
-inline float dtw(const float* distances, int64_t N, int64_t M) {
+inline float dtw(const float* distances, int64_t N, int64_t M, int64_t stride_x, int64_t stride_y) {
   STD_TORCH_CHECK(N > 0 && M > 0, "Empty input tensor");
+  STD_TORCH_CHECK(stride_x > 0 && stride_y > 0, "Strides must be positive");
   std::vector<float> cost(N * M);
 
   cost[0] = distances[0];
   for (int64_t i = 1; i < N; i++) {
-    cost[i * M] = distances[i * M] + cost[(i - 1) * M];
+    cost[i * M] = distances[i * stride_x] + cost[(i - 1) * M];
   }
   for (int64_t j = 1; j < M; j++) {
-    cost[j] = distances[j] + cost[j - 1];
+    cost[j] = distances[j * stride_y] + cost[j - 1];
   }
   for (int64_t i = 1; i < N; i++) {
     for (int64_t j = 1; j < M; j++) {
-      cost[i * M + j] =
-          distances[i * M + j] + std::min({cost[(i - 1) * M + j], cost[(i - 1) * M + j - 1], cost[i * M + j - 1]});
+      cost[i * M + j] = distances[i * stride_x + j * stride_y] +
+          std::min({cost[(i - 1) * M + j], cost[(i - 1) * M + j - 1], cost[i * M + j - 1]});
     }
   }
 
@@ -73,7 +74,12 @@ inline float dtw(const float* distances, int64_t N, int64_t M) {
 }
 
 Tensor dtw_cpu(const Tensor distances) {
-  float result = dtw(reinterpret_cast<const float*>(distances.data_ptr()), distances.size(0), distances.size(1));
+  float result =
+      dtw(reinterpret_cast<const float*>(distances.data_ptr()),
+          distances.size(0),
+          distances.size(1),
+          distances.stride(0),
+          distances.stride(1));
   AtenTensorHandle ath;
   aoti_torch_scalar_to_tensor_float32(result, &ath);
   return Tensor(ath);
@@ -82,11 +88,12 @@ Tensor dtw_cpu(const Tensor distances) {
 Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
   const auto nx = distances.size(0);
   const auto ny = distances.size(1);
-  const auto sx_a = reinterpret_cast<const int64_t*>(sx.data_ptr());
-  const auto sy_a = reinterpret_cast<const int64_t*>(sy.data_ptr());
+  const auto distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
+  const auto sx_ptr = reinterpret_cast<const int64_t*>(sx.data_ptr());
+  const auto sy_ptr = reinterpret_cast<const int64_t*>(sy.data_ptr());
 
   int64_t sizes[2] = {nx, ny};
-  int64_t strides[2] = {distances.stride(0), distances.stride(1)};
+  int64_t strides[2] = {ny, 1};
   int32_t dtype;
   aoti_torch_get_dtype(distances.get(), &dtype);
   int32_t device_type;
@@ -94,25 +101,23 @@ Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, b
   AtenTensorHandle ath;
   aoti_torch_empty_strided(2, sizes, strides, dtype, device_type, distances.get_device(), &ath);
   auto out = Tensor(ath);
-  auto out_a = reinterpret_cast<float*>(out.data_ptr());
+  zero_(out);
+  auto out_ptr = reinterpret_cast<float*>(out.data_ptr());
 
+#pragma omp parallel for schedule(dynamic)
   for (int64_t i = 0; i < nx; i++) {
     const int64_t start_j = symmetric ? i : 0;
     for (int64_t j = start_j; j < ny; j++) {
       if (symmetric && i == j)
         continue;
-
-      AtenTensorHandle sub_ath;
-      AtenTensorHandle sub_ath2;
-      int64_t i_end = i + 1;
-      int64_t j_end = j + 1;
-      aoti_torch_cpu_slice_Tensor(distances.get(), 0, &i, &i_end, 1, &sub_ath);
-      aoti_torch_cpu_slice_Tensor(sub_ath, 1, &j, &j_end, 1, &sub_ath2);
-      const auto sub_distances = Tensor(sub_ath2);
-
-      out_a[i * ny + j] = dtw(reinterpret_cast<const float*>(sub_distances.data_ptr()), sx_a[i], sy_a[j]);
+      out_ptr[i * ny + j] =
+          dtw(distances_ptr + i * distances.stride(0) + j * distances.stride(1),
+              sx_ptr[i],
+              sy_ptr[j],
+              distances.stride(2),
+              distances.stride(3));
       if (symmetric && i != j) {
-        out_a[j * ny + i] = out_a[i * ny + j];
+        out_ptr[j * ny + i] = out_ptr[i * ny + j];
       }
     }
   };
