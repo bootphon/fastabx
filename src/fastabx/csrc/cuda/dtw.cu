@@ -57,7 +57,7 @@ __global__ void dtw_wavefront_kernel(
       const float c_up = (i > 0) ? buffers[alpha][j] : FLT_MAX;
       const float c_left = (j > 0) ? buffers[alpha][j - 1] : FLT_MAX;
       const float c_diag = (i > 0 && j > 0) ? buffers[beta][j - 1] : FLT_MAX;
-      const float min_cost = (i == 0 && j == 0) ? 0 : min(c_left, min(c_diag, c_up));
+      const float min_cost = (i == 0 && j == 0) ? 0 : fminf(c_left, fminf(c_diag, c_up));
       const float cij = min_cost +
           distances[x * distances_strides_0 + y * distances_strides_1 + i * distances_strides_2 +
                     j * distances_strides_3];
