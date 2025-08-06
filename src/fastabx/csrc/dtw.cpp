@@ -94,12 +94,8 @@ Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, b
 
   int64_t sizes[2] = {nx, ny};
   int64_t strides[2] = {ny, 1};
-  int32_t dtype;
-  aoti_torch_get_dtype(distances.get(), &dtype);
-  int32_t device_type;
-  aoti_torch_get_device_type(distances.get(), &device_type);
   AtenTensorHandle ath;
-  aoti_torch_empty_strided(2, sizes, strides, dtype, device_type, distances.get_device(), &ath);
+  aoti_torch_empty_strided(2, sizes, strides, aoti_torch_dtype_float32(), aoti_torch_device_type_cpu(), 0, &ath);
   auto out = Tensor(ath);
   zero_(out);
   auto out_ptr = reinterpret_cast<float*>(out.data_ptr());
