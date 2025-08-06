@@ -2,6 +2,7 @@
 
 import abc
 import math
+import os
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,10 +17,14 @@ from polars.interchange.protocol import SupportsInterchange
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
-from fastabx.utils import with_librilight_bug
 from fastabx.verify import verify_empty_datapoints
 
 type ArrayLike = npt.ArrayLike
+
+
+def with_librilight_bug() -> bool:
+    """Whether to reproduce the results from LibriLight ABX or not."""
+    return os.getenv("FASTABX_WITH_LIBRILIGHT_BUG", "0") == "1"
 
 
 @dataclass(frozen=True)

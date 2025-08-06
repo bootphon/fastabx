@@ -1,12 +1,17 @@
-#include <ATen/Parallel.h>
 #include <Python.h>
-#include <torch/library.h>
-#include <torch/types.h>
+#include <torch/csrc/inductor/aoti_torch/c/shim.h>
+#include <torch/csrc/inductor/aoti_torch/generated/c_shim_cpu.h>
+#include <torch/csrc/stable/library.h>
+#include <torch/csrc/stable/tensor.h>
+#include <torch/headeronly/util/Exception.h>
+#include <algorithm>
+#include <iostream>
+#include <vector>
 
 extern "C" {
 /* Creates a dummy empty _C module that can be imported from Python.
    The import from Python will load the .so consisting of this file
-   in this extension, so that the TORCH_LIBRARY static initializers
+   in this extension, so that the STABLE_TORCH_LIBRARY static initializers
    below are run. */
 PyObject* PyInit__C(void) {
   static struct PyModuleDef module_def = {
@@ -21,28 +26,25 @@ PyObject* PyInit__C(void) {
 }
 }
 
+using torch::stable::Tensor;
+
 namespace fastabx {
 
-float _dtw_cpu(torch::Tensor distances) {
-  const auto N = distances.size(0);
-  const auto M = distances.size(1);
-  TORCH_CHECK(N > 0 && M > 0, "Empty input tensor");
+inline float dtw(const float* distances, int64_t N, int64_t M) {
+  STD_TORCH_CHECK(N > 0 && M > 0, "Empty input tensor");
+  std::vector<float> cost(N * M);
 
-  const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
-  const auto distances_a = distances.accessor<float, 2>();
-  auto cost = torch::zeros({N, M}, options);
-  auto cost_a = cost.accessor<float, 2>();
-
-  cost_a[0][0] = distances_a[0][0];
+  cost[0] = distances[0];
   for (int64_t i = 1; i < N; i++) {
-    cost_a[i][0] = distances_a[i][0] + cost_a[i - 1][0];
+    cost[i * M] = distances[i * M] + cost[(i - 1) * M];
   }
   for (int64_t j = 1; j < M; j++) {
-    cost_a[0][j] = distances_a[0][j] + cost_a[0][j - 1];
+    cost[j] = distances[j] + cost[j - 1];
   }
   for (int64_t i = 1; i < N; i++) {
     for (int64_t j = 1; j < M; j++) {
-      cost_a[i][j] = distances_a[i][j] + std::min({cost_a[i - 1][j], cost_a[i - 1][j - 1], cost_a[i][j - 1]});
+      cost[i * M + j] =
+          distances[i * M + j] + std::min({cost[(i - 1) * M + j], cost[(i - 1) * M + j - 1], cost[i * M + j - 1]});
     }
   }
 
@@ -50,9 +52,9 @@ float _dtw_cpu(torch::Tensor distances) {
   int64_t i = N - 1;
   int64_t j = M - 1;
   while (i > 0 && j > 0) {
-    const float c_up = cost_a[i - 1][j];
-    const float c_left = cost_a[i][j - 1];
-    const float c_diag = cost_a[i - 1][j - 1];
+    const float c_up = cost[(i - 1) * M + j];
+    const float c_left = cost[i * M + j - 1];
+    const float c_diag = cost[(i - 1) * M + j - 1];
     if (c_diag <= c_left && c_diag <= c_up) {
       i--;
       j--;
@@ -67,50 +69,72 @@ float _dtw_cpu(torch::Tensor distances) {
     path_len += j;
   if (j == 0)
     path_len += i;
-  return cost_a[N - 1][M - 1] / path_len;
+  return cost[(N - 1) * M + M - 1] / path_len;
 }
 
-torch::Tensor dtw_cpu(torch::Tensor distances) {
-  const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
-  return torch::tensor(_dtw_cpu(distances), options);
+Tensor dtw_cpu(const Tensor distances) {
+  float result = dtw(reinterpret_cast<const float*>(distances.data_ptr()), distances.size(0), distances.size(1));
+  AtenTensorHandle ath;
+  aoti_torch_scalar_to_tensor_float32(result, &ath);
+  return Tensor(ath);
 }
 
-torch::Tensor dtw_batch_cpu(torch::Tensor distances, torch::Tensor sx, torch::Tensor sy, bool symmetric) {
+Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
   const auto nx = distances.size(0);
   const auto ny = distances.size(1);
-  const auto options = torch::TensorOptions().dtype(torch::kFloat32).device(distances.device());
-  const auto sx_a = sx.accessor<int64_t, 1>();
-  const auto sy_a = sy.accessor<int64_t, 1>();
-  auto out = torch::zeros({nx, ny}, options);
-  auto out_a = out.accessor<float, 2>();
+  const auto sx_a = reinterpret_cast<const int64_t*>(sx.data_ptr());
+  const auto sy_a = reinterpret_cast<const int64_t*>(sy.data_ptr());
 
-  at::parallel_for(0, nx, 1, [&](int64_t start, int64_t end) {
-    for (int64_t i = start; i < end; i++) {
-      const int64_t start_j = symmetric ? i : 0;
-      for (int64_t j = start_j; j < ny; j++) {
-        if (symmetric && i == j)
-          continue;
-        const auto sub_distances = distances.index({i, j, torch::indexing::Slice(), torch::indexing::Slice()})
-                                       .slice(0, 0, sx_a[i])
-                                       .slice(1, 0, sy_a[j]);
-        out_a[i][j] = _dtw_cpu(sub_distances);
-        if (symmetric && i != j) {
-          out_a[j][i] = out_a[i][j];
-        }
+  int64_t sizes[2] = {nx, ny};
+  int64_t strides[2] = {distances.stride(0), distances.stride(1)};
+  int32_t dtype;
+  aoti_torch_get_dtype(distances.get(), &dtype);
+  int32_t device_type;
+  aoti_torch_get_device_type(distances.get(), &device_type);
+  AtenTensorHandle ath;
+  aoti_torch_empty_strided(2, sizes, strides, dtype, device_type, distances.get_device(), &ath);
+  auto out = Tensor(ath);
+  auto out_a = reinterpret_cast<float*>(out.data_ptr());
+
+  for (int64_t i = 0; i < nx; i++) {
+    const int64_t start_j = symmetric ? i : 0;
+    for (int64_t j = start_j; j < ny; j++) {
+      if (symmetric && i == j)
+        continue;
+
+      AtenTensorHandle sub_ath;
+      AtenTensorHandle sub_ath2;
+      int64_t i_end = i + 1;
+      int64_t j_end = j + 1;
+      aoti_torch_cpu_slice_Tensor(distances.get(), 0, &i, &i_end, 1, &sub_ath);
+      aoti_torch_cpu_slice_Tensor(sub_ath, 1, &j, &j_end, 1, &sub_ath2);
+      const auto sub_distances = Tensor(sub_ath2);
+
+      out_a[i * ny + j] = dtw(reinterpret_cast<const float*>(sub_distances.data_ptr()), sx_a[i], sy_a[j]);
+      if (symmetric && i != j) {
+        out_a[j * ny + i] = out_a[i * ny + j];
       }
     }
-  });
+  };
   return out;
 }
 
-TORCH_LIBRARY(fastabx, m) {
-  m.def("dtw(Tensor distances) -> Tensor", {torch::Tag::pt2_compliant_tag});
-  m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor", {torch::Tag::pt2_compliant_tag});
+void boxed_dtw_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
+  stack[0] = from(dtw_cpu(to<Tensor>(stack[0])));
 }
 
-TORCH_LIBRARY_IMPL(fastabx, CPU, m) {
-  m.impl("dtw", &dtw_cpu);
-  m.impl("dtw_batch", &dtw_batch_cpu);
+void boxed_dtw_batch_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
+  stack[0] = from(dtw_batch_cpu(to<Tensor>(stack[0]), to<Tensor>(stack[1]), to<Tensor>(stack[2]), to<bool>(stack[3])));
+}
+
+STABLE_TORCH_LIBRARY(fastabx, m) {
+  m.def("dtw(Tensor distances) -> Tensor");
+  m.def("dtw_batch(Tensor distances, Tensor sx, Tensor sy, bool symmetric) -> Tensor");
+}
+
+STABLE_TORCH_LIBRARY_IMPL(fastabx, CPU, m) {
+  m.impl("dtw", &boxed_dtw_cpu);
+  m.impl("dtw_batch", &boxed_dtw_batch_cpu);
 }
 
 } // namespace fastabx
