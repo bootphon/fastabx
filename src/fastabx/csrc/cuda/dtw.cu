@@ -22,12 +22,19 @@ __global__ void dtw_wavefront_kernel(
     const int64_t* sx,
     const int64_t* sy,
     bool symmetric,
-    const int64_t* cost_sizes,
-    const int64_t* cost_strides,
-    const int64_t* distances_strides) {
+    int64_t cost_sizes_0,
+    int64_t cost_sizes_1,
+    int64_t cost_strides_0,
+    int64_t cost_strides_1,
+    int64_t cost_strides_2,
+    int64_t cost_strides_3,
+    int64_t distances_strides_0,
+    int64_t distances_strides_1,
+    int64_t distances_strides_2,
+    int64_t distances_strides_3) {
   const int x = blockIdx.x;
   const int y = blockIdx.y;
-  if (x >= cost_sizes[0] || y >= cost_sizes[1])
+  if (x >= cost_sizes_0 || y >= cost_sizes_1)
     return;
   if (symmetric && x >= y)
     return;
@@ -52,9 +59,9 @@ __global__ void dtw_wavefront_kernel(
       const float c_diag = (i > 0 && j > 0) ? buffers[beta][j - 1] : FLT_MAX;
       const float min_cost = (i == 0 && j == 0) ? 0 : min(c_left, min(c_diag, c_up));
       const float cij = min_cost +
-          distances[x * distances_strides[0] + y * distances_strides[1] + i * distances_strides[2] +
-                    j * distances_strides[3]];
-      cost[x * cost_strides[0] + y * cost_strides[1] + i * cost_strides[2] + j * cost_strides[3]] = cij;
+          distances[x * distances_strides_0 + y * distances_strides_1 + i * distances_strides_2 +
+                    j * distances_strides_3];
+      cost[x * cost_strides_0 + y * cost_strides_1 + i * cost_strides_2 + j * cost_strides_3] = cij;
       buffers[gamma][j] = cij;
     }
     __syncthreads();
@@ -72,12 +79,17 @@ __global__ void dtw_backtrack_kernel(
     const int64_t* sx,
     const int64_t* sy,
     bool symmetric,
-    const int64_t* out_strides,
-    const int64_t* cost_sizes,
-    const int64_t* cost_strides) {
+    int64_t out_strides_0,
+    int64_t out_strides_1,
+    int64_t cost_sizes_0,
+    int64_t cost_sizes_1,
+    int64_t cost_strides_0,
+    int64_t cost_strides_1,
+    int64_t cost_strides_2,
+    int64_t cost_strides_3) {
   const int x = blockIdx.x;
   const int y = blockIdx.y;
-  if (x >= cost_sizes[0] || y >= cost_sizes[1])
+  if (x >= cost_sizes_0 || y >= cost_sizes_1)
     return;
   if (symmetric && x >= y)
     return;
@@ -88,12 +100,10 @@ __global__ void dtw_backtrack_kernel(
   int64_t i = N - 1;
   int64_t j = M - 1;
   while (i > 0 && j > 0) {
-    const float c_up =
-        cost[x * cost_strides[0] + y * cost_strides[1] + (i - 1) * cost_strides[2] + j * cost_strides[3]];
-    const float c_left =
-        cost[x * cost_strides[0] + y * cost_strides[1] + i * cost_strides[2] + (j - 1) * cost_strides[3]];
+    const float c_up = cost[x * cost_strides_0 + y * cost_strides_1 + (i - 1) * cost_strides_2 + j * cost_strides_3];
+    const float c_left = cost[x * cost_strides_0 + y * cost_strides_1 + i * cost_strides_2 + (j - 1) * cost_strides_3];
     const float c_diag =
-        cost[x * cost_strides[0] + y * cost_strides[1] + (i - 1) * cost_strides[2] + (j - 1) * cost_strides[3]];
+        cost[x * cost_strides_0 + y * cost_strides_1 + (i - 1) * cost_strides_2 + (j - 1) * cost_strides_3];
     if (c_diag <= c_left && c_diag <= c_up) {
       i--;
       j--;
@@ -109,11 +119,10 @@ __global__ void dtw_backtrack_kernel(
   if (j == 0)
     path_len += i;
 
-  out[x * out_strides[0] + y * out_strides[1]] =
-      cost[x * cost_strides[0] + y * cost_strides[1] + (N - 1) * cost_strides[2] + (M - 1) * cost_strides[3]] /
-      path_len;
+  out[x * out_strides_0 + y * out_strides_1] =
+      cost[x * cost_strides_0 + y * cost_strides_1 + (N - 1) * cost_strides_2 + (M - 1) * cost_strides_3] / path_len;
   if (symmetric)
-    out[y * out_strides[0] + x * out_strides[1]] = out[x * out_strides[0] + y * out_strides[1]];
+    out[y * out_strides_0 + x * out_strides_1] = out[x * out_strides_0 + y * out_strides_1];
 }
 
 Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
@@ -121,6 +130,9 @@ Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, 
   const auto ny = distances.size(1);
   const auto max_x = distances.size(2);
   const auto max_y = distances.size(3);
+
+  STD_TORCH_CHECK(nx > 0 && ny > 0 && max_x > 0 && max_y > 0, "Empty input tensor");
+  STD_TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
 
   auto cost = empty_like(distances);
   zero_(cost);
@@ -131,26 +143,6 @@ Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, 
       2, sizes, strides, aoti_torch_dtype_float32(), aoti_torch_device_type_cuda(), distances.get_device(), &ath);
   auto out = Tensor(ath);
 
-  // Create device memory for stride and size arrays
-  int64_t h_distances_strides[4] = {
-      distances.stride(0), distances.stride(1), distances.stride(2), distances.stride(3)};
-  int64_t h_cost_sizes[4] = {nx, ny, max_x, max_y};
-  int64_t h_cost_strides[4] = {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)};
-  int64_t h_out_strides[2] = {out.stride(0), out.stride(1)};
-
-  int64_t *d_distances_strides, *d_cost_sizes, *d_cost_strides, *d_out_strides;
-  cudaMalloc(&d_distances_strides, 4 * sizeof(int64_t));
-  cudaMalloc(&d_cost_sizes, 4 * sizeof(int64_t));
-  cudaMalloc(&d_cost_strides, 4 * sizeof(int64_t));
-  cudaMalloc(&d_out_strides, 2 * sizeof(int64_t));
-  cudaMemcpy(d_distances_strides, h_distances_strides, 4 * sizeof(int64_t), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_cost_sizes, h_cost_sizes, 4 * sizeof(int64_t), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_cost_strides, h_cost_strides, 4 * sizeof(int64_t), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_out_strides, h_out_strides, 2 * sizeof(int64_t), cudaMemcpyHostToDevice);
-
-  STD_TORCH_CHECK(nx > 0 && ny > 0 && max_x > 0 && max_y > 0, "Empty input tensor");
-  STD_TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
-
   const dim3 num_blocks(nx, ny);
   const int num_threads = max_x > 1024 ? 1024 : max_x;
 
@@ -160,23 +152,30 @@ Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, 
       reinterpret_cast<const int64_t*>(sx.data_ptr()),
       reinterpret_cast<const int64_t*>(sy.data_ptr()),
       symmetric,
-      d_cost_sizes,
-      d_cost_strides,
-      d_distances_strides);
+      nx,
+      ny,
+      cost.stride(0),
+      cost.stride(1),
+      cost.stride(2),
+      cost.stride(3),
+      distances.stride(0),
+      distances.stride(1),
+      distances.stride(2),
+      distances.stride(3));
   dtw_backtrack_kernel<<<num_blocks, 1>>>(
       reinterpret_cast<float*>(out.data_ptr()),
       reinterpret_cast<const float*>(cost.data_ptr()),
       reinterpret_cast<const int64_t*>(sx.data_ptr()),
       reinterpret_cast<const int64_t*>(sy.data_ptr()),
       symmetric,
-      d_out_strides,
-      d_cost_sizes,
-      d_cost_strides);
-
-  cudaFree(d_distances_strides);
-  cudaFree(d_cost_sizes);
-  cudaFree(d_cost_strides);
-  cudaFree(d_out_strides);
+      out.stride(0),
+      out.stride(1),
+      nx,
+      ny,
+      cost.stride(0),
+      cost.stride(1),
+      cost.stride(2),
+      cost.stride(3));
   return out;
 }
 
