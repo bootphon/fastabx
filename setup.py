@@ -11,12 +11,11 @@ def get_openmp_flags() -> tuple[list[str], list[str]]:
     """Return the compiler and linker flags for OpenMP."""
     match sys.platform:
         case "linux":
-            compile_flags, link_flags = ["-fopenmp"], ["-fopenmp"]
+            return ["-fopenmp"], ["-fopenmp"]
         case "win32":
-            compile_flags, link_flags = ["-openmp"], []
+            return ["-openmp"], []
         case _:  # On MacOS, we use the OpenMP version vendored by PyTorch
             return [], []
-    return compile_flags, link_flags
 
 
 def get_extension() -> Extension:
