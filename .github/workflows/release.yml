@@ -14,28 +14,37 @@ jobs:
         include:
           - { os: "macos-14", torch-version: "2.6.0", torch-backend: "cpu" }
           - { os: "macos-14", torch-version: "2.7.1", torch-backend: "cpu" }
+          - { os: "macos-14", torch-version: "2.8.0", torch-backend: "cpu" }
           - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cpu" }
           - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cu124" }
           - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cu126" }
           - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cpu" }
           - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cu126" }
           - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cu128" }
+          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cpu" }
+          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu126" }
+          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu128" }
+          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu129" }
           - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cpu" }
           - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cu124" }
           - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cu126" }
           - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cpu" }
           - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cu126" }
           - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cu128" }
+          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cpu" }
+          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu126" }
+          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu128" }
+          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu129" }
     env:
       GLIBC_VERSION: "2_34"
-      DEFAULT_VERSION: "2.7.1"
+      DEFAULT_VERSION: "2.8.0"
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check if this is the default version
         shell: bash
         run: |
-          DEFAULT_BACKEND=$(jq -rn '{"Linux": "cu126", "Windows": "cpu", "macOS": "cpu"}["${{ runner.os }}"]')
+          DEFAULT_BACKEND=$(jq -rn '{"Linux": "cu128", "Windows": "cpu", "macOS": "cpu"}["${{ runner.os }}"]')
           if [[ "${{ matrix.torch-version }}" == "$DEFAULT_VERSION" && "${{ matrix.torch-backend }}" == "$DEFAULT_BACKEND" ]]; then
             echo "IS_DEFAULT=true" >> $GITHUB_ENV
           else
