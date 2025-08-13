@@ -366,7 +366,9 @@ class Dataset:
     ) -> "Dataset":
         """Create a dataset from the features (numpy array) and the labels (dictionary of sequences)."""
         features_df = pl.from_numpy(np.asarray(features))
-        labels_df = pl.from_dict(labels) if isinstance(labels, Mapping) else pl.from_dataframe(labels.__dataframe__())
+        labels_df = (
+            pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)
+        )
         if len(features_df) != len(labels_df):
             raise ValueError
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)

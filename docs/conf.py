@@ -1,4 +1,5 @@
-"""Sphinx configuration."""  # noqa: INP001
+# ruff: noqa: INP001, A001
+"""Sphinx configuration."""
 
 import functools
 import inspect
@@ -17,7 +18,7 @@ extensions = [
 
 project = "fastabx"
 author = metadata(project)["Author"]
-copyright = f"{datetime.now(tz=UTC).year}, {author}"  # noqa: A001
+copyright = f"{datetime.now(tz=UTC).year}, {author}"
 version = metadata(project)["Version"]
 release = version
 

@@ -5,7 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from torch.library import opcheck
 
-import fastabx  # noqa: F401
+import fastabx  # noqa: F401 # Need to import it to register dtw operation
 
 DIM, BATCH = st.integers(1, 1280), st.integers(1, 3)
 LOW, HIGH_MINUS_LOW = st.floats(-100, 100), st.floats(0.1, 100)

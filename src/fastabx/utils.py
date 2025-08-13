@@ -27,7 +27,7 @@ def load_dtw_extension() -> None:
     expected = json.loads((importlib.resources.files("fastabx") / "torch_version.json").read_text())[sys.platform]
     if torch.__version__ != expected:
         raise PyTorchVersionError(torch.__version__, expected)
-    from . import _C  # type: ignore[attr-defined] # noqa: F401, PLC0415
+    from . import _C  # ty: ignore[unresolved-import] # noqa: F401, PLC0415
 
 
 def with_librilight_bug() -> bool:

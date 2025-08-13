@@ -1,6 +1,6 @@
 """Check that the configuration of the convolutions is compatible with the item file."""
 
-# ruff: noqa: D101, D102, D103, PLR2004, T201
+# ruff: noqa: D101, D102, D103, S603, T201
 import argparse
 import subprocess
 import uuid
@@ -14,10 +14,15 @@ import torch
 from fastabx.dataset import dummy_dataset_from_item, find_all_files
 
 
+class NoAudioError(ValueError):
+    def __init__(self, extension: str, root: Path | str) -> None:
+        super().__init__(f"No audio found with extension {extension} in {root}")
+
+
 def num_samples(path: str | Path) -> int:
     cmd = ["soxi", "-s", str(path)]
     try:
-        out = subprocess.run(cmd, capture_output=True, check=True, text=True).stdout  # noqa: S603
+        out = subprocess.run(cmd, capture_output=True, check=True, text=True).stdout
     except subprocess.CalledProcessError as error:
         raise RuntimeError(error.stderr) from error
     return int(out)
@@ -73,7 +78,7 @@ def invalid_entries_in_item(
     convs = [Conv1d.from_string(conv) for conv in convs_string.split("-")]
     lengths = {name: conv_length(length, convs) for name, length in get_all_num_samples(root, extension).items()}
     if not lengths:
-        raise ValueError(f"Not audio found with extension {extension} in {root}")  # noqa: TRY003, EM102
+        raise NoAudioError(extension, root)
     return (
         dummy_dataset_from_item(item, frequency)
         .labels.select(pl.exclude("left", "right"))

@@ -7,7 +7,6 @@
 #    "h5features==1.4.1",
 # ]
 # ///
-# ruff: noqa: EM101, EM102, TRY003
 """Utility to convert h5features to torch tensors, and back, intended to be used alongside ABXpy."""
 
 import argparse
@@ -24,7 +23,7 @@ def torch_to_h5features(root: Path, dest: Path, step: float, group: str = "featu
     items, labels, features = [], [], []
     for path in sorted(root.glob("*.pt")):
         feats = torch.load(path, map_location="cpu").squeeze().numpy(force=True)
-        if feats.ndim != 2:  # noqa: PLR2004
+        if feats.ndim != 2:
             raise ValueError(path)
         times = np.arange(step / 2, feats.shape[0] * step, step, dtype=np.float64)
         items.append(path.stem)
@@ -39,7 +38,7 @@ def torch_to_h5features_with_times(root_features: Path, root_times: Path, dest: 
     items, labels, features = [], [], []
     for path in sorted(root_features.glob("*.pt")):
         feats = torch.load(path, map_location="cpu").squeeze().numpy(force=True)
-        if feats.ndim != 2:  # noqa: PLR2004
+        if feats.ndim != 2:
             raise ValueError(path)
         times = root_times / path.name
         items.append(path.stem)
