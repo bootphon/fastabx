@@ -52,11 +52,11 @@ dev = [
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "pre-commit>=4.2.0",
-    "ruff>=0.12.3",
+    "ruff>=0.12.8",
     "ty>=0.0.1a17",
     "types-setuptools>=80.9.0.20250529",
     "types-tqdm>=4.67.0.20250516",
-    "typos>=1.34.0",
+    "typos>=1.35.4",
 ]
 test = ["hypothesis>=6.135.31", "pytest>=8.4.1"]
 doc = [
