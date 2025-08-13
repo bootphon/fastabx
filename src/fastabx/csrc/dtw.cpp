@@ -26,8 +26,6 @@ PyObject* PyInit__C(void) {
 }
 }
 
-using torch::stable::Tensor;
-
 namespace fastabx {
 
 inline float dtw(
@@ -78,7 +76,7 @@ inline float dtw(
   return cost[(N - 1) * M + M - 1] / path_len;
 }
 
-Tensor dtw_cpu(const Tensor distances) {
+torch::stable::Tensor dtw_cpu(const torch::stable::Tensor distances) {
   float result =
       dtw(reinterpret_cast<const float*>(distances.data_ptr()),
           distances.size(0),
@@ -87,22 +85,22 @@ Tensor dtw_cpu(const Tensor distances) {
           distances.stride(1));
   AtenTensorHandle ath;
   aoti_torch_scalar_to_tensor_float32(result, &ath);
-  return Tensor(ath);
+  return torch::stable::Tensor(ath);
 }
 
-Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
+torch::stable::Tensor dtw_batch_cpu(
+    const torch::stable::Tensor distances,
+    const torch::stable::Tensor sx,
+    const torch::stable::Tensor sy,
+    bool symmetric) {
   const int64_t nx = distances.size(0);
   const int64_t ny = distances.size(1);
   const float* distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
   const int64_t* sx_ptr = reinterpret_cast<const int64_t*>(sx.data_ptr());
   const int64_t* sy_ptr = reinterpret_cast<const int64_t*>(sy.data_ptr());
 
-  const int64_t sizes[2] = {nx, ny};
-  const int64_t strides[2] = {ny, 1};
-  AtenTensorHandle ath;
-  aoti_torch_empty_strided(2, sizes, strides, aoti_torch_dtype_float32(), aoti_torch_device_type_cpu(), 0, &ath);
-  Tensor out = Tensor(ath);
-  zero_(out);
+  torch::stable::Tensor out = torch::stable::new_empty(distances, {nx, ny});
+  torch::stable::zero_(out);
   float* out_ptr = reinterpret_cast<float*>(out.data_ptr());
 
 #pragma omp parallel for schedule(dynamic)
@@ -126,11 +124,15 @@ Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, b
 }
 
 void boxed_dtw_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] = from(dtw_cpu(to<Tensor>(stack[0])));
+  stack[0] = from(dtw_cpu(to<torch::stable::Tensor>(stack[0])));
 }
 
 void boxed_dtw_batch_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] = from(dtw_batch_cpu(to<Tensor>(stack[0]), to<Tensor>(stack[1]), to<Tensor>(stack[2]), to<bool>(stack[3])));
+  stack[0] = from(dtw_batch_cpu(
+      to<torch::stable::Tensor>(stack[0]),
+      to<torch::stable::Tensor>(stack[1]),
+      to<torch::stable::Tensor>(stack[2]),
+      to<bool>(stack[3])));
 }
 
 STABLE_TORCH_LIBRARY(fastabx, m) {

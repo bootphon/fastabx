@@ -6,14 +6,14 @@
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/ops.h>
 #include <torch/csrc/stable/tensor.h>
+#include <torch/headeronly/core/ScalarType.h>
 #include <torch/headeronly/util/Exception.h>
 #include <array>
+#include <optional>
 
 // Shared memory has a size of 48kB
 // Maximum diagonal length is N such that N * 3 * sizeof(float) = 48kB
 #define MAX_DIAG_LEN 4096
-
-using torch::stable::Tensor;
 
 namespace fastabx {
 
@@ -109,7 +109,11 @@ __global__ void dtw_backtrack_kernel(
     out[y * out_strides[0] + x * out_strides[1]] = out[x * out_strides[0] + y * out_strides[1]];
 }
 
-Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
+torch::stable::Tensor dtw_batch_cuda(
+    const torch::stable::Tensor distances,
+    const torch::stable::Tensor sx,
+    const torch::stable::Tensor sy,
+    bool symmetric) {
   const int64_t nx = distances.size(0);
   const int64_t ny = distances.size(1);
   const int64_t max_x = distances.size(2);
@@ -118,14 +122,9 @@ Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, 
   STD_TORCH_CHECK(nx > 0 && ny > 0 && max_x > 0 && max_y > 0, "Empty input tensor");
   STD_TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
 
-  Tensor cost = empty_like(distances);
-  zero_(cost);
-  const int64_t sizes[2] = {nx, ny};
-  const int64_t strides[2] = {ny, 1};
-  AtenTensorHandle ath;
-  aoti_torch_empty_strided(
-      2, sizes, strides, aoti_torch_dtype_float32(), aoti_torch_device_type_cuda(), distances.get_device(), &ath);
-  Tensor out = Tensor(ath);
+  torch::stable::Tensor cost = torch::stable::empty_like(distances);
+  torch::stable::zero_(cost);
+  torch::stable::Tensor out = torch::stable::new_empty(distances, {nx, ny});
 
   float* cost_ptr = reinterpret_cast<float*>(cost.data_ptr());
   float* out_ptr = reinterpret_cast<float*>(out.data_ptr());
@@ -147,39 +146,36 @@ Tensor dtw_batch_cuda(const Tensor distances, const Tensor sx, const Tensor sy, 
   return out;
 }
 
-Tensor dtw_cuda(const Tensor distances) {
-  const int64_t one[1] = {1};
-  AtenTensorHandle sx_ath;
-  aoti_torch_empty_strided(
-      1, one, one, aoti_torch_dtype_int64(), aoti_torch_device_type_cuda(), distances.get_device(), &sx_ath);
-  Tensor sx = Tensor(sx_ath);
+torch::stable::Tensor dtw_cuda(const torch::stable::Tensor distances) {
+  torch::stable::Tensor sx =
+      torch::stable::new_empty(distances, {1}, std::make_optional(torch::headeronly::ScalarType::Long));
   aoti_torch_cuda_fill__Scalar(sx.get(), distances.size(0));
-
-  AtenTensorHandle sy_ath;
-  aoti_torch_empty_strided(
-      1, one, one, aoti_torch_dtype_int64(), aoti_torch_device_type_cuda(), distances.get_device(), &sy_ath);
-  Tensor sy = Tensor(sy_ath);
+  torch::stable::Tensor sy =
+      torch::stable::new_empty(distances, {1}, std::make_optional(torch::headeronly::ScalarType::Long));
   aoti_torch_cuda_fill__Scalar(sy.get(), distances.size(1));
 
   AtenTensorHandle distances_ath;
   const int64_t shape[4] = {1, 1, distances.size(0), distances.size(1)};
   aoti_torch_cuda_reshape(distances.get(), shape, 4, &distances_ath);
-  const Tensor distances_resized = Tensor(distances_ath);
-  Tensor result = dtw_batch_cuda(distances_resized, sx, sy, false);
+  const torch::stable::Tensor distances_resized = torch::stable::Tensor(distances_ath);
+  torch::stable::Tensor result = dtw_batch_cuda(distances_resized, sx, sy, false);
 
   AtenTensorHandle out_ath;
   aoti_torch_cuda_squeeze_dim(result.get(), 0, &out_ath);
   aoti_torch_cuda_squeeze_dim(out_ath, 0, &out_ath);
-  return Tensor(out_ath);
+  return torch::stable::Tensor(out_ath);
 }
 
 void boxed_dtw_cuda(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] = from(dtw_cuda(to<Tensor>(stack[0])));
+  stack[0] = from(dtw_cuda(to<torch::stable::Tensor>(stack[0])));
 }
 
 void boxed_dtw_batch_cuda(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] =
-      from(dtw_batch_cuda(to<Tensor>(stack[0]), to<Tensor>(stack[1]), to<Tensor>(stack[2]), to<bool>(stack[3])));
+  stack[0] = from(dtw_batch_cuda(
+      to<torch::stable::Tensor>(stack[0]),
+      to<torch::stable::Tensor>(stack[1]),
+      to<torch::stable::Tensor>(stack[2]),
+      to<bool>(stack[3])));
 }
 
 STABLE_TORCH_LIBRARY_IMPL(fastabx, CUDA, m) {
