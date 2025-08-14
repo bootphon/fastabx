@@ -133,6 +133,10 @@ def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = N
 
 
 def compile_abx_on_cell() -> Callable[[Cell, Distance], Tensor]:
+    """Return a torch.compile'd version of :py:func:`.abx_on_cell`.
+
+    It is optimized to reduce Python overhead with CUDA graphs.
+    """
     if not torch.cuda.is_available() or torch.cuda.get_device_capability() < (8, 0):
         raise RuntimeError
     if importlib.metadata.version("torch") < "2.8.0":
