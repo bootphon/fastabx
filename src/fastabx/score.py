@@ -7,7 +7,7 @@ import polars as pl
 import polars.selectors as cs
 from tqdm import tqdm
 
-from fastabx.distance import DistanceName, abx_on_cell, distance_function
+from fastabx.distance import DistanceName, abx_on_cell, compile_abx_on_cell, distance_function
 from fastabx.task import Task
 from fastabx.verify import format_score_levels, verify_score_levels
 
@@ -53,14 +53,15 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``."""
 
-    def __init__(self, task: Task, distance_name: DistanceName) -> None:
+    def __init__(self, task: Task, distance_name: DistanceName, *, with_compile: bool = True) -> None:
         scores, sizes = [], []
         self.distance_name = distance_name
         distance = distance_function(distance_name)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
+        abx = compile_abx_on_cell() if with_compile else abx_on_cell
         for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
-            scores.append(abx_on_cell(cell, distance).item())
+            scores.append(abx(cell, distance).item())
             sizes.append(len(cell))
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes)

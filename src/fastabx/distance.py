@@ -1,5 +1,6 @@
 """Distance computation."""
 
+import importlib.metadata
 import math
 from collections.abc import Callable
 from typing import Literal, get_args
@@ -114,3 +115,12 @@ def abx_on_cell(cell: Cell, distance: Distance) -> torch.Tensor:
     sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
     sc /= len(cell)
     return 1 - sc
+
+
+def compile_abx_on_cell() -> Callable[[Cell, Distance], Tensor]:
+    if not torch.cuda.is_available() or torch.cuda.get_device_capability() < (8, 0):
+        raise RuntimeError
+    if importlib.metadata.version("torch") < "2.8.0":
+        raise RuntimeError
+    torch.set_float32_matmul_precision("high")
+    return torch.compile(abx_on_cell, dynamic=False, fullgraph=True, mode="reduce-overhead")

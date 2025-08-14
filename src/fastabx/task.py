@@ -60,6 +60,7 @@ class Task:
         is_symmetric = not bool(self.across)
         columns = ["header", "description", "index", "index_b"] + (["index_x"] if self.across else [])
         for header, description, *idx in self.cells[columns].iter_rows():
+            idx = [[71379, 9366, 40112, 50161], [110977, 0, 24571]]
             a = self.dataset.accessor.batched(idx[0])
             b = self.dataset.accessor.batched(idx[1])
             x = self.dataset.accessor.batched(idx[2]) if self.across else a
