@@ -1,7 +1,6 @@
 """Task module. The Task class builds all the cells for the 'by', 'on' and 'across' conditions."""
 
 from dataclasses import dataclass
-from functools import cached_property
 
 import polars as pl
 import polars.selectors as cs
@@ -26,9 +25,9 @@ class Cell:
     def __post_init__(self) -> None:
         verify_cell((self.a.data, self.a.sizes), (self.b.data, self.b.sizes), (self.x.data, self.x.sizes))
 
-    @cached_property
+    @property
     def num_triplets(self) -> int:
-        """Number of triplets in the cell."""
+        """Get the number of triplets in the cell."""
         nx = self.a.data.size(0) - 1 if self.is_symmetric else self.x.data.size(0)
         return self.a.data.size(0) * self.b.data.size(0) * nx
 

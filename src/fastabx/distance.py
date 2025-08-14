@@ -106,7 +106,7 @@ def abx_on_cell(cell: Cell, distance: Distance) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``."""
     dxa, dxb = distance_on_cell(cell, distance)
     if cell.is_symmetric:
-        dxa.fill_diagonal_(dxb.max() + 1)
+        dxa.fill_diagonal_(float("inf"))
     nx, na = dxa.size()
     nx, nb = dxb.size()
     dxb = dxb.view(nx, 1, nb).expand(nx, na, nb)
