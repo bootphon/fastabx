@@ -1,3 +1,4 @@
+#include <ATen/cuda/CUDAContext.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <torch/library.h>
@@ -114,13 +115,15 @@ torch::Tensor dtw_cuda(torch::Tensor distances) {
   TORCH_CHECK(N > 0 && M > 0, "Empty input tensor");
   TORCH_CHECK(N < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
   const int num_threads = N > 1024 ? 1024 : N;
-  dtw_wavefront_kernel<<<1, num_threads>>>(
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+  dtw_wavefront_kernel<<<1, num_threads, 0, stream>>>(
       cost.packed_accessor32<float, 4>(),
       distances_unsqueezed.packed_accessor32<float, 4>(),
       sx.packed_accessor32<int64_t, 1>(),
       sy.packed_accessor32<int64_t, 1>(),
       false);
-  dtw_backtrack_kernel<<<1, 1>>>(
+  dtw_backtrack_kernel<<<1, 1, 0, stream>>>(
       out.packed_accessor32<float, 2>(),
       cost.packed_accessor32<float, 4>(),
       sx.packed_accessor32<int64_t, 1>(),
@@ -142,13 +145,15 @@ torch::Tensor dtw_batch_cuda(torch::Tensor distances, torch::Tensor sx, torch::T
   TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
   const dim3 num_blocks(nx, ny);
   const int num_threads = max_x > 1024 ? 1024 : max_x;
-  dtw_wavefront_kernel<<<num_blocks, num_threads>>>(
+  cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+  dtw_wavefront_kernel<<<num_blocks, num_threads, 0, stream>>>(
       cost.packed_accessor32<float, 4>(),
       distances.packed_accessor32<float, 4>(),
       sx.packed_accessor32<int64_t, 1>(),
       sy.packed_accessor32<int64_t, 1>(),
       symmetric);
-  dtw_backtrack_kernel<<<num_blocks, 1>>>(
+  dtw_backtrack_kernel<<<num_blocks, 1, 0, stream>>>(
       out.packed_accessor32<float, 2>(),
       cost.packed_accessor32<float, 4>(),
       sx.packed_accessor32<int64_t, 1>(),
