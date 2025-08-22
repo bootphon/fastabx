@@ -102,7 +102,7 @@ def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torc
     return dxa, dxb
 
 
-def abx_on_cell(cell: Cell, distance: Distance) -> torch.Tensor:
+def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = None) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``."""
     dxa, dxb = distance_on_cell(cell, distance)
     if cell.is_symmetric:
@@ -111,6 +111,10 @@ def abx_on_cell(cell: Cell, distance: Distance) -> torch.Tensor:
     nx, nb = dxb.size()
     dxb = dxb.view(nx, 1, nb).expand(nx, na, nb)
     dxa = dxa.view(nx, na, 1).expand(nx, na, nb)
-    sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
-    sc /= len(cell)
+    if mask is None:
+        sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
+        sc /= len(cell)
+    else:
+        sc = (dxa < dxb)[mask].sum() + 0.5 * (dxa == dxb)[mask].sum()
+        sc /= mask.sum()
     return 1 - sc
