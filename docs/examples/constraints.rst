@@ -18,7 +18,7 @@ on the categories used for the ON, BY, and ACROSS conditions. But there is no co
 
 To achieve this finer filtering of triplets, the :py:class:`.Score` class accepts a :py:type:`.Constraints` argument.
 :py:type:`.Constraints` are lists of polars expressions that are applied to each triplet before computing the ABX
-score of the individual cell. The expressions should involve the labels of the triplets contained in ``.Dataset.labels``,
+score of the individual cell. The expressions should involve the labels of the triplets contained in ``Dataset.labels``,
 suffixed by ``_a``, ``_b``, and ``_x``. This is a powerful and general mechanism, and it can be used to do any kind of filtering.
 
 For example, let's say we are interested in accent discrimination from sentence embeddings.
