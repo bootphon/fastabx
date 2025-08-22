@@ -7,6 +7,8 @@ import sys
 
 import torch
 
+MIN_CELLS_FOR_TQDM = 50
+
 
 class PyTorchVersionError(ImportError):
     """PyTorch version mismatch."""

@@ -7,11 +7,11 @@ import polars as pl
 import polars.selectors as cs
 from tqdm import tqdm
 
-from fastabx.distance import DistanceName, abx_on_cell, distance_function
+from fastabx.constraints import Constraints, score_task_with_constraints
+from fastabx.distance import Distance, DistanceName, abx_on_cell, distance_function
 from fastabx.task import Task
+from fastabx.utils import MIN_CELLS_FOR_TQDM
 from fastabx.verify import format_score_levels, verify_score_levels
-
-MIN_CELLS_FOR_TQDM = 50
 
 
 def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
@@ -50,18 +50,28 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
     return cells
 
 
+def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
+    """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes."""
+    scores, sizes = [], []
+    for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
+        scores.append(abx_on_cell(cell, distance).item())
+        sizes.append(len(cell))
+    return scores, sizes
+
+
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``."""
 
-    def __init__(self, task: Task, distance_name: DistanceName) -> None:
-        scores, sizes = [], []
+    def __init__(self, task: Task, distance_name: DistanceName, *, constraints: Constraints | None = None) -> None:
         self.distance_name = distance_name
         distance = distance_function(distance_name)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
-        for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
-            scores.append(abx_on_cell(cell, distance).item())
-            sizes.append(len(cell))
+        scores, sizes = (
+            score_task(task, distance)
+            if constraints is None
+            else score_task_with_constraints(task, distance, constraints)
+        )
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes)
         )

@@ -9,7 +9,7 @@ from torch import Tensor
 
 NDIM = 3
 INVALID_COLUMN_SUFFIX = ("_a", "_b", "_x")
-INVALID_COLUMN_NAMES = {"index", "score", "size", "__group", "__lookup"}
+INVALID_COLUMN_NAMES = {"index", "score", "size", "is_valid", "__group", "__lookup"}
 
 
 class LabelReservedNameError(ValueError):
