@@ -49,20 +49,20 @@ class Task:
     def __getitem__(self, i: int) -> Cell:
         if i < 0 or i >= len(self):
             raise IndexError
-        a = self.dataset.accessor.batched(self.cells[i, "index"])
+        a = self.dataset.accessor.batched(self.cells[i, "index_a"])
         b = self.dataset.accessor.batched(self.cells[i, "index_b"])
-        x = self.dataset.accessor.batched(self.cells[i, "index_x"]) if self.across else a
+        x = self.dataset.accessor.batched(self.cells[i, "index_x"])
         header, description = self.cells[i, "header"], self.cells[i, "description"]
         is_symmetric = not bool(self.across)
         return Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric)
 
     def __iter__(self) -> Generator[Cell, None, None]:
         is_symmetric = not bool(self.across)
-        columns = ["header", "description", "index", "index_b"] + (["index_x"] if self.across else [])
+        columns = ["header", "description", "index_a", "index_b", "index_x"]
         for header, description, *idx in self.cells[columns].iter_rows():
             a = self.dataset.accessor.batched(idx[0])
             b = self.dataset.accessor.batched(idx[1])
-            x = self.dataset.accessor.batched(idx[2]) if self.across else a
+            x = self.dataset.accessor.batched(idx[2])
             yield Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric)
 
     def __repr__(self) -> str:

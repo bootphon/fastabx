@@ -64,9 +64,10 @@ def cells_on_by(df: pl.LazyFrame, on: str, by: list[str]) -> pl.LazyFrame:
         .select(cs.exclude(f"{on}_x", "len", "len_b"))
     )
     return (
-        cells.join(lookup, on="__lookup", how="left")
+        cells.join(lookup.rename({"index": "index_a"}), on="__lookup", how="left")
         .join(lookup.rename({"__lookup": "__lookup_b", "index": "index_b"}), on="__lookup_b", how="left")
         .select(cs.exclude("__lookup", "__lookup_b"))
+        .with_columns(index_x=pl.col("index_a"))
     )
 
 
@@ -102,7 +103,7 @@ def cells_on_by_across(df: pl.LazyFrame, on: str, by: list[str], across: list[st
         .select(cs.exclude(f"{on}_x"))
     )
     return (
-        cells.join(lookup, on="__lookup", how="left")
+        cells.join(lookup.rename({"index": "index_a"}), on="__lookup", how="left")
         .join(lookup.rename({"__lookup": "__lookup_b", "index": "index_b"}), on="__lookup_b", how="left")
         .join(lookup.rename({"__lookup": "__lookup_x", "index": "index_x"}), on="__lookup_x", how="left")
         .select(cs.exclude("__lookup", "__lookup_b", "__lookup_x"))

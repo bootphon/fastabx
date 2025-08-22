@@ -38,7 +38,7 @@ class CollapseError(Exception):
 def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
     """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs."""
     if levels is None:
-        if len(set(cells.columns) - {"index", "index_b", "score", "size"}) != 2:
+        if len(set(cells.columns) - {"index_a", "index_b", "index_x", "score", "size"}) != 2:
             raise CollapseError(are_set=False)
         levels = []
     cells = cells.select(~(cs.starts_with("index") | cs.ends_with("_x")))
