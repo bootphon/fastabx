@@ -6,6 +6,7 @@ import inspect
 from datetime import UTC, datetime
 from importlib.metadata import metadata
 from pathlib import Path
+from typing import TypeAliasType
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -27,6 +28,7 @@ add_function_parentheses = False
 exclude_patterns = ["build"]
 html_theme = "furo"
 mathjax3_config = {"tex": {"macros": {"onset": "t_\\text{on}", "offset": "t_\\text{off}"}}}
+toc_object_entries_show_parents = "hide"
 
 
 class SourceCodeError(ValueError):
@@ -52,6 +54,8 @@ def linkcode_resolve(domain: str, info: dict) -> str | None:
     for part in info["fullname"].split("."):
         obj = getattr(obj, part)
     obj = inspect.unwrap(obj)
+    if isinstance(obj, TypeAliasType):
+        return None
     if isinstance(obj, property):
         obj = obj.fget
     elif isinstance(obj, functools.cached_property):

@@ -6,3 +6,4 @@ Examples
 
     gaussians
     external
+    constraints

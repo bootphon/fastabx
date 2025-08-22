@@ -12,6 +12,26 @@ The library provides one function that can be used out of the box: :func:`.zeros
 This function computes the triphone or phoneme ABX, similarly as in past ZeroSpeech challenges.
 It is also available through a command line interface.
 
+.. code-block:: python
+
+   from fastabx import zerospeech_abx
+
+   item, features, frequency = "./triphone-dev-clean.item", "./hubert-l11-dev-clean", 50
+   abx_error_rate = zerospeech_abx(
+       item,
+       features,
+       max_size_group=10,
+       max_x_across=5,
+       speaker="within",
+       context="within",
+       distance="angular",
+       frequency=frequency,
+       seed=0,
+   )
+   print(abx_error_rate)
+   # 0.033783210627340875
+
+
 The main interface of the library consists of three classes: :class:`.Dataset`, :class:`.Task`, and :class:`.Score`.
 The :class:`.Dataset` is a simple wrapper to the underlying corpus: it is made of labels and of a way to access the
 representations. We provide several class methods to create a Dataset from arrays, CSV files, or using

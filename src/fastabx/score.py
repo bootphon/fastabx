@@ -60,7 +60,10 @@ def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
 
 
 class Score:
-    """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``."""
+    """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``.
+
+    Additional :py:type:`.Constraints` can be provided to restrict the possible triplets in each cell.
+    """
 
     def __init__(self, task: Task, distance_name: DistanceName, *, constraints: Constraints | None = None) -> None:
         self.distance_name = distance_name

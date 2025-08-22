@@ -15,11 +15,11 @@ from fastabx.distance import Distance, abx_on_cell
 from fastabx.task import Task
 from fastabx.utils import MIN_CELLS_FOR_TQDM
 
-Constraints = Iterable[IntoExprColumn]
+type Constraints = Iterable[IntoExprColumn]
 
 
 def constraints_all_different(*columns: str) -> Constraints:
-    """Return a list of constraints that ensure that each specified column has different values for A, B and X."""
+    """Return :py:type:`.Constraints` that ensure that each specified column has different values for A, B and X."""
     return [
         pl.col(f"{c}_a").ne(pl.col(f"{c}_x"))
         & pl.col(f"{c}_a").ne(pl.col(f"{c}_b"))
