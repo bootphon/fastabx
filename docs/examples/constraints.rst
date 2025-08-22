@@ -8,17 +8,17 @@ With constraints
     This is an advanced feature that should be used with care.
     In most cases, it is not necessary to use constraints.
 
-In the majority of applications, the ABX analysis benefit from using only the ON, BY, and ACROSS conditions.
+In the majority of applications, the ABX evaluation is fully specified using only the ON, BY, and ACROSS conditions.
 However, in some cases, because of the specificites of the dataset or the hierarchy of attributes, it can be
 necessary to filter the triplets further.
 
-The :py:class:`.Subsampler` can already be used to limit the number of :py:class:`.Cell` in a :py:class:`.Task`, but it can only be used at the
-cell level, not at the triplet level. It can be used to subsample the cells, and to remove some based on the categories
-used for the ON, BY, and ACROSS conditions. But there can be not constrained filtering inside each cell.
+The :py:class:`.Subsampler` can already be used to limit the number of :py:class:`.Cell` in a :py:class:`.Task`, but
+it only operates at the cell level, not at the triplet level. It can subsample the cells, and remove some based
+on the categories used for the ON, BY, and ACROSS conditions. But there is no constrained filtering inside each cell.
 
-To achieve this finer filtering of triplets, the :py:class:`.Score` class accepts a :py:type:`.Constraints`.
+To achieve this finer filtering of triplets, the :py:class:`.Score` class accepts a :py:type:`.Constraints` argument.
 :py:type:`.Constraints` are lists of polars expressions that are applied to each triplet before computing the ABX
-score of the individual cell. The expression should involve the labels of the triplets contained in ``.Dataset.labels``,
+score of the individual cell. The expressions should involve the labels of the triplets contained in ``.Dataset.labels``,
 suffixed by ``_a``, ``_b``, and ``_x``. This is a powerful and general mechanism, and it can be used to do any kind of filtering.
 
 For example, let's say we are interested in accent discrimination from sentence embeddings.
