@@ -59,10 +59,10 @@ class Task:
     def __iter__(self) -> Generator[Cell, None, None]:
         is_symmetric = not bool(self.across)
         columns = ["header", "description", "index_a", "index_b", "index_x"]
-        for header, description, *idx in self.cells[columns].iter_rows():
-            a = self.dataset.accessor.batched(idx[0])
-            b = self.dataset.accessor.batched(idx[1])
-            x = self.dataset.accessor.batched(idx[2])
+        for header, description, index_a, index_b, index_x in self.cells[columns].iter_rows():
+            a = self.dataset.accessor.batched(index_a)
+            b = self.dataset.accessor.batched(index_b)
+            x = self.dataset.accessor.batched(index_x)
             yield Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric)
 
     def __repr__(self) -> str:
