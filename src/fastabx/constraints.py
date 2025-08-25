@@ -28,13 +28,30 @@ def constraints_all_different(*columns: str) -> Constraints:
     ]
 
 
-def apply_constraints(cells: pl.DataFrame, labels: pl.DataFrame, constraints: Constraints) -> pl.DataFrame:
+class NoConstraintsError(ValueError):
+    """Invalid constraints."""
+
+    def __init__(self) -> None:
+        super().__init__("No valid column provided in the constraints")
+
+
+def apply_constraints(
+    cells: pl.DataFrame,
+    labels: pl.DataFrame,
+    constraints: Constraints,
+    *,
+    is_symmetric: bool,
+) -> pl.DataFrame:
     """Apply constraints to the cells DataFrame."""
     columns_to_retrieve = {
         name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
         for constraint in constraints
         for name in constraint.meta.root_names()
     }
+    if not columns_to_retrieve or not columns_to_retrieve.issubset(labels.columns):
+        raise NoConstraintsError
+    if is_symmetric:
+        constraints = [*constraints, pl.col("index_a") != pl.col("index_x")]
     labels_lazy = labels.lazy().select(*columns_to_retrieve).with_row_index()
     cells_lazy = cells.lazy()
     is_valid = (
@@ -58,7 +75,7 @@ def constrained_cell_generator(
 ) -> Generator[tuple[Cell, torch.Tensor], None, None]:
     """Generate cells with constraints applied, yielding (Cell, mask) tuples."""
     is_symmetric, device = not bool(task.across), task.dataset.accessor.device
-    cells = apply_constraints(task.cells, task.dataset.labels, constraints)
+    cells = apply_constraints(task.cells, task.dataset.labels, constraints, is_symmetric=is_symmetric)
     columns = ["header", "description", "index_a", "index_b", "index_x", "is_valid"]
     for header, description, index_a, index_b, index_x, is_valid in cells[columns].iter_rows():
         a = task.dataset.accessor.batched(index_a)
