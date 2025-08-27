@@ -133,13 +133,29 @@ def read_item(item: str | Path) -> pl.DataFrame:
         raise InvalidItemFileError from error
 
 
-def item_frontiers(frequency: float) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
+def read_labels(path: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
+    """Return the labels from the path to the item file or DataFrame."""
+    schema_overrides = {file_col: pl.String, onset_col: pl.String, offset_col: pl.String}
+    times_to_decimal = [pl.col(onset_col).str.to_decimal(), pl.col(offset_col).str.to_decimal()]
+    match ext := Path(path).suffix:
+        case ".item":
+            return read_item(path)
+        case ".csv":
+            return pl.read_csv(path, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+        case ".jsonl" | ".ndjson":
+            return pl.read_ndjson(path, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+        case _:
+            msg = f"File extension {ext} is not supported. Supported extensions are .item, .csv, .jsonl, .ndjson."
+            raise InvalidItemFileError(msg)
+
+
+def item_frontiers(frequency: float, onset_col: str, offset_col: str) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
     """Frontiers [start, end[ in the input features and in the concatenated ones."""
     # Remove the cast to float and -0.5 once RoundMode "half_ceil" and "half_floor" are added to polars round method
     # (or "half_away_from_zero" and "half_to_zero")
     # See: https://github.com/pola-rs/polars/issues/21800
-    start = (pl.col("onset") * frequency - 0.5).cast(pl.Float64).ceil().cast(pl.Int64).alias("start")
-    end = (pl.col("offset") * frequency - 0.5).cast(pl.Float64).floor().cast(pl.Int64).alias("end")
+    start = (pl.col(onset_col) * frequency - 0.5).cast(pl.Float64).ceil().cast(pl.Int64).alias("start")
+    end = (pl.col(offset_col) * frequency - 0.5).cast(pl.Float64).floor().cast(pl.Int64).alias("end")
     if not with_librilight_bug():
         end += 1
     length = (end - start).alias("length")
@@ -180,12 +196,16 @@ def load_data_from_item[T](
     labels: pl.DataFrame,
     frequency: int,
     feature_maker: Callable[[T], torch.Tensor],
+    file_col: str,
+    onset_col: str,
+    offset_col: str,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory. Return a dictionary of indices and a tensor of data."""
-    metadata = labels[["#file", "onset", "offset"]].with_row_index()
-    lazy = metadata.lazy().sort("#file", maintain_order=True).with_columns(*item_frontiers(frequency))
+    metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
+    frontiers = item_frontiers(frequency, onset_col, offset_col)
+    lazy = metadata.lazy().sort(file_col, maintain_order=True).with_columns(*frontiers)
     indices_lazy = lazy.select("left", "right", "index").sort("index").select("left", "right")
-    by_file_lazy = lazy.select("#file", "start", "end").group_by("#file", maintain_order=True).agg("start", "end")
+    by_file_lazy = lazy.select(file_col, "start", "end").group_by(file_col, maintain_order=True).agg("start", "end")
     indices, by_file = pl.collect_all([indices_lazy, by_file_lazy])
 
     data, device = [], torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -198,7 +218,7 @@ def load_data_from_item[T](
                 raise EmptyFeaturesError(
                     lazy.filter(pl.col("end") <= pl.col("start"))
                     .sort("index")
-                    .select("#file", "onset", "offset")
+                    .select(file_col, onset_col, offset_col)
                     .collect()
                 )
             data.append(features[start:end])
@@ -223,13 +243,16 @@ def load_data_from_item_with_times(
     paths_features: dict[str, Path],
     paths_times: dict[str, Path],
     labels: pl.DataFrame,
+    file_col: str,
+    onset_col: str,
+    offset_col: str,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory using features and times array. This is smaller than using a predefined frequency."""
-    metadata = labels[["#file", "onset", "offset"]].with_row_index()
+    metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     by_file = (
-        metadata.sort("#file", maintain_order=True)
-        .group_by("#file", maintain_order=True)
-        .agg("index", "onset", "offset")
+        metadata.sort(file_col, maintain_order=True)
+        .group_by(file_col, maintain_order=True)
+        .agg("index", onset_col, offset_col)
     )
     data, device, all_indices, right = [], torch.device("cuda" if torch.cuda.is_available() else "cpu"), {}, 0
     decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
@@ -277,27 +300,39 @@ class Dataset:
         *,
         feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
         extension: str = ".pt",
+        file_col: str = "#file",
+        onset_col: str = "onset",
+        offset_col: str = "offset",
     ) -> "Dataset":
         """Create a dataset from an item file.
 
         If you want to keep the Libri-Light bug to reproduce previous results,
         set the environment variable FASTABX_WITH_LIBRILIGHT_BUG=1.
         """
-        labels = read_item(item)
+        labels = read_labels(item, file_col, onset_col, offset_col)
         paths = find_all_files(root, extension)
-        indices, data = load_data_from_item(paths, labels, frequency, feature_maker)
+        indices, data = load_data_from_item(paths, labels, frequency, feature_maker, file_col, onset_col, offset_col)
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
-    def from_item_with_times(cls, item: str | Path, features: str | Path, times: str | Path) -> "Dataset":
+    def from_item_with_times(
+        cls,
+        item: str | Path,
+        features: str | Path,
+        times: str | Path,
+        *,
+        file_col: str = "#file",
+        onset_col: str = "onset",
+        offset_col: str = "offset",
+    ) -> "Dataset":
         """Create a dataset from an item file.
 
         Use arrays containing the times associated to the features instead of a given frequency.
         """
-        labels = read_item(item)
-        paths_features = find_all_files(features, ".pt")
-        paths_times = find_all_files(times, ".pt")
-        indices, data = load_data_from_item_with_times(paths_features, paths_times, labels)
+        labels = read_labels(item, file_col, onset_col, offset_col)
+        paths_feat = find_all_files(features, ".pt")
+        paths_time = find_all_files(times, ".pt")
+        indices, data = load_data_from_item_with_times(paths_feat, paths_time, labels, file_col, onset_col, offset_col)
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
@@ -310,6 +345,9 @@ class Dataset:
         audio_key: str = "audio",
         units_key: str = "units",
         separator: str = " ",
+        file_col: str = "#file",
+        onset_col: str = "onset",
+        offset_col: str = "offset",
     ) -> "Dataset":
         """Create a dataset from an item file with the units all described in a single JSONL file.
 
@@ -320,7 +358,7 @@ class Dataset:
         :param units_key: Key in the JSONL file that contains the units.
         :param separator: Separator used in the units field.
         """
-        labels = read_item(item)
+        labels = read_labels(item, file_col, onset_col, offset_col)
         units_df = (
             pl.scan_ndjson(units)
             .with_columns(pl.col(audio_key).str.split("/").list.last().str.replace(r"\.[^.]+$", ""))
@@ -331,7 +369,7 @@ class Dataset:
             return torch.tensor([int(unit) for unit in units_df[idx, units_key].split(separator)]).unsqueeze(1)
 
         mapping: dict[str, int] = dict(zip(units_df[audio_key], range(len(units_df)), strict=True))
-        indices, data = load_data_from_item(mapping, labels, frequency, feature_maker)
+        indices, data = load_data_from_item(mapping, labels, frequency, feature_maker, file_col, onset_col, offset_col)
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
@@ -378,5 +416,5 @@ def dummy_dataset_from_item(item: str | Path, frequency: int | None) -> Dataset:
     """To debug."""
     labels = read_item(item).with_columns(pl.lit(0).alias("dummy"))
     if frequency is not None:
-        labels = labels.with_columns(*item_frontiers(frequency))
+        labels = labels.with_columns(*item_frontiers(frequency, "onset", "offset"))
     return Dataset.from_dataframe(labels, "dummy")
