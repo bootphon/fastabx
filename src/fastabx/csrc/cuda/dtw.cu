@@ -1,6 +1,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <torch/csrc/inductor/aoti_torch/generated/c_shim_cuda.h>
+#include <torch/csrc/stable/accelerator.h>
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/ops.h>
 // #include <torch/csrc/stable/tensor.h> // Fails to build if included here and in dtw.cpp
@@ -137,9 +138,12 @@ torch::stable::Tensor dtw_batch_cuda(
 
   const dim3 num_blocks(nx, ny);
   const int num_threads = max_x > 1024 ? 1024 : max_x;
-  dtw_wavefront_kernel<<<num_blocks, num_threads>>>(
+  torch::stable::accelerator::DeviceIndex device_idx = torch::stable::accelerator::getCurrentDeviceIndex();
+  cudaStream_t stream = (cudaStream_t)torch::stable::accelerator::getCurrentStream(device_idx).id();
+
+  dtw_wavefront_kernel<<<num_blocks, num_threads, 0, stream>>>(
       cost_ptr, distances_ptr, sx_ptr, sy_ptr, symmetric, cost_sizes, cost_strides, distances_strides);
-  dtw_backtrack_kernel<<<num_blocks, 1>>>(
+  dtw_backtrack_kernel<<<num_blocks, 1, 0, stream>>>(
       out_ptr, cost_ptr, sx_ptr, sy_ptr, symmetric, out_strides, cost_sizes, cost_strides);
   return out;
 }
