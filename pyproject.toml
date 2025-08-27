@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "setuptools>=80.9.0",
-    "torch>=2.6.0",
+    "torch>=2.9.0",
     "numpy>=1.26.4",
     "ninja>=1.11",
 ]
@@ -33,7 +33,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.26.4",
     "polars>=1.26.0",
-    "torch>=2.6.0",
+    "torch>=2.9.0",
     "tqdm>=4.67.1",
 ]
 
@@ -68,9 +68,6 @@ doc = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.1",
 ]
-
-[tool.setuptools.package-data]
-fastabx = ["torch_version.json"]
 
 [tool.ruff]
 line-length = 119
