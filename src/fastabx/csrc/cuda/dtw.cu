@@ -7,7 +7,6 @@
 // #include <torch/csrc/stable/tensor.h> // Fails to build if included here and in dtw.cpp
 #include <torch/headeronly/core/ScalarType.h>
 #include <torch/headeronly/util/Exception.h>
-#include <array>
 #include <optional>
 
 // Shared memory has a size of 48kB
@@ -16,15 +15,24 @@
 
 namespace fastabx {
 
+template <int N>
+struct Int64Tuple {
+  const int64_t v[N];
+
+  __host__ __device__ const int64_t& operator[](int i) const {
+    return v[i];
+  }
+};
+
 __global__ void dtw_wavefront_kernel(
     float* cost,
     const float* distances,
     const int64_t* sx,
     const int64_t* sy,
     const bool symmetric,
-    const std::array<int64_t, 4> cost_sizes,
-    const std::array<int64_t, 4> cost_strides,
-    const std::array<int64_t, 4> distances_strides) {
+    const Int64Tuple<4> cost_sizes,
+    const Int64Tuple<4> cost_strides,
+    const Int64Tuple<4> distances_strides) {
   const int x = blockIdx.x;
   const int y = blockIdx.y;
   if (x >= cost_sizes[0] || y >= cost_sizes[1] || (symmetric && x >= y))
@@ -70,9 +78,9 @@ __global__ void dtw_backtrack_kernel(
     const int64_t* sx,
     const int64_t* sy,
     const bool symmetric,
-    const std::array<int64_t, 2> out_strides,
-    const std::array<int64_t, 4> cost_sizes,
-    const std::array<int64_t, 4> cost_strides) {
+    const Int64Tuple<2> out_strides,
+    const Int64Tuple<4> cost_sizes,
+    const Int64Tuple<4> cost_strides) {
   const int x = blockIdx.x;
   const int y = blockIdx.y;
   if (x >= cost_sizes[0] || y >= cost_sizes[1] || (symmetric && x >= y))
@@ -130,11 +138,11 @@ torch::stable::Tensor dtw_batch_cuda(
   const float* distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
   const int64_t* sx_ptr = reinterpret_cast<int64_t*>(sx.data_ptr());
   const int64_t* sy_ptr = reinterpret_cast<int64_t*>(sy.data_ptr());
-  const std::array<int64_t, 4> distances_strides = {
+  const Int64Tuple<4> distances_strides = {
       distances.stride(0), distances.stride(1), distances.stride(2), distances.stride(3)};
-  const std::array<int64_t, 4> cost_sizes = {nx, ny, max_x, max_y};
-  const std::array<int64_t, 4> cost_strides = {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)};
-  const std::array<int64_t, 2> out_strides = {out.stride(0), out.stride(1)};
+  const Int64Tuple<4> cost_sizes = {nx, ny, max_x, max_y};
+  const Int64Tuple<4> cost_strides = {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)};
+  const Int64Tuple<2> out_strides = {out.stride(0), out.stride(1)};
 
   const dim3 num_blocks(nx, ny);
   const int num_threads = max_x > 1024 ? 1024 : max_x;
