@@ -3,7 +3,7 @@
 #include <torch/csrc/inductor/aoti_torch/generated/c_shim_cuda.h>
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/ops.h>
-#include <torch/csrc/stable/tensor.h>
+// #include <torch/csrc/stable/tensor.h> // Fails to build if included here and in dtw.cpp
 #include <torch/headeronly/core/ScalarType.h>
 #include <torch/headeronly/util/Exception.h>
 #include <array>
