@@ -4,12 +4,22 @@ import torch
 
 
 def dtw(distances: torch.Tensor) -> torch.Tensor:
-    """Compute the DTW of the given ``distances`` 2D tensor."""
+    """Compute the DTW of the given ``distances`` 2D tensor.
+
+    :param distances: A 2D tensor of shape (n, m) representing the pairwise distances between two sequences.
+    """
     return torch.ops.fastabx.dtw.default(distances)
 
 
 def dtw_batch(distances: torch.Tensor, sx: torch.Tensor, sy: torch.Tensor, *, symmetric: bool) -> torch.Tensor:
-    """Compute the batched DTW on the ``distances`` 4D tensor."""
+    """Compute the batched DTW on the ``distances`` 4D tensor.
+
+    :param distances: A 4D tensor of shape (n1, n2, s1, s2) representing the pairwise distances between two
+        batches of sequences.
+    :param sx: A 1D tensor of shape (n1,) representing the lengths of the sequences in the first batch.
+    :param sy: A 1D tensor of shape (n2,) representing the lengths of the sequences in the second batch.
+    :param symmetric: Whether or not the DTW is symmetric (i.e., the two batches are the same).
+    """
     return torch.ops.fastabx.dtw_batch.default(distances, sx, sy, symmetric)
 
 

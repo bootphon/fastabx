@@ -13,6 +13,12 @@ class Task:
 
     A Task builds all the :py:class:`.Cell` given ``on``, ``by`` and ``across`` conditions.
     It can be subsampled to limit the number of cells.
+
+    :param dataset: The dataset containing the features and the labels.
+    :param on: The ``on`` condition.
+    :param by: The list of ``by`` conditions.
+    :param across: The list of ``across`` conditions.
+    :param subsampler: An optional subsampler to limit the number of cells and their sizes.
     """
 
     def __init__(

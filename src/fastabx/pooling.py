@@ -42,9 +42,11 @@ class PooledDataset(Dataset):
 def pooling(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
     """Pool the :py:class:`.Dataset` using the pooling method given by ``pooling_name``.
 
-    The pooled dataset is a new one, with data stored in memory.
-    For simplicity, we iterate through the original dataset and
-    apply pooling on each element.
+    The pooled dataset is a new one, with data stored in memory. For simplicity, we iterate through the original
+    dataset and apply pooling on each element.
+
+    :param dataset: The dataset to pool.
+    :param pooling_name: The pooling method, either "mean" or "hamming".
     """
     labels = dataset.labels
     indices = {i: (i, i + 1) for i in range(len(labels))}

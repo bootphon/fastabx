@@ -63,6 +63,11 @@ class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``.
 
     Additional :py:type:`.Constraints` can be provided to restrict the possible triplets in each cell.
+
+    :param task: The :py:class:`.Task` to score.
+    :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl", "kl_symmetric"
+        or "identical". Defaults to "angular".
+    :param constraints: Optional constraints to restrict the possible triplets.
     """
 
     def __init__(self, task: Task, distance_name: DistanceName, *, constraints: Constraints | None = None) -> None:
@@ -93,7 +98,10 @@ class Score:
         return f"Score({len(self.cells)} cells, {self.distance_name} distance)"
 
     def write_csv(self, file: str | Path) -> None:
-        """Write the results of all the cells to a CSV file."""
+        """Write the results of all the cells to a CSV file.
+
+        :param file: Path to the output CSV file.
+        """
         nested = [name for name, dtype in self.cells.schema.items() if dtype == pl.List]
         (self.cells.select(cs.exclude(nested)) if nested else self.cells).write_csv(file)
 

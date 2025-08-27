@@ -92,7 +92,12 @@ def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
 
 
 def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute the distance matrices between all A and X, and all B and X in the ``cell``, for a given ``distance``."""
+    """Compute the distance matrices between all A and X, and all B and X in the ``cell``, for a given ``distance``.
+
+    :param cell: The cell to compute the distances on.
+    :param distance: The distance function to use. It takes two tensors of shape
+        (n1, s1, d) and (n2, s2, d) and returns a tensor of shape (n1, n2, s1, s2).
+    """
     (a, sa), (b, sb), (x, sx) = (cell.a.data, cell.a.sizes), (cell.b.data, cell.b.sizes), (cell.x.data, cell.x.sizes)
     if cell.use_dtw:
         dxa = dtw_batch(distance(x, a), sx, sa, symmetric=cell.is_symmetric)
@@ -103,7 +108,13 @@ def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torc
 
 
 def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = None) -> torch.Tensor:
-    """Compute the ABX of a ``cell`` using the given ``distance``."""
+    """Compute the ABX of a ``cell`` using the given ``distance``.
+
+    :param cell: The cell to compute the ABX on.
+    :param distance: The distance function to use. It takes two tensors of shape
+        (n1, s1, d) and (n2, s2, d) and returns a tensor of shape (n1, n2, s1, s2).
+    :param mask: Optional boolean mask of shape (nx, na, nb) to select which triplets to include in the score.
+    """
     dxa, dxb = distance_on_cell(cell, distance)
     if cell.is_symmetric:
         dxa.fill_diagonal_(float("inf"))

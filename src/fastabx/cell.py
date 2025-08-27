@@ -13,7 +13,19 @@ MIN_A_LEN = 2  # Minimum length of A in the ABX task.
 
 @dataclass(frozen=True)
 class Cell:
-    """Individual cell of the ABX task."""
+    """Individual cell of the ABX task.
+
+    Cells are the unit of work for the ABX :py:class:`.Task` and :py:class:`.Score`.
+    They are collections of triplets (A, B, X) that share the same values for the ``on``, ``by`` and ``across``
+    conditions.
+
+    :param a: Batch of A samples.
+    :param b: Batch of B samples.
+    :param x: Batch of X samples.
+    :param header: Short string identifying the cell.
+    :param description: Long string describing the cell.
+    :param is_symmetric: Whether or not the cell is symmetric (i.e., A and X are the same set).
+    """
 
     a: Batch
     b: Batch
@@ -33,7 +45,10 @@ class Cell:
 
     @property
     def use_dtw(self) -> bool:
-        """Whether or not to use the DTW when computing the distances for this cell."""
+        """Whether or not to use the DTW when computing the distances for this cell.
+
+        We don't need DTW if all samples in the cell have a time dimension of 1.
+        """
         return not (1 == self.a.data.size(1) == self.b.data.size(1) == self.x.data.size(1))
 
     def __len__(self) -> int:

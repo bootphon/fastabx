@@ -35,6 +35,12 @@ class Subsampler:
     Each cell is limited to ``max_size_group`` items for A, B and X independently.
     When using "across" conditions, each group of (A, B) is limited to ``max_x_across`` possible values for X.
     Subsampling for one or more conditions can be disabled by setting the corresponding argument to ``None``.
+
+    :param max_size_group: Maximum number of instances of A, B, or X in each :py:class:`.Cell`.
+        Set to 10 in the original ZeroSpeech ABX code. Disabled if set to ``None``.
+    :param max_x_across: In the "across" speaker mode, maximum number of X considered for given values of A and B.
+        Set to 5 in the original ZeroSpeech ABX code. Disabled if set to ``None``.
+    :param seed: The random seed for the subsampling, default is 0.
     """
 
     def __init__(self, max_size_group: int | None, max_x_across: int | None, seed: int = 0) -> None:

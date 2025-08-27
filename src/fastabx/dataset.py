@@ -133,17 +133,17 @@ def read_item(item: str | Path) -> pl.DataFrame:
         raise InvalidItemFileError from error
 
 
-def read_labels(path: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
-    """Return the labels from the path to the item file or DataFrame."""
+def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
+    """Return the labels from the path to the item file."""
     schema_overrides = {file_col: pl.String, onset_col: pl.String, offset_col: pl.String}
     times_to_decimal = [pl.col(onset_col).str.to_decimal(), pl.col(offset_col).str.to_decimal()]
-    match ext := Path(path).suffix:
+    match ext := Path(item).suffix:
         case ".item":
-            return read_item(path)
+            return read_item(item)
         case ".csv":
-            return pl.read_csv(path, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+            return pl.read_csv(item, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
         case ".jsonl" | ".ndjson":
-            return pl.read_ndjson(path, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+            return pl.read_ndjson(item, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
         case _:
             msg = f"File extension {ext} is not supported. Supported extensions are .item, .csv, .jsonl, .ndjson."
             raise InvalidItemFileError(msg)
@@ -308,6 +308,15 @@ class Dataset:
 
         If you want to keep the Libri-Light bug to reproduce previous results,
         set the environment variable FASTABX_WITH_LIBRILIGHT_BUG=1.
+
+        :param item: Path to the item file.
+        :param root: Path to the root directory containing either the features or the audio files.
+        :param frequency: The feature frequency of the features / the output of the feature maker, in Hz.
+        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
+        :param extension: The filename extension of the files to process in ``root``, default is ".pt".
+        :param file_col: Column in the item file that contains the audio file names, default is "#file".
+        :param onset_col: Column in the item file that contains the onset times, default is "onset".
+        :param offset_col: Column in the item file that contains the offset times, default is "offset".
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         paths = find_all_files(root, extension)
@@ -328,6 +337,13 @@ class Dataset:
         """Create a dataset from an item file.
 
         Use arrays containing the times associated to the features instead of a given frequency.
+
+        :param item: Path to the item file.
+        :param features: Path to the root directory containing either the features or the audio files.
+        :param times: Path to the root directory containing the times arrays.
+        :param file_col: Column in the item file that contains the audio file names, default is "#file".
+        :param onset_col: Column in the item file that contains the onset times, default is "onset".
+        :param offset_col: Column in the item file that contains the offset times, default is "offset".
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         paths_feat = find_all_files(features, ".pt")
@@ -353,10 +369,13 @@ class Dataset:
 
         :param item: Path to the item file.
         :param units: Path to the JSONL file containing the units.
-        :param frequency: Frequency of the features.
-        :param audio_key: Key in the JSONL file that contains the audio file names.
-        :param units_key: Key in the JSONL file that contains the units.
-        :param separator: Separator used in the units field.
+        :param frequency: The feature frequency, in Hz.
+        :param audio_key: Key in the JSONL file that contains the audio file names, default is "audio".
+        :param units_key: Key in the JSONL file that contains the units, default is "units".
+        :param separator: Separator used in the units field, default is whitespace " ".
+        :param file_col: Column in the item file that contains the audio file names, default is "#file".
+        :param onset_col: Column in the item file that contains the onset times, default is "onset".
+        :param offset_col: Column in the item file that contains the offset times, default is "offset".
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         units_df = (
@@ -374,7 +393,11 @@ class Dataset:
 
     @classmethod
     def from_dataframe(cls, df: SupportsInterchange, feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a DataFrame (polars or pandas)."""
+        """Create a dataset from a DataFrame (polars or pandas).
+
+        :param df: DataFrame containing both the labels and the features.
+        :param feature_columns: Column name or list of column names containing the features.
+        """
         df = pl.from_dataframe(df.__dataframe__())
         labels = df.select(cs.exclude(feature_columns))
         indices = {i: (i, i + 1) for i in range(len(labels))}
@@ -383,17 +406,30 @@ class Dataset:
 
     @classmethod
     def from_csv(cls, path: str | Path, feature_columns: str | Collection[str], *, separator: str = ",") -> "Dataset":
-        """Create a dataset from a CSV file."""
+        """Create a dataset from a CSV file.
+
+        :param path: Path to the CSV file containing both the labels and the features.
+        :param feature_columns: Column name or list of column names containing the features.
+        :param separator: Separator used in the CSV file.
+        """
         return cls.from_dataframe(pl.read_csv(path, separator=separator), feature_columns)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Sequence[object]], feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a dictionary of sequences."""
+        """Create a dataset from a dictionary of sequences.
+
+        :param data: Dictionary of sequences containing both the labels and the features.
+        :param feature_columns: Column name or list of column names containing the features.
+        """
         return cls.from_dataframe(pl.from_dict(data), feature_columns)
 
     @classmethod
     def from_dicts(cls, data: Iterable[dict[str, Any]], feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a sequence of dictionaries."""
+        """Create a dataset from a sequence of dictionaries.
+
+        :param data: Sequence of dictionaries containing both the labels and the features.
+        :param feature_columns: Column name or list of column names containing the features.
+        """
         return cls.from_dataframe(pl.from_dicts(data), feature_columns)
 
     @classmethod
@@ -402,7 +438,11 @@ class Dataset:
         features: ArrayLike,
         labels: Mapping[str, Sequence[object]] | SupportsInterchange,
     ) -> "Dataset":
-        """Create a dataset from the features (numpy array) and the labels (dictionary of sequences)."""
+        """Create a dataset from the features (numpy array) and the labels (dictionary of sequences).
+
+        :param features: 2D array-like containing the features.
+        :param labels: Dictionary of sequences or DataFrame containing the labels.
+        """
         features_df = pl.from_numpy(np.asarray(features))
         labels_df = (
             pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)

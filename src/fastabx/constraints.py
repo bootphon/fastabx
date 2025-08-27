@@ -19,7 +19,10 @@ type Constraints = Iterable[IntoExprColumn]
 
 
 def constraints_all_different(*columns: str) -> Constraints:
-    """Return :py:type:`.Constraints` that ensure that each specified column has different values for A, B and X."""
+    """Return :py:type:`.Constraints` that ensure that each specified column has different values for A, B and X.
+
+    :param columns: The columns to apply the constraints on.
+    """
     return [
         pl.col(f"{c}_a").ne(pl.col(f"{c}_x"))
         & pl.col(f"{c}_a").ne(pl.col(f"{c}_b"))
