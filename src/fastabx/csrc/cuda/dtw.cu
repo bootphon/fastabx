@@ -129,20 +129,10 @@ torch::stable::Tensor dtw_batch_cuda(
   STD_TORCH_CHECK(nx > 0 && ny > 0 && max_x > 0 && max_y > 0, "Empty input tensor");
   STD_TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
 
-  torch::stable::Tensor cost = torch::stable::empty_like(distances);
+  // torch::stable::Tensor cost = torch::stable::new_zeros(distances, {nx, ny, max_x, max_y});
+  torch::stable::Tensor cost = torch::stable::new_empty(distances, {nx, ny, max_x, max_y});
   torch::stable::zero_(cost);
   torch::stable::Tensor out = torch::stable::new_empty(distances, {nx, ny});
-
-  float* cost_ptr = reinterpret_cast<float*>(cost.data_ptr());
-  float* out_ptr = reinterpret_cast<float*>(out.data_ptr());
-  const float* distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
-  const int64_t* sx_ptr = reinterpret_cast<int64_t*>(sx.data_ptr());
-  const int64_t* sy_ptr = reinterpret_cast<int64_t*>(sy.data_ptr());
-  const Int64Tuple<4> distances_strides = {
-      distances.stride(0), distances.stride(1), distances.stride(2), distances.stride(3)};
-  const Int64Tuple<4> cost_sizes = {nx, ny, max_x, max_y};
-  const Int64Tuple<4> cost_strides = {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)};
-  const Int64Tuple<2> out_strides = {out.stride(0), out.stride(1)};
 
   const dim3 num_blocks(nx, ny);
   const int num_threads = max_x > 1024 ? 1024 : max_x;
@@ -150,9 +140,23 @@ torch::stable::Tensor dtw_batch_cuda(
   cudaStream_t stream = (cudaStream_t)torch::stable::accelerator::getCurrentStream(device_idx).id();
 
   dtw_wavefront_kernel<<<num_blocks, num_threads, 0, stream>>>(
-      cost_ptr, distances_ptr, sx_ptr, sy_ptr, symmetric, cost_sizes, cost_strides, distances_strides);
+      reinterpret_cast<float*>(cost.data_ptr()),
+      reinterpret_cast<const float*>(distances.data_ptr()),
+      reinterpret_cast<int64_t*>(sx.data_ptr()),
+      reinterpret_cast<int64_t*>(sy.data_ptr()),
+      symmetric,
+      {nx, ny, max_x, max_y},
+      {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)},
+      {distances.stride(0), distances.stride(1), distances.stride(2), distances.stride(3)});
   dtw_backtrack_kernel<<<num_blocks, 1, 0, stream>>>(
-      out_ptr, cost_ptr, sx_ptr, sy_ptr, symmetric, out_strides, cost_sizes, cost_strides);
+      reinterpret_cast<float*>(out.data_ptr()),
+      reinterpret_cast<float*>(cost.data_ptr()),
+      reinterpret_cast<int64_t*>(sx.data_ptr()),
+      reinterpret_cast<int64_t*>(sy.data_ptr()),
+      symmetric,
+      {out.stride(0), out.stride(1)},
+      {nx, ny, max_x, max_y},
+      {cost.stride(0), cost.stride(1), cost.stride(2), cost.stride(3)});
   return out;
 }
 
