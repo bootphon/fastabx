@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "setuptools>=80.9.0",
-    "torch>=2.9.0",
+    "torch==2.9.0.dev20250829+cu128",
     "numpy>=1.26.4",
     "ninja>=1.11",
 ]
@@ -33,7 +33,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.26.4",
     "polars>=1.26.0",
-    "torch>=2.9.0",
+    "torch==2.9.0.dev20250829+cu128",
     "tqdm>=4.67.1",
 ]
 
