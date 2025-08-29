@@ -94,12 +94,11 @@ torch::stable::Tensor dtw_batch_cpu(
     bool symmetric) {
   const int64_t nx = distances.size(0);
   const int64_t ny = distances.size(1);
+  torch::stable::Tensor out = torch::stable::new_zeros(distances, {nx, ny});
+
   const float* distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
   const int64_t* sx_ptr = reinterpret_cast<const int64_t*>(sx.data_ptr());
   const int64_t* sy_ptr = reinterpret_cast<const int64_t*>(sy.data_ptr());
-  // torch::stable::Tensor out = torch::stable::new_zeros(distances, {nx, ny});
-  torch::stable::Tensor out = torch::stable::new_empty(distances, {nx, ny});
-  torch::stable::zero_(out);
   float* out_ptr = reinterpret_cast<float*>(out.data_ptr());
 
 #pragma omp parallel for schedule(dynamic)

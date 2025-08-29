@@ -361,7 +361,7 @@ test = [
 requires-dist = [
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "polars", specifier = ">=1.26.0" },
-    { name = "torch", specifier = "==2.9.0.dev20250828+cu128" },
+    { name = "torch", specifier = "==2.9.0.dev20250829+cu128" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
@@ -1787,7 +1787,7 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.9.0.dev20250828+cu128"
+version = "2.9.0.dev20250829+cu128"
 source = { registry = "https://download.pytorch.org/whl/nightly/cu128" }
 dependencies = [
     { name = "filelock" },
@@ -1815,16 +1815,11 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp312-cp312-win_amd64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp313-cp313-manylinux_2_28_x86_64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp313-cp313-win_amd64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp313-cp313t-manylinux_2_28_x86_64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp313-cp313t-win_amd64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp314-cp314-manylinux_2_28_x86_64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp314-cp314-win_amd64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp314-cp314t-manylinux_2_28_x86_64.whl" },
-    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250828%2Bcu128-cp314-cp314t-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250829%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250829%2Bcu128-cp313-cp313-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250829%2Bcu128-cp313-cp313t-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250829%2Bcu128-cp314-cp314-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/nightly/cu128/torch-2.9.0.dev20250829%2Bcu128-cp314-cp314t-manylinux_2_28_x86_64.whl" },
 ]
 
 [[package]]

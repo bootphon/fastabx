@@ -129,9 +129,7 @@ torch::stable::Tensor dtw_batch_cuda(
   STD_TORCH_CHECK(nx > 0 && ny > 0 && max_x > 0 && max_y > 0, "Empty input tensor");
   STD_TORCH_CHECK(max_x < MAX_DIAG_LEN, "Diagonal too large to use CUDA shared memory");
 
-  // torch::stable::Tensor cost = torch::stable::new_zeros(distances, {nx, ny, max_x, max_y});
-  torch::stable::Tensor cost = torch::stable::new_empty(distances, {nx, ny, max_x, max_y});
-  torch::stable::zero_(cost);
+  torch::stable::Tensor cost = torch::stable::new_zeros(distances, {nx, ny, max_x, max_y});
   torch::stable::Tensor out = torch::stable::new_empty(distances, {nx, ny});
 
   const dim3 num_blocks(nx, ny);
