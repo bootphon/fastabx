@@ -27,6 +27,8 @@ PyObject* PyInit__C(void) {
 
 namespace fastabx {
 
+using torch::stable::Tensor;
+
 inline float dtw(
     const float* distances,
     const int64_t N,
@@ -75,26 +77,22 @@ inline float dtw(
   return cost[(N - 1) * M + M - 1] / path_len;
 }
 
-torch::stable::Tensor dtw_cpu(const torch::stable::Tensor distances) {
+Tensor dtw_cpu(const Tensor distances) {
   float result =
       dtw(reinterpret_cast<const float*>(distances.data_ptr()),
           distances.size(0),
           distances.size(1),
           distances.stride(0),
           distances.stride(1));
-  torch::stable::Tensor out = torch::stable::new_empty(distances, {});
+  Tensor out = torch::stable::new_empty(distances, {});
   torch::stable::fill_(out, result);
   return out;
 }
 
-torch::stable::Tensor dtw_batch_cpu(
-    const torch::stable::Tensor distances,
-    const torch::stable::Tensor sx,
-    const torch::stable::Tensor sy,
-    bool symmetric) {
+Tensor dtw_batch_cpu(const Tensor distances, const Tensor sx, const Tensor sy, bool symmetric) {
   const int64_t nx = distances.size(0);
   const int64_t ny = distances.size(1);
-  torch::stable::Tensor out = torch::stable::new_zeros(distances, {nx, ny});
+  Tensor out = torch::stable::new_zeros(distances, {nx, ny});
 
   const float* distances_ptr = reinterpret_cast<const float*>(distances.data_ptr());
   const int64_t* sx_ptr = reinterpret_cast<const int64_t*>(sx.data_ptr());
@@ -122,15 +120,11 @@ torch::stable::Tensor dtw_batch_cpu(
 }
 
 void boxed_dtw_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] = from(dtw_cpu(to<torch::stable::Tensor>(stack[0])));
+  stack[0] = from(dtw_cpu(to<Tensor>(stack[0])));
 }
 
 void boxed_dtw_batch_cpu(StableIValue* stack, uint64_t num_args, uint64_t num_outputs) {
-  stack[0] = from(dtw_batch_cpu(
-      to<torch::stable::Tensor>(stack[0]),
-      to<torch::stable::Tensor>(stack[1]),
-      to<torch::stable::Tensor>(stack[2]),
-      to<bool>(stack[3])));
+  stack[0] = from(dtw_batch_cpu(to<Tensor>(stack[0]), to<Tensor>(stack[1]), to<Tensor>(stack[2]), to<bool>(stack[3])));
 }
 
 STABLE_TORCH_LIBRARY(fastabx, m) {
