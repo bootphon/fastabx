@@ -8,6 +8,8 @@ from importlib.metadata import metadata
 from pathlib import Path
 from typing import TypeAliasType
 
+from packaging.version import parse
+
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.linkcode",
@@ -20,7 +22,7 @@ extensions = [
 project = "fastabx"
 author = metadata(project)["Author"]
 copyright = f"{datetime.now(tz=UTC).year}, {author}"
-version = metadata(project)["Version"]
+version = parse(metadata(project)["Version"]).base_version
 release = version
 
 autodoc_typehints = "description"
