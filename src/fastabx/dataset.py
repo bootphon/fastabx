@@ -126,9 +126,8 @@ def read_item(item: str | Path) -> pl.DataFrame:
         "speaker": pl.String,
     }
     try:
-        return pl.read_csv(item, separator=" ", schema=schema).with_columns(
-            pl.col("onset").str.to_decimal(), pl.col("offset").str.to_decimal()
-        )
+        df = pl.read_csv(item, separator=" ", schema=schema)
+        return df.with_columns(df["onset"].str.to_decimal(), df["offset"].str.to_decimal())
     except pl.exceptions.ComputeError as error:
         raise InvalidItemFileError from error
 
@@ -136,14 +135,15 @@ def read_item(item: str | Path) -> pl.DataFrame:
 def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
     """Return the labels from the path to the item file."""
     schema_overrides = {file_col: pl.String, onset_col: pl.String, offset_col: pl.String}
-    times_to_decimal = [pl.col(onset_col).str.to_decimal(), pl.col(offset_col).str.to_decimal()]
     match ext := Path(item).suffix:
         case ".item":
             return read_item(item)
         case ".csv":
-            return pl.read_csv(item, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+            df = pl.read_csv(item, schema_overrides=schema_overrides)
+            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case ".jsonl" | ".ndjson":
-            return pl.read_ndjson(item, schema_overrides=schema_overrides).with_columns(*times_to_decimal)
+            df = pl.read_ndjson(item, schema_overrides=schema_overrides)
+            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case _:
             msg = f"File extension {ext} is not supported. Supported extensions are .item, .csv, .jsonl, .ndjson."
             raise InvalidItemFileError(msg)
