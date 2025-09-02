@@ -5,7 +5,7 @@ variables:
 
 before_script:
   - apt-get update || true
-  - apt-get -y install curl make g++ pandoc
+  - apt-get -y install curl make g++ pandoc git
   - curl -LsSf https://astral.sh/uv/install.sh | sh
   - source $HOME/.local/bin/env
 
