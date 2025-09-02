@@ -1,6 +1,7 @@
 [build-system]
 requires = [
     "setuptools>=80.9.0",
+    "setuptools-scm[simple]>=9.2.0",
     "torch>=2.6.0",
     "numpy>=1.26.4",
     "ninja>=1.11",
@@ -9,7 +10,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastabx"
-version = "0.5.3"
 description = "A library for efficient computation of ABX discriminability"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,6 +36,7 @@ dependencies = [
     "torch>=2.6.0",
     "tqdm>=4.67.1",
 ]
+dynamic = ["version"]
 
 [project.urls]
 homepage = "https://docs.cognitive-ml.fr/fastabx"
