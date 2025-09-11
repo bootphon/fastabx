@@ -49,15 +49,12 @@ fastabx = "fastabx.__main__:main"
 
 [dependency-groups]
 dev = [
-    "ipdb>=0.13.13",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "pre-commit>=4.2.0",
-    "ruff>=0.12.8",
-    "ty>=0.0.1a17",
-    "types-setuptools>=80.9.0.20250529",
-    "types-tqdm>=4.67.0.20250516",
-    "typos>=1.35.4",
+    "ruff>=0.13.0",
+    "ty>=0.0.1a20",
+    "typos>=1.36.2",
 ]
 test = ["hypothesis>=6.135.31", "pytest>=8.4.1"]
 doc = [
@@ -88,7 +85,6 @@ ignore = [
     "D107",    # undocumented-public-init
     "D203",    # incorrect-blank-line-before-class
     "D213",    # multi-line-summary-second-line
-    "PD901",   # pandas-df-variable-name
     "PLR0913", # too-many-arguments
 ]
 
@@ -103,5 +99,5 @@ division-by-zero = "warn"
 possibly-unresolved-reference = "warn"
 unused-ignore-comment = "warn"
 
-[tool.typos]
-default.extend-words = { IY = "IY" }
+[tool.typos.default.extend-words]
+IY = "IY"
