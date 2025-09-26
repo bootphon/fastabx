@@ -1,10 +1,9 @@
-# ruff: noqa: E402
+# ruff: noqa: F401
 """Full ABX."""
 
-from fastabx.utils import load_dtw_extension
+import torch
 
-load_dtw_extension()
-
+from fastabx import _C  # ty: ignore[unresolved-import]
 from fastabx.dataset import Dataset
 from fastabx.pooling import pooling
 from fastabx.score import Score

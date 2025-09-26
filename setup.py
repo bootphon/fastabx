@@ -11,12 +11,11 @@ def get_openmp_flags() -> tuple[list[str], list[str]]:
     """Return the compiler and linker flags for OpenMP."""
     match sys.platform:
         case "linux":
-            compile_flags, link_flags = ["-fopenmp"], ["-fopenmp"]
+            return ["-fopenmp"], ["-fopenmp"]
         case "win32":
-            compile_flags, link_flags = ["-openmp"], []
+            return ["-openmp"], []
         case _:  # On MacOS, we use the OpenMP version vendored by PyTorch
             return [], []
-    return compile_flags, link_flags
 
 
 def get_extension() -> Extension:
@@ -25,7 +24,7 @@ def get_extension() -> Extension:
     extension = CUDAExtension if use_cuda else CppExtension
     openmp_flags = get_openmp_flags()
     extra_compile_args = {
-        "cxx": ["-fdiagnostics-color=always", "-DPy_LIMITED_API=0x030C0000", "-O3"] + openmp_flags[0],
+        "cxx": ["-fdiagnostics-color=always", "-O3"] + openmp_flags[0],
         "nvcc": ["-O3"],
     }
     sources = ["src/fastabx/csrc/dtw.cpp"]
