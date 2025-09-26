@@ -24,7 +24,7 @@ def get_extension() -> Extension:
     extension = CUDAExtension if use_cuda else CppExtension
     openmp_flags = get_openmp_flags()
     extra_compile_args = {
-        "cxx": ["-fdiagnostics-color=always", "-O3"] + openmp_flags[0],
+        "cxx": ["-fdiagnostics-color=always", "-DTORCH_STABLE_ONLY", "-O3"] + openmp_flags[0],
         "nvcc": ["-O3"],
     }
     sources = ["src/fastabx/csrc/dtw.cpp"]
