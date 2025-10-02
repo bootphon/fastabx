@@ -19,8 +19,6 @@ from tqdm import tqdm
 from fastabx.utils import with_librilight_bug
 from fastabx.verify import verify_empty_datapoints
 
-type ArrayLike = npt.ArrayLike
-
 
 @dataclass(frozen=True)
 class Batch:
@@ -435,7 +433,7 @@ class Dataset:
     @classmethod
     def from_numpy(
         cls,
-        features: ArrayLike,
+        features: npt.ArrayLike,
         labels: Mapping[str, Sequence[object]] | SupportsInterchange,
     ) -> "Dataset":
         """Create a dataset from the features (numpy array) and the labels (dictionary of sequences).
