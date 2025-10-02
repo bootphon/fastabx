@@ -149,11 +149,8 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
 
 def item_frontiers(frequency: float, onset_col: str, offset_col: str) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
     """Frontiers [start, end[ in the input features and in the concatenated ones."""
-    # Remove the cast to float and -0.5 once RoundMode "half_ceil" and "half_floor" are added to polars round method
-    # (or "half_away_from_zero" and "half_to_zero")
-    # See: https://github.com/pola-rs/polars/issues/21800
-    start = (pl.col(onset_col) * frequency - 0.5).cast(pl.Float64).ceil().cast(pl.Int64).alias("start")
-    end = (pl.col(offset_col) * frequency - 0.5).cast(pl.Float64).floor().cast(pl.Int64).alias("end")
+    start = (pl.col(onset_col) * frequency - 0.5).ceil().cast(pl.Int64).alias("start")
+    end = (pl.col(offset_col) * frequency - 0.5).floor().cast(pl.Int64).alias("end")
     if not with_librilight_bug():
         end += 1
     length = (end - start).alias("length")
