@@ -91,7 +91,8 @@ class InMemoryAccessor(DataAccessor):
 
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
     """Recursively find all files with the given `extension` in `root`."""
-    return dict(sorted((p.stem, p) for p in Path(root).rglob(f"*{extension}")))
+    root = Path(root)
+    return dict(sorted((str(p.relative_to(root)).removesuffix(extension), p) for p in root.rglob(f"*{extension}")))
 
 
 def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
