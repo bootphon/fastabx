@@ -109,25 +109,7 @@ def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Ten
 
 
 class InvalidItemFileError(Exception):
-    """The item file does not have the correct columns."""
-
-
-def read_item(item: str | Path) -> pl.DataFrame:
-    """Read an item file."""
-    schema = {
-        "#file": pl.String,
-        "onset": pl.String,
-        "offset": pl.String,
-        "#phone": pl.String,
-        "prev-phone": pl.String,
-        "next-phone": pl.String,
-        "speaker": pl.String,
-    }
-    try:
-        df = pl.read_csv(item, separator=" ", schema=schema)
-        return df.with_columns(df["onset"].str.to_decimal(), df["offset"].str.to_decimal())
-    except pl.exceptions.ComputeError as error:
-        raise InvalidItemFileError from error
+    """The item file is invalid."""
 
 
 def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
@@ -135,7 +117,8 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
     schema_overrides = {file_col: pl.String, onset_col: pl.String, offset_col: pl.String}
     match ext := Path(item).suffix:
         case ".item":
-            return read_item(item)
+            df = pl.read_csv(item, separator=" ", schema_overrides=schema_overrides)
+            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case ".csv":
             df = pl.read_csv(item, schema_overrides=schema_overrides)
             return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
@@ -449,7 +432,7 @@ class Dataset:
 
 def dummy_dataset_from_item(item: str | Path, frequency: int | None) -> Dataset:
     """To debug."""
-    labels = read_item(item).with_columns(pl.lit(0).alias("dummy"))
+    labels = read_labels(item, "#file", "onset", "offset").with_columns(pl.lit(0).alias("dummy"))
     if frequency is not None:
         labels = labels.with_columns(*item_frontiers(frequency, "onset", "offset"))
     return Dataset.from_dataframe(labels, "dummy")
