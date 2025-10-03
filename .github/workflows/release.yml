@@ -56,6 +56,7 @@ jobs:
 
       - name: Get tag name
         id: get_tag
+        shell: bash
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Install CUDA on Linux
@@ -114,11 +115,22 @@ jobs:
           fi
           jq -n --arg platform "$PLATFORM" --arg version "$VERSION" '{($platform): $version}' > src/fastabx/torch_version.json
 
+      - name: Override latest git tag
+        shell: bash
+        env:
+          TAG: ${{ steps.get_tag.outputs.TAG_NAME }}
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<>"
+          git add src/fastabx/torch_version.json
+          git commit -m "update" || true
+          git tag --force $TAG
+
       - name: Build wheel
         shell: bash
         run: |
           uv venv -p 3.12
-          uv pip install setuptools numpy ninja
+          uv pip install setuptools setuptools-scm numpy ninja
           uv pip install torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/${{ matrix.torch-backend }}
           uv build --wheel --no-build-isolation
 
