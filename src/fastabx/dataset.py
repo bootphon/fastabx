@@ -121,16 +121,17 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
     match ext := Path(item).suffix:
         case ".item":
             df = pl.read_csv(item, separator=" ", schema_overrides=schema_overrides)
-            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case ".csv":
             df = pl.read_csv(item, schema_overrides=schema_overrides)
-            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case ".jsonl" | ".ndjson":
             df = pl.read_ndjson(item, schema_overrides=schema_overrides)
-            return df.with_columns(df[onset_col].str.to_decimal(), df[offset_col].str.to_decimal())
         case _:
             msg = f"File extension {ext} is not supported. Supported extensions are .item, .csv, .jsonl, .ndjson."
             raise InvalidItemFileError(msg)
+    return df.with_columns(
+        df[onset_col].str.to_decimal(inference_length=len(df)),
+        df[offset_col].str.to_decimal(inference_length=len(df)),
+    )
 
 
 def item_frontiers(frequency: float, onset_col: str, offset_col: str) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
