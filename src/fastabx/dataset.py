@@ -173,6 +173,15 @@ class EmptyFeaturesError(ValueError):
         )
 
 
+def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError:
+    """Error to raise when some files are missing."""
+    return FileNotFoundError(
+        f"{len(to_find - found)} files missing to build the Dataset. "
+        f"Only {len(found)} out of {len(to_find)} have been found. "
+        "Make sure to use the correct directory and file extension."
+    )
+
+
 def load_data_from_item[T](
     mapping: dict[str, T],
     labels: pl.DataFrame,
@@ -192,7 +201,10 @@ def load_data_from_item[T](
 
     data, device = [], torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for fileid, start_indices, end_indices in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
-        features = feature_maker(mapping[fileid]).detach().to(device)
+        try:
+            features = feature_maker(mapping[fileid]).detach().to(device)
+        except KeyError as error:
+            raise missing_files_error(set(mapping), set(by_file[file_col].unique())) from error
         for start, end in zip(start_indices, end_indices, strict=True):
             if start < 0 or end > features.size(0):
                 raise FeaturesSizeError(fileid, start, end, features.size(0))
