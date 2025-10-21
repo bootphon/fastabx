@@ -11,7 +11,7 @@ Install the package with pip:
 
    $ pip install fastabx
 
-fastabx requires Python 3.12 or later, and PyTorch 2.8.0 [#torch]_ (with CUDA 12.8 on Linux).
+fastabx requires Python 3.12 or later, and PyTorch 2.9.0 [#torch]_ (with CUDA 12.8 on Linux).
 The pinned PyTorch version is the default one on PyPI.
 Wheels compatible with other versions and variants of PyTorch are available on the GitHub Releases page.
 
