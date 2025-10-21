@@ -3,7 +3,9 @@
 import os
 import sys
 
+import torch
 from setuptools import Extension, setup
+from torch.torch_version import Version
 from torch.utils.cpp_extension import CUDA_HOME, BuildExtension, CppExtension, CUDAExtension
 
 
@@ -19,6 +21,13 @@ def get_openmp_flags() -> tuple[list[str], list[str]]:
     return compile_flags, link_flags
 
 
+def get_cuda_arch_list() -> str:
+    """Supported CUDA architectures. Volta is not supported by CUDA 13.0."""
+    if torch.version.cuda is None or Version(torch.version.cuda) < Version("13.0"):
+        return "Volta;Turing;Ampere;Ada;Hopper"
+    return "Turing;Ampere;Ada;Hopper"
+
+
 def get_extension() -> Extension:
     """Either CUDA or CPU extension."""
     use_cuda = CUDA_HOME is not None
@@ -30,7 +39,7 @@ def get_extension() -> Extension:
     }
     sources = ["src/fastabx/csrc/dtw.cpp"]
     if use_cuda:
-        os.environ["TORCH_CUDA_ARCH_LIST"] = "Volta;Turing;Ampere;Ada;Hopper"
+        os.environ["TORCH_CUDA_ARCH_LIST"] = get_cuda_arch_list()
         sources.append("src/fastabx/csrc/cuda/dtw.cu")
     return extension(
         "fastabx._C",
