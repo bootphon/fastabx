@@ -42,5 +42,5 @@ To build a wheel:
 Footnotes
 ---------
 
-.. [#glibc] The glibc constraint is due to the runners available in GitHub CI. If you build from source,
-   you can use the lowest version of glibc supported by PyTorch.
+.. [#glibc] The glibc constraint is due to the runners available in GitHub CI that are used to build torchdtw.
+   If you build from source, you can use the lowest version of glibc supported by PyTorch.
