@@ -1,6 +1,7 @@
 """Entry point for the ZeroSpeech ABX evaluation."""
 
 import argparse
+import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
 from fastabx.distance import available_distances
@@ -13,6 +14,9 @@ def main() -> None:
         description="ZeroSpeech ABX",
         allow_abbrev=False,
         formatter_class=ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {importlib.metadata.version('fastabx')}"
     )
     parser.add_argument("item", help="Path to the item file")
     parser.add_argument("features", help="Path to the features directory")
