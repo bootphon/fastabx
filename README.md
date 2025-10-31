@@ -19,7 +19,7 @@ Install the pre-built package in your environment:
 pip install fastabx
 ```
 
-It requires Python 3.12 or later, and depends on PyTorch 2.9.0 or later, NumPy, Polars and tqdm.
+It requires Python 3.12 or later, and depends on PyTorch 2.10.0 or later, NumPy, Polars, tqdm, and [torchdtw](https://github.com/bootphon/torchdtw).
 
 ## Citation
 

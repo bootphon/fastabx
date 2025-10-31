@@ -11,7 +11,7 @@ Install the package with pip:
 
    $ pip install fastabx
 
-fastabx requires Python 3.12 or later, and depends on PyTorch 2.9.0 or later, NumPy, Polars, and tqdm.
+fastabx requires Python 3.12 or later, and depends on PyTorch 2.10.0 or later, NumPy, Polars, tqdm, and `torchdtw <https://github.com/bootphon/torchdtw>`_.
 
 fastabx is available on Linux x86-64 (with glibc 2.34 or later [#glibc]_), macOS arm64, and Windows x86-64.
 
