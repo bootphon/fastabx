@@ -32,7 +32,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26.4",
-    "polars>=1.26.0",
+    "polars>=1.35.1",
     "torch>=2.6.0",
     "tqdm>=4.67.1",
 ]
