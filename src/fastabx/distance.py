@@ -6,9 +6,9 @@ from typing import Literal, get_args
 
 import torch
 from torch import Tensor
+from torchdtw import dtw_batch
 
 from fastabx.cell import Cell
-from fastabx.dtw import dtw_batch
 
 type Distance = Callable[[Tensor, Tensor], Tensor]
 type DistanceName = Literal["euclidean", "cosine", "angular", "kl", "kl_symmetric", "identical", "null"]
