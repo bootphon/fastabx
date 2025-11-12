@@ -354,7 +354,6 @@ class Dataset:
         *,
         audio_key: str = "audio",
         units_key: str = "units",
-        separator: str = " ",
         file_col: str = "#file",
         onset_col: str = "onset",
         offset_col: str = "offset",
@@ -364,9 +363,8 @@ class Dataset:
         :param item: Path to the item file.
         :param units: Path to the JSONL file containing the units.
         :param frequency: The feature frequency, in Hz.
-        :param audio_key: Key in the JSONL file that contains the audio file names, default is "audio".
-        :param units_key: Key in the JSONL file that contains the units, default is "units".
-        :param separator: Separator used in the units field, default is whitespace " ".
+        :param audio_key: Key in the JSONL file that contains the audio file names (str), default is "audio".
+        :param units_key: Key in the JSONL file that contains the units (list[int]), default is "units".
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
@@ -379,7 +377,7 @@ class Dataset:
         )
 
         def feature_maker(idx: int) -> torch.Tensor:
-            return torch.tensor([int(unit) for unit in units_df[idx, units_key].split(separator)]).unsqueeze(1)
+            return torch.tensor(units_df[idx, units_key]).unsqueeze(1)
 
         mapping: dict[str, int] = dict(zip(units_df[audio_key], range(len(units_df)), strict=True))
         indices, data = load_data_from_item(mapping, labels, frequency, feature_maker, file_col, onset_col, offset_col)
