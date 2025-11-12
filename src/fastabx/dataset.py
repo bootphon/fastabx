@@ -185,7 +185,7 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
 def load_data_from_item[T](
     mapping: dict[str, T],
     labels: pl.DataFrame,
-    frequency: int,
+    frequency: float,
     feature_maker: Callable[[T], torch.Tensor],
     file_col: str,
     onset_col: str,
@@ -290,7 +290,7 @@ class Dataset:
         cls,
         item: str | Path,
         root: str | Path,
-        frequency: int,
+        frequency: float,
         *,
         feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
         extension: str = ".pt",
@@ -350,7 +350,7 @@ class Dataset:
         cls,
         item: str | Path,
         units: str | Path,
-        frequency: int,
+        frequency: float,
         *,
         audio_key: str = "audio",
         units_key: str = "units",
@@ -444,7 +444,7 @@ class Dataset:
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
 
 
-def dummy_dataset_from_item(item: str | Path, frequency: int | None) -> Dataset:
+def dummy_dataset_from_item(item: str | Path, frequency: float | None) -> Dataset:
     """To debug."""
     labels = read_labels(item, "#file", "onset", "offset").with_columns(pl.lit(0).alias("dummy"))
     if frequency is not None:
