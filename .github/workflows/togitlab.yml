@@ -1,4 +1,5 @@
 name: Push to Gitlab Workflow
+permissions: {}
 
 on:
   push:
@@ -12,11 +13,14 @@ jobs:
     env:
       GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       GITLAB_REPO: gitlab.cognitive-ml.fr/mpoli/fastabx.git
+    permissions:
+      content: read # Fetch repository
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Push
         shell: bash
