@@ -1,78 +1,69 @@
-[build-system]
-requires = [
-    "setuptools>=80.9.0",
-    "setuptools-scm>=9.2.0",
-    "torch>=2.6.0",
-    "numpy>=1.26.4",
-    "ninja>=1.11",
-]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "fastabx"
 description = "A library for efficient computation of ABX discriminability"
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [
-    { name = "Maxime Poli" },
-    { name = "CoML", email = "dev@cognitive-ml.fr" },
-]
 license = "MIT"
-keywords = ["speech", "machine learning"]
+authors = [
+  { name = "Maxime Poli" },
+  { name = "CoML", email = "dev@cognitive-ml.fr" },
+]
+keywords = ["machine learning", "speech"]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
-    "Programming Language :: C++",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "numpy>=1.26.4",
-    "polars>=1.35.1",
-    "torch>=2.6.0",
-    "tqdm>=4.67.1",
+  "numpy>=1.26.4",
+  "polars>=1.35.1",
+  "torch>=2.10.0",
+  "torchdtw>=0.0.2",
+  "tqdm>=4.67.1",
 ]
 dynamic = ["version"]
 
 [project.urls]
-homepage = "https://docs.cognitive-ml.fr/fastabx"
-documentation = "https://docs.cognitive-ml.fr/fastabx"
-repository = "https://github.com/bootphon/fastabx"
 changelog = "https://github.com/bootphon/fastabx/releases"
+documentation = "https://docs.cognitive-ml.fr/fastabx"
+homepage = "https://docs.cognitive-ml.fr/fastabx"
+repository = "https://github.com/bootphon/fastabx"
 
 [project.scripts]
 fastabx = "fastabx.__main__:main"
 
 [dependency-groups]
 dev = [
-    "ipykernel>=6.29.5",
-    "matplotlib>=3.10.3",
-    "pre-commit>=4.2.0",
-    "ruff>=0.13.0",
-    "ty>=0.0.1a20",
-    "typos>=1.36.2",
+  "ipykernel>=6.29.5",
+  "matplotlib>=3.10.3",
+  "pre-commit>=4.2.0",
+  "ruff>=0.14.10",
+  "typos>=1.36.2",
+]
+doc = [
+  "furo>=2024.8.6",
+  "matplotlib>=3.10.3",
+  "nbconvert>=7.16.6",
+  "nbsphinx>=0.9.7",
+  "packaging>=25.0",
+  "sphinx>=8.1.3",
+  "sphinx-copybutton>=0.5.2",
+  "sphinx-design>=0.6.1",
 ]
 test = ["hypothesis>=6.135.31", "pytest>=8.4.1"]
-doc = [
-    "furo>=2024.8.6",
-    "matplotlib>=3.10.3",
-    "nbconvert>=7.16.6",
-    "nbsphinx>=0.9.7",
-    "packaging>=25.0",
-    "sphinx>=8.1.3",
-    "sphinx-copybutton>=0.5.2",
-    "sphinx-design>=0.6.1",
-]
 
-[tool.setuptools.package-data]
-fastabx = ["torch_version.json"]
+[build-system]
+requires = ["hatch-vcs>=0.5.0", "hatchling>=1.28.0"]
+build-backend = "hatchling.build"
 
-[tool.setuptools_scm]
-version_scheme = "no-guess-dev"
+[tool.hatch.version]
+source = "vcs"
 
 [tool.ruff]
 line-length = 119
@@ -80,12 +71,12 @@ line-length = 119
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "COM812",  # missing-trailing-comma
-    "D105",    # undocumented-magic-method
-    "D107",    # undocumented-public-init
-    "D203",    # incorrect-blank-line-before-class
-    "D213",    # multi-line-summary-second-line
-    "PLR0913", # too-many-arguments
+  "COM812",  # missing-trailing-comma
+  "D105",  # undocumented-magic-method
+  "D107",  # undocumented-public-init
+  "D203",  # incorrect-blank-line-before-class
+  "D213",  # multi-line-summary-second-line
+  "PLR0913",  # too-many-arguments
 ]
 
 [tool.ruff.lint.flake8-self]
@@ -93,11 +84,6 @@ ignore-names = ["_check"]
 
 [tool.ruff.lint.pylint]
 allow-magic-value-types = ["str", "int"]
-
-[tool.ty.rules]
-division-by-zero = "warn"
-possibly-unresolved-reference = "warn"
-unused-ignore-comment = "warn"
 
 [tool.typos.default.extend-words]
 IY = "IY"
