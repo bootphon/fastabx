@@ -13,6 +13,19 @@ it is a generic framework that can be applied to other domains of representation
 
 This package provides a simple interface that can be adapted to any ABX conditions, and to any input modality.
 
+Install
+=======
+
+Install the package with pip:
+
+.. code-block:: console
+
+   $ pip install fastabx
+
+fastabx requires Python 3.12 or later, and depends on PyTorch 2.10.0 or later, NumPy, Polars, tqdm, and `torchdtw <https://github.com/bootphon/torchdtw>`_.
+
+fastabx is available on Linux x86-64 (with glibc 2.34 or later [#glibc]_), macOS arm64, and Windows x86-64.
+
 Citation
 ========
 
@@ -39,9 +52,14 @@ Contents
    :titlesonly:
    :maxdepth: 1
 
-   install
    abx
    guide
    api
    examples/index
    advanced/index
+
+Footnotes
+---------
+
+.. [#glibc] The glibc constraint is due to the runners available in GitHub CI that are used to build torchdtw.
+   If you build from source, you can use the lowest version of glibc supported by PyTorch.

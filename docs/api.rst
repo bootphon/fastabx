@@ -49,12 +49,6 @@ Distance
 .. autofunction:: fastabx.distance.distance_on_cell
 .. autofunction:: fastabx.distance.abx_on_cell
 
-DTW
----
-
-.. autofunction:: fastabx.dtw.dtw
-.. autofunction:: fastabx.dtw.dtw_batch
-
 Constraints
 -----------
 

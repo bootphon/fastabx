@@ -19,8 +19,7 @@ Install the pre-built package in your environment:
 pip install fastabx
 ```
 
-It requires Python 3.12 or later and the default PyTorch version on PyPI (2.9.0, CUDA 12.8 variant for Linux, CPU variant for Windows and macOS).
-Wheels compatible with other versions and variants of PyTorch are available on the GitHub Releases page.
+It requires Python 3.12 or later, and depends on PyTorch 2.10.0 or later, NumPy, Polars, tqdm, and [torchdtw](https://github.com/bootphon/torchdtw).
 
 ## Citation
 
