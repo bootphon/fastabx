@@ -126,6 +126,8 @@ def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = N
         sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
         sc /= len(cell)
     else:
-        sc = (dxa < dxb)[mask].sum() + 0.5 * (dxa == dxb)[mask].sum()
+        dxa = torch.where(~mask, float("inf"), dxa)
+        dxb = torch.where(~mask, float("inf"), dxb)
+        sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
         sc /= mask.sum()
     return 1 - sc

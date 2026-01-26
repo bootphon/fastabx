@@ -5,12 +5,13 @@ from pathlib import Path
 
 import polars as pl
 import polars.selectors as cs
+import torch
 from tqdm import tqdm
 
 from fastabx.constraints import Constraints, score_task_with_constraints
 from fastabx.distance import Distance, DistanceName, abx_on_cell, distance_function
-from fastabx.task import Task
-from fastabx.utils import MIN_CELLS_FOR_TQDM
+from fastabx.task import Task, padded_cell_generator
+from fastabx.utils import MIN_CELLS_FOR_TQDM, torch_compile_available
 from fastabx.verify import format_score_levels, verify_score_levels
 
 
@@ -59,6 +60,23 @@ def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
     return scores, sizes
 
 
+def score_task_with_compile(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
+    """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes."""
+    assert torch_compile_available()
+    scores, sizes = [], []
+    torch.set_float32_matmul_precision("high")
+    abx_on_cell_compiled = torch.compile(abx_on_cell, dynamic=False, fullgraph=True, mode="reduce-overhead")
+    for cell, mask in tqdm(
+        padded_cell_generator(task),
+        "Scoring each cell with torch.compile",
+        total=len(task),
+        disable=len(task) < MIN_CELLS_FOR_TQDM,
+    ):
+        scores.append(abx_on_cell_compiled(cell, distance, mask=mask).item())
+        sizes.append(len(cell))
+    return scores, sizes
+
+
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``.
 
@@ -70,13 +88,23 @@ class Score:
     :param constraints: Optional constraints to restrict the possible triplets.
     """
 
-    def __init__(self, task: Task, distance_name: DistanceName, *, constraints: Constraints | None = None) -> None:
+    def __init__(
+        self,
+        task: Task,
+        distance_name: DistanceName,
+        *,
+        constraints: Constraints | None = None,
+        with_compile: bool = False,
+    ) -> None:
+        scores, sizes = [], []
         self.distance_name = distance_name
         distance = distance_function(distance_name)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
+        if constraints is not None and with_compile:
+            raise ValueError
         scores, sizes = (
-            score_task(task, distance)
+            score_task_with_compile(task, distance)
             if constraints is None
             else score_task_with_constraints(task, distance, constraints)
         )
