@@ -3,6 +3,8 @@
 import json
 import os
 
+import torch
+
 MIN_CELLS_FOR_TQDM = 50
 
 
@@ -19,3 +21,8 @@ def print_fastabx_output(score: float, **kwargs: str | int) -> None:
         case _:
             output = f"ABX error rate: {score:.3%}"
     print(output)  # noqa: T201
+
+
+def torch_compile_available() -> bool:
+    """Whether torch.compile can be used."""
+    return torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 0)
