@@ -124,4 +124,4 @@ class Score:
             if levels is not None:
                 raise CollapseError(are_set=True)
             return self.cells.select(pl_weighted_mean("score", "size")).item()
-        return self.details(levels=levels)["score"].mean()
+        return self.details(levels=levels)["score"].mean()  # ty:ignore[invalid-return-type]

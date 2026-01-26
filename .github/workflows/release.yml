@@ -1,4 +1,5 @@
 name: Release Workflow
+permissions: {}
 
 on:
   push:
@@ -6,255 +7,105 @@ on:
       - "*"
 
 jobs:
-  build:
-    name: Build wheel
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - { os: "macos-14", torch-version: "2.6.0", torch-backend: "cpu" }
-          - { os: "macos-14", torch-version: "2.7.1", torch-backend: "cpu" }
-          - { os: "macos-14", torch-version: "2.8.0", torch-backend: "cpu" }
-          - { os: "macos-14", torch-version: "2.9.0", torch-backend: "cpu" }
-          - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cpu" }
-          - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cu124" }
-          - { os: "ubuntu-22.04", torch-version: "2.6.0", torch-backend: "cu126" }
-          - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cpu" }
-          - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cu126" }
-          - { os: "ubuntu-22.04", torch-version: "2.7.1", torch-backend: "cu128" }
-          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cpu" }
-          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu126" }
-          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu128" }
-          - { os: "ubuntu-22.04", torch-version: "2.8.0", torch-backend: "cu129" }
-          - { os: "ubuntu-22.04", torch-version: "2.9.0", torch-backend: "cpu" }
-          - { os: "ubuntu-22.04", torch-version: "2.9.0", torch-backend: "cu126" }
-          - { os: "ubuntu-22.04", torch-version: "2.9.0", torch-backend: "cu128" }
-          - { os: "ubuntu-22.04", torch-version: "2.9.0", torch-backend: "cu130" }
-          - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cpu" }
-          - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cu124" }
-          - { os: "windows-latest", torch-version: "2.6.0", torch-backend: "cu126" }
-          - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cpu" }
-          - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cu126" }
-          - { os: "windows-latest", torch-version: "2.7.1", torch-backend: "cu128" }
-          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cpu" }
-          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu126" }
-          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu128" }
-          - { os: "windows-latest", torch-version: "2.8.0", torch-backend: "cu129" }
-          - { os: "windows-latest", torch-version: "2.9.0", torch-backend: "cpu" }
-          - { os: "windows-latest", torch-version: "2.9.0", torch-backend: "cu126" }
-          - { os: "windows-latest", torch-version: "2.9.0", torch-backend: "cu128" }
-          - { os: "windows-latest", torch-version: "2.9.0", torch-backend: "cu130" }
-    env:
-      GLIBC_VERSION: "2_34"
-      DEFAULT_VERSION: "2.9.0"
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Check if this is the default version
-        shell: bash
-        run: |
-          DEFAULT_BACKEND=$(jq -rn '{"Linux": "cu128", "Windows": "cpu", "macOS": "cpu"}["${{ runner.os }}"]')
-          if [[ "${{ matrix.torch-version }}" == "$DEFAULT_VERSION" && "${{ matrix.torch-backend }}" == "$DEFAULT_BACKEND" ]]; then
-            echo "IS_DEFAULT=true" >> $GITHUB_ENV
-          else
-            echo "IS_DEFAULT=false" >> $GITHUB_ENV
-          fi
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Free up disk space
-        if: ${{ runner.os == 'Linux' }}
-        # https://github.com/easimon/maximize-build-space/blob/master/action.yml
-        # https://github.com/easimon/maximize-build-space/tree/test-report
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-
-      - name: Set up swap space
-        if: runner.os == 'Linux'
-        uses: pierotofy/set-swap-space@v1.0
-        with:
-          swap-size-gb: 10
-
-      - name: Get tag name
-        id: get_tag
-        shell: bash
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Install CUDA 12 on Linux
-        if: ${{ runner.os == 'Linux' && matrix.torch-backend != 'cpu' && matrix.torch-backend != 'cu130' }}
-        run: |
-          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-          sudo dpkg -i cuda-keyring_1.1-1_all.deb
-          sudo apt-get update
-          sudo apt-get -y install cuda-nvcc-12-9 cuda-libraries-dev-12.9
-          echo "CUDA_HOME=/usr/local/cuda-12.9" >> $GITHUB_ENV
-          echo "/usr/local/cuda-12.9/bin" >> $GITHUB_PATH
-
-      - name: Install CUDA 13 on Linux
-        if: ${{ runner.os == 'Linux' && matrix.torch-backend == 'cu130' }}
-        run: |
-          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-          sudo dpkg -i cuda-keyring_1.1-1_all.deb
-          sudo apt-get update
-          sudo apt-get -y install cuda-nvcc-13-0 cuda-libraries-dev-13.0
-          echo "CUDA_HOME=/usr/local/cuda-13.0" >> $GITHUB_ENV
-          echo "/usr/local/cuda-13.0/bin" >> $GITHUB_PATH
-
-      - name: Install CUDA 12 on Windows
-        if: ${{ runner.os == 'Windows' && matrix.torch-backend != 'cpu' && matrix.torch-backend != 'cu130' }}
-        shell: pwsh
-        run: |
-          $downloadUrl = "https://developer.download.nvidia.com/compute/cuda/12.9.1/local_installers/cuda_12.9.1_576.57_windows.exe"
-          $dst = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9"
-          New-Item -Path "cuda" -ItemType Directory
-          New-Item -Path $dst -ItemType Directory
-          & "C:\msys64\usr\bin\wget" $downloadUrl -O "cuda.exe" -q
-          & 'C:\Program Files\7-Zip\7z' x "cuda.exe" -o"cuda"
-          $directories = Get-ChildItem -Directory -Path "cuda"
-          foreach ($dir in $directories) {
-              $items = Get-ChildItem -Path (Join-Path "cuda" $dir.Name)
-              foreach ($item in $items) {
-                  if ($item.PSIsContainer) {
-                      Write-Output "$($item.FullName)"
-                      Copy-Item -Path "$($item.FullName)\*" -Destination $dst -Recurse -Force
-                  }
-              }
-          }
-          Write-Output "CUDA_HOME=$dst" >> $env:GITHUB_ENV
-          Write-Output "$dst\bin" >> $env:GITHUB_PATH
-
-      - name: Install CUDA 13 on Windows
-        if: ${{ runner.os == 'Windows' && matrix.torch-backend == 'cu130' }}
-        shell: pwsh
-        run: |
-          $downloadUrl = "https://developer.download.nvidia.com/compute/cuda/13.0.2/local_installers/cuda_13.0.2_windows.exe"
-          $dst = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
-          New-Item -Path "cuda" -ItemType Directory
-          New-Item -Path $dst -ItemType Directory
-          & "C:\msys64\usr\bin\wget" $downloadUrl -O "cuda.exe" -q
-          & 'C:\Program Files\7-Zip\7z' x "cuda.exe" -o"cuda"
-          $directories = Get-ChildItem -Directory -Path "cuda"
-          foreach ($dir in $directories) {
-              $items = Get-ChildItem -Path (Join-Path "cuda" $dir.Name)
-              foreach ($item in $items) {
-                  if ($item.PSIsContainer) {
-                      Write-Output "$($item.FullName)"
-                      Copy-Item -Path "$($item.FullName)\*" -Destination $dst -Recurse -Force
-                  }
-              }
-          }
-          Write-Output "CUDA_HOME=$dst" >> $env:GITHUB_ENV
-          Write-Output "$dst\bin" >> $env:GITHUB_PATH
-
-      - name: Check CUDA installation
-        if: ${{ matrix.torch-backend != 'cpu' }}
-        shell: bash
-        run: |
-          nvcc -V
-          echo CUDA_HOME=$CUDA_HOME
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Override torch_version.json
-        shell: bash
-        run: |
-          PLATFORM=$(jq -rn '{"Linux": "linux", "Windows": "win32", "macOS": "darwin"}["${{ runner.os }}"]')
-          if [ $PLATFORM = "darwin" ]; then
-            VERSION=${{ matrix.torch-version }}
-          else
-            VERSION=${{ matrix.torch-version }}+${{ matrix.torch-backend }}
-          fi
-          jq -n --arg platform "$PLATFORM" --arg version "$VERSION" '{($platform): $version}' > src/fastabx/torch_version.json
-
-      - name: Override latest git tag
-        shell: bash
-        env:
-          TAG: ${{ steps.get_tag.outputs.TAG_NAME }}
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "<>"
-          git add src/fastabx/torch_version.json
-          git commit -m "update" || true
-          git tag --force $TAG
-
-      - name: Build wheel
-        shell: bash
-        run: |
-          uv venv -p 3.12
-          uv pip install setuptools setuptools-scm numpy ninja
-          uv pip install torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/${{ matrix.torch-backend }}
-          uv build --wheel --no-build-isolation
-
-      - name: Relabel the Linux wheel
-        if: runner.os == 'Linux'
-        run: |
-          uvx --with patchelf auditwheel repair ./dist/*abi3-linux*.whl -w ./dist --plat manylinux_${GLIBC_VERSION}_x86_64 --exclude "libtorch*" --exclude "libc10*" --exclude "libcu*"
-          rm ./dist/*abi3-linux*.whl
-
-      - name: Copy the wheel with torch version and backend
-        shell: bash
-        run: |
-          wheel=$(ls ./dist/fastabx-*.whl)
-          if [ "$IS_DEFAULT" = true ]; then
-            cp "$wheel" "${wheel/-cp/+${{ matrix.torch-backend }}.torch${{ matrix.torch-version }}-cp}"
-          else
-            mv "$wheel" "${wheel/-cp/+${{ matrix.torch-backend }}.torch${{ matrix.torch-version }}-cp}"
-          fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}-${{ matrix.torch-backend }}-${{ matrix.torch-version }}
-          path: ./dist/*
-
-  release:
-    name: Create release
-    needs: build
+  lint:
+    name: Linters
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write # Required for upload-sarif (used by zizmor-action) to upload SARIF files.
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@135698455da5c3b3e55f73f4419e481ab68cdd95 # v0.4.1
+
+      - name: typos
+        uses: crate-ci/typos@65120634e79d8374d1aa2f27e54baa0c364fff5a # v1.42.1
+
+      - name: Install tombi
+        uses: tombi-toml/setup-tombi@f7cb38e77d9a62bc27a8445bf50e660e9496b893 # v1.0.7
+
+      - name: Validate TOML files
+        run: tombi lint
+
+      - name: Ruff
+        uses: astral-sh/ruff-action@57714a7c8a2e59f32539362ba31877a1957dded1 # v3.5.1
+
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      actions: write # Upload artifact
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "latest"
+          enable-cache: false
 
-      - name: Get tag name
-        id: get_tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Build wheel and sdist
+        run: uv build
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Upload dists
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          path: artifacts
+          name: python-package-distributions
+          path: dist/
 
-      - name: Move the artifacts
-        run: |
-          mkdir ./dist
-          mv ./artifacts/**/*.whl ./dist
+  publish-to-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: publish-to-pypi
+    permissions:
+      actions: read # Download artifact
+      id-token: write # Needed for trusted publishing
+    steps:
+      - name: Download all dists
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: python-package-distributions
+          path: dist/
 
-      - name: Build sdist
-        run: uv build --sdist
-
-      - name: List artifacts
-        run: find ./dist
-
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.get_tag.outputs.TAG_NAME }}
-        run: gh release create "$TAG" ./dist/*
-
-      - name: Remove non default wheels
-        run:
-          rm ./dist/*torch*.whl
+      - name: Install uv
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        with:
+          version: "latest"
+          enable-cache: false
 
       - name: Upload to PyPI
-        run: uv publish -t ${{ secrets.UV_PUBLISH_TOKEN }}
+        run: uv publish --trusted-publishing always
+
+
+  github-release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      actions: read # Download artifact
+      contents: write # Create GitHub release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download all dists
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: python-package-distributions
+          path: ./dist/
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF#refs/tags/}" ./dist/*

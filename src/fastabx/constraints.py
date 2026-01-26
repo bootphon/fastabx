@@ -49,7 +49,7 @@ def apply_constraints(
     columns_to_retrieve = {
         name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
         for constraint in constraints
-        for name in constraint.meta.root_names()
+        for name in constraint.meta.root_names()  # ty: ignore[possibly-missing-attribute]
     }
     if not columns_to_retrieve or not columns_to_retrieve.issubset(labels.columns):
         raise NoConstraintsError

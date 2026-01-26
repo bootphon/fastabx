@@ -422,7 +422,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "polars", specifier = ">=1.35.1" },
     { name = "torch", specifier = ">=2.10.0" },
-    { name = "torchdtw", specifier = ">=0.0.2" },
+    { name = "torchdtw", specifier = ">=0.1.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
@@ -1931,16 +1931,16 @@ wheels = [
 
 [[package]]
 name = "torchdtw"
-version = "0.0.2"
+version = "0.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "torch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/4d/9e43879b78259e52df32733aaede2937c9cac7e33862e50e0d67e30fa90f/torchdtw-0.0.2.tar.gz", hash = "sha256:23c776b03360b0b9be7782b03b9184ab1869ea9561d03593e13c88078852e57c", size = 57612, upload-time = "2026-01-22T08:10:31.666Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/40/6cf3362190a853b243cf7d8bd32ddaae3431f3792ca7b4393cf11499c028/torchdtw-0.1.0.tar.gz", hash = "sha256:63d0a782a49fe121d6694302d8778591b6ed323f726960ef07ae9093c09b8197", size = 57929, upload-time = "2026-01-26T09:31:41.71Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/aa/2f50ec5ac907ad622970bbec46e2f4c5a6d14a393a6e0502648e11c785ff/torchdtw-0.0.2-cp312-abi3-macosx_14_0_arm64.whl", hash = "sha256:31a1029efaeafc4dd3f8014dca72f5c5d48b6df5099082d627b5fc07c2721618", size = 25635, upload-time = "2026-01-22T08:10:32.485Z" },
-    { url = "https://files.pythonhosted.org/packages/11/89/10d666e3b23a3b62c503acd0d84e4614a9623aaa6cbe7298915d7016a2e8/torchdtw-0.0.2-cp312-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:f81bbd5fe5e1c1938ecff840c1a67a761d3dfaeba4b5d5ff6f5d81ce5cb36cdb", size = 252591, upload-time = "2026-01-22T08:10:33.179Z" },
-    { url = "https://files.pythonhosted.org/packages/20/4a/6a08751a110c2f7b598e92a48f95f589dde32612494acc9b7a24e80683ce/torchdtw-0.0.2-cp312-abi3-win_amd64.whl", hash = "sha256:3a937c43a0e743fe093b7b3580bc1b0b60d61fb23796570117f3d8a7afddd09c", size = 30782, upload-time = "2026-01-22T08:10:30.355Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/e7/2ad2ef9814028c0c17e5e1e0feadeb4dbc70cbc2e56a770e3257f3332637/torchdtw-0.1.0-cp312-abi3-macosx_14_0_arm64.whl", hash = "sha256:bb544f61750bde26b2c256d7e4a555fc52d552a6280d3e280a4c2ab9c508cc8f", size = 25631, upload-time = "2026-01-26T09:31:42.68Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/bc/72318a9e62aaa351de1e3b959597baf28661e25186648ae631324b2adb0f/torchdtw-0.1.0-cp312-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:0828cc4454efee702ac89933f7cd76f82e841ec5dea2c1b034a3e2e899a53175", size = 252590, upload-time = "2026-01-26T09:31:43.947Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/23/46a67ec05cb178aaaa85f783adeb1d69177c954dd7e37a7d5dea4dd67b3d/torchdtw-0.1.0-cp312-abi3-win_amd64.whl", hash = "sha256:4acce003055e97c97a662bf27ac159a4024c8ad77e123661733adb7277cf04e3", size = 30781, upload-time = "2026-01-26T09:31:40.245Z" },
 ]
 
 [[package]]

@@ -183,7 +183,7 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
 
 
 def load_data_from_item[T](
-    mapping: dict[str, T],
+    mapping: Mapping[str, T],
     labels: pl.DataFrame,
     frequency: float,
     feature_maker: Callable[[T], torch.Tensor],
@@ -437,7 +437,7 @@ class Dataset:
         """
         features_df = pl.from_numpy(np.asarray(features))
         labels_df = (
-            pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)
+            pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)  # ty: ignore[call-non-callable]
         )
         if len(features_df) != len(labels_df):
             raise ValueError
