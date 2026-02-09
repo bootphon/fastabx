@@ -5,6 +5,7 @@ import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
 from fastabx.distance import available_distances
+from fastabx.utils import print_fastabx_output
 from fastabx.zerospeech import zerospeech_abx
 
 
@@ -53,7 +54,7 @@ def main() -> None:
         frequency=args.frequency,
         seed=args.seed,
     )
-    print(f"ABX error rate: {score:.3%}")  # noqa: T201
+    print_fastabx_output(score, **vars(args))
 
 
 if __name__ == "__main__":

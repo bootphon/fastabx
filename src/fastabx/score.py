@@ -1,5 +1,6 @@
 """Score the ABX task for each cell and collapse the scores into a final score."""
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -53,7 +54,7 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
 def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
     """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes."""
     scores, sizes = [], []
-    for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM):
+    for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")):
         scores.append(abx_on_cell(cell, distance).item())
         sizes.append(len(cell))
     return scores, sizes
