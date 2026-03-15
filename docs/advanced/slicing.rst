@@ -46,10 +46,10 @@ We have, for any :math:`i \in \mathbb{N}`,
 Therefore, the beginning and end indices (both included) are:
 
 .. math::
-	\begin{align}
+	\begin{aligned}
 	    i_\text{start} & = \min(I) = \left\lceil \frac{\onset}{\Delta t} - \frac{1}{2} \right\rceil, \\
 	    i_\text{end} & = \max(I) = \left\lfloor \frac{\offset}{\Delta t} - \frac{1}{2} \right\rfloor.
-	\end{align}
+	\end{aligned}
 
 In Libri-Light, because the features were sliced with :code:`features[i_start : i_end]` instead of :code:`features[i_start : i_end + 1]`,
 the last included index was :math:`i_\text{end} - 1 = \left\lfloor \frac{\offset}{\Delta t} - \frac{1}{2} \right\rfloor - 1`
