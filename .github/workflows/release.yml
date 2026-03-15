@@ -19,19 +19,10 @@ jobs:
           persist-credentials: false
 
       - name: zizmor
-        uses: zizmorcore/zizmor-action@135698455da5c3b3e55f73f4419e481ab68cdd95 # v0.4.1
+        uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8 # v0.5.2
 
-      - name: typos
-        uses: crate-ci/typos@65120634e79d8374d1aa2f27e54baa0c364fff5a # v1.42.1
-
-      - name: Install tombi
-        uses: tombi-toml/setup-tombi@f7cb38e77d9a62bc27a8445bf50e660e9496b893 # v1.0.7
-
-      - name: Validate TOML files
-        run: tombi lint
-
-      - name: Ruff
-        uses: astral-sh/ruff-action@57714a7c8a2e59f32539362ba31877a1957dded1 # v3.5.1
+      - name: pre-commit hooks
+        uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037 # v1.1.1
 
   build:
     name: Build distribution

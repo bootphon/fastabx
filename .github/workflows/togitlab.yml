@@ -10,6 +10,8 @@ jobs:
   push:
     name: Push to Gitlab
     runs-on: ubuntu-latest
+    environment:
+      name: coml-gitlab
     env:
       GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       GITLAB_REPO: gitlab.cognitive-ml.fr/mpoli/fastabx.git
