@@ -83,5 +83,8 @@ ignore-names = ["_check"]
 [tool.ruff.lint.pylint]
 allow-magic-value-types = ["str", "int"]
 
+[tool.tombi.files]
+exclude = ["uv.lock"]
+
 [tool.typos.default.extend-words]
 IY = "IY"
