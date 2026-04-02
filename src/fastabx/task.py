@@ -2,10 +2,32 @@
 
 from collections.abc import Generator
 
+import polars as pl
+
 from fastabx.cell import Cell, cell_description, cell_header, cells_on_by, cells_on_by_across
 from fastabx.dataset import Dataset
 from fastabx.subsample import Subsampler
 from fastabx.verify import verify_dataset_labels, verify_task_conditions
+
+
+def task_cells(
+    dataset: Dataset,
+    on: str,
+    by: list[str],
+    across: list[str],
+    subsampler: Subsampler | None,
+) -> pl.DataFrame:
+    """Build cells from the dataset and the task conditions."""
+    if across:
+        cells = cells_on_by_across(dataset.labels.lazy(), on, by, across)
+    else:
+        cells = cells_on_by(dataset.labels.lazy(), on, by)
+    if subsampler:
+        cells = subsampler(cells, with_across=bool(across))
+    return cells.with_columns(
+        description=cell_description(on, by, across),
+        header=cell_header(on, by, across),
+    ).collect()
 
 
 class Task:
@@ -19,6 +41,8 @@ class Task:
     :param by: The list of ``by`` conditions.
     :param across: The list of ``across`` conditions.
     :param subsampler: An optional subsampler to limit the number of cells and their sizes.
+    :param cells: An optional DataFrame of precomputed cells. Useful if you hardcode the triplets yourself.
+        All other input arguments will be ignored if this is set.
     """
 
     def __init__(
@@ -29,25 +53,17 @@ class Task:
         by: list[str] | None = None,
         across: list[str] | None = None,
         subsampler: Subsampler | None = None,
+        cells: pl.DataFrame | None = None,
     ) -> None:
         self.dataset = dataset
         self.on = on
         self.by = by or []
         self.across = across or []
+        self.is_symmetric = not bool(self.across)
         verify_task_conditions([self.on, *self.by, *self.across])
-        verify_dataset_labels(dataset.labels.select([self.on, *self.by, *self.across]))
+        verify_dataset_labels(self.dataset.labels.select([self.on, *self.by, *self.across]))
         self._subsampler_description = subsampler.description(with_across=bool(self.across)) if subsampler else ""
-
-        if self.across:
-            cells = cells_on_by_across(self.dataset.labels.lazy(), self.on, self.by, self.across)
-        else:
-            cells = cells_on_by(self.dataset.labels.lazy(), self.on, self.by)
-        if subsampler:
-            cells = subsampler(cells, with_across=bool(self.across))
-        self.cells = cells.with_columns(
-            description=cell_description(self.on, self.by, self.across),
-            header=cell_header(self.on, self.by, self.across),
-        ).collect()
+        self.cells = task_cells(self.dataset, self.on, self.by, self.across, subsampler) if cells is None else cells
 
     def __len__(self) -> int:
         return len(self.cells)
@@ -59,17 +75,15 @@ class Task:
         b = self.dataset.accessor.batched(self.cells[i, "index_b"])
         x = self.dataset.accessor.batched(self.cells[i, "index_x"])
         header, description = self.cells[i, "header"], self.cells[i, "description"]
-        is_symmetric = not bool(self.across)
-        return Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric)
+        return Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=self.is_symmetric)
 
     def __iter__(self) -> Generator[Cell, None, None]:
-        is_symmetric = not bool(self.across)
         columns = ["header", "description", "index_a", "index_b", "index_x"]
         for header, description, index_a, index_b, index_x in self.cells[columns].iter_rows():
             a = self.dataset.accessor.batched(index_a)
             b = self.dataset.accessor.batched(index_b)
             x = self.dataset.accessor.batched(index_x)
-            yield Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric)
+            yield Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=self.is_symmetric)
 
     def __repr__(self) -> str:
         return (
