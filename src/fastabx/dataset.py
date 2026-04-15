@@ -148,7 +148,7 @@ class FrequencyTypeError(TypeError):
 def decimal_frequency(frequency: int | str | Decimal) -> Decimal:
     """Convert frequency to a Decimal."""
     if isinstance(frequency, (int, str, Decimal)):
-        return Decimal(frequency)
+        return Decimal(str(frequency))
     raise FrequencyTypeError
 
 
