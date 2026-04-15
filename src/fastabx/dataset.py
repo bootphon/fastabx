@@ -4,6 +4,7 @@ import abc
 import math
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Self
 
@@ -134,10 +135,32 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
     )
 
 
-def item_frontiers(frequency: float, onset_col: str, offset_col: str) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
+class FrequencyTypeError(TypeError):
+    """If frequency is of a type that can lead to floating-point unexpected behavior."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "`frequency` is getting converted to Decimal. To avoid floating point errors, it should be "
+            "an int, str, or Decimal. In particular, we don't allow `frequency` to be a float but not an int."
+        )
+
+
+def decimal_frequency(frequency: int | str | Decimal) -> Decimal:
+    """Convert frequency to a Decimal."""
+    if isinstance(frequency, (int, str, Decimal)):
+        return Decimal(frequency)
+    raise FrequencyTypeError
+
+
+def item_frontiers(
+    frequency: int | str | Decimal,
+    onset_col: str,
+    offset_col: str,
+) -> tuple[pl.Expr, pl.Expr, pl.Expr, pl.Expr]:
     """Frontiers [start, end[ in the input features and in the concatenated ones."""
-    start = (pl.col(onset_col) * frequency - 0.5).ceil().cast(pl.Int64).alias("start")
-    end = (pl.col(offset_col) * frequency - 0.5).floor().cast(pl.Int64).alias("end")
+    frequency = decimal_frequency(frequency)
+    start = (pl.col(onset_col) * frequency - Decimal("0.5")).ceil().cast(pl.Int64).alias("start")
+    end = (pl.col(offset_col) * frequency - Decimal("0.5")).floor().cast(pl.Int64).alias("end")
     if not with_librilight_bug():
         end += 1
     length = (end - start).alias("length")
@@ -185,7 +208,7 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
 def load_data_from_item[T](
     mapping: Mapping[str, T],
     labels: pl.DataFrame,
-    frequency: float,
+    frequency: int | str | Decimal,
     feature_maker: Callable[[T], torch.Tensor],
     file_col: str,
     onset_col: str,
@@ -290,7 +313,7 @@ class Dataset:
         cls,
         item: str | Path,
         root: str | Path,
-        frequency: float,
+        frequency: int | str | Decimal,
         *,
         feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
         extension: str = ".pt",
@@ -306,6 +329,7 @@ class Dataset:
         :param item: Path to the item file.
         :param root: Path to the root directory containing either the features or the audio files.
         :param frequency: The feature frequency of the features / the output of the feature maker, in Hz.
+            If it is not an integer, pass it as a string to avoid floating-point errors.
         :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
         :param extension: The filename extension of the files to process in ``root``, default is ".pt".
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
@@ -350,7 +374,7 @@ class Dataset:
         cls,
         item: str | Path,
         units: str | Path,
-        frequency: float,
+        frequency: int | str | Decimal,
         *,
         audio_key: str = "audio",
         units_key: str = "units",
@@ -363,6 +387,7 @@ class Dataset:
         :param item: Path to the item file.
         :param units: Path to the JSONL file containing the units.
         :param frequency: The feature frequency, in Hz.
+            If it is not an integer, pass it as a string to avoid floating-point errors.
         :param audio_key: Key in the JSONL file that contains the audio file names (str), default is "audio".
         :param units_key: Key in the JSONL file that contains the units (list[int]), default is "units".
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
@@ -444,7 +469,7 @@ class Dataset:
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
 
 
-def dummy_dataset_from_item(item: str | Path, frequency: float | None) -> Dataset:
+def dummy_dataset_from_item(item: str | Path, frequency: int | str | Decimal | None) -> Dataset:
     """To debug."""
     labels = read_labels(item, "#file", "onset", "offset").with_columns(pl.lit(0).alias("dummy"))
     if frequency is not None:
