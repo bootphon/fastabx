@@ -98,17 +98,18 @@ def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
     return dict(sorted((str(p.relative_to(root)).removesuffix(extension), p) for p in root.rglob(f"*{extension}")))
 
 
-def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    """Normalize the given vector across the third dimension.
+def normalize_with_singularity_(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+    """Normalize the given vector across the third dimension, in-place.
 
     Extend all vectors by eps to put the null vector at the maximal
     angular distance from any non-null vector.
     """
-    norm = torch.norm(x, dim=1, keepdim=True)
-    zero_vals = norm == 0
-    x = torch.where(zero_vals, 1 / math.sqrt(x.size(1)), x / norm)
-    border = torch.full((x.size(0), 1), eps, dtype=x.dtype, device=x.device)
-    border = torch.where(zero_vals, -2 * eps, border)
+    norm = x.norm(dim=1, keepdim=True)
+    zero_mask = norm.squeeze(1) == 0
+    x[~zero_mask] /= norm[~zero_mask]
+    x[zero_mask] = 1.0 / math.sqrt(x.size(1))
+    border = x.new_full((x.size(0), 1), eps)
+    border[zero_mask] = -2 * eps
     return torch.cat([x, border], dim=1)
 
 
@@ -305,7 +306,7 @@ class Dataset:
 
     def normalize_(self) -> Self:
         """L2 normalization of the data."""
-        self.accessor.data = normalize_with_singularity(self.accessor.data.cpu()).to(self.accessor.device)
+        self.accessor.data = normalize_with_singularity_(self.accessor.data)
         return self
 
     @classmethod
