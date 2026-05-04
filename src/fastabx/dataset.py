@@ -206,6 +206,13 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
     )
 
 
+class NonFiniteError(ValueError):
+    """To raise if non-finite features have been found."""
+
+    def __init__(self, fileid: str) -> None:
+        super().__init__(f"Non-finite values detected in features for file '{fileid}'")
+
+
 def load_data_from_item[T](
     mapping: Mapping[str, T],
     labels: pl.DataFrame,
@@ -227,6 +234,8 @@ def load_data_from_item[T](
     for fileid, start_indices, end_indices in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
         try:
             features = feature_maker(mapping[fileid]).detach().to(device)
+            if not torch.isfinite(features).all():
+                raise NonFiniteError(fileid)
         except KeyError as error:
             raise missing_files_error(set(mapping), set(by_file[file_col].unique())) from error
         for start, end in zip(start_indices, end_indices, strict=True):
