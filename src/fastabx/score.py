@@ -1,13 +1,17 @@
 """Score the ABX task for each cell and collapse the scores into a final score."""
 
 import os
-from collections.abc import Sequence
+import queue
+import threading
+from collections.abc import Generator, Sequence
 from pathlib import Path
 
 import polars as pl
 import polars.selectors as cs
+import torch
 from tqdm import tqdm
 
+from fastabx.cell import Cell
 from fastabx.constraints import Constraints, score_task_with_constraints
 from fastabx.distance import Distance, DistanceName, abx_on_cell, distance_function
 from fastabx.task import Task
@@ -51,13 +55,37 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
     return cells
 
 
+def _prefetch_cells(task: Task, prefetch: int = 2) -> Generator[Cell, None, None]:
+    """Iterate over cells, fetching the next cell in a background thread."""
+    q = queue.Queue(maxsize=prefetch)
+    sentinel = object()
+
+    def producer() -> None:
+        try:
+            for cell in task:
+                q.put(cell)
+        except Exception as e:  # noqa: BLE001
+            q.put(e)
+        finally:
+            q.put(sentinel)
+
+    thread = threading.Thread(target=producer, daemon=True)
+    thread.start()
+    while (item := q.get()) is not sentinel:
+        if isinstance(item, Exception):
+            raise item from item
+        yield item
+    thread.join()
+
+
 def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
     """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes."""
     scores, sizes = [], []
-    for cell in tqdm(task, "Scoring each cell", disable=len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")):
-        scores.append(abx_on_cell(cell, distance).item())
+    disable_tqdm = len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")
+    for cell in tqdm(_prefetch_cells(task), "Scoring each cell", disable=disable_tqdm, total=len(task)):
+        scores.append(abx_on_cell(cell, distance))
         sizes.append(len(cell))
-    return scores, sizes
+    return torch.stack(scores).tolist(), sizes
 
 
 class Score:
