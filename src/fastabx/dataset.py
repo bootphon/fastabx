@@ -89,7 +89,7 @@ class InMemoryAccessor(DataAccessor):
             this_data = self[i]
             sizes.append(this_data.size(0))
             data.append(this_data)
-        return Batch(pad_sequence(data, batch_first=True), torch.tensor(sizes, dtype=torch.int64, device=self.device))
+        return Batch(pad_sequence(data, batch_first=True), torch.tensor(sizes, dtype=torch.int32, device=self.device))
 
 
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
