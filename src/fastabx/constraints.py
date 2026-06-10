@@ -7,7 +7,6 @@ from collections.abc import Generator, Iterable
 import polars as pl
 import polars.selectors as cs
 import torch
-from polars._typing import IntoExprColumn
 from tqdm import tqdm
 
 from fastabx.cell import Cell
@@ -15,7 +14,7 @@ from fastabx.distance import Distance, abx_on_cell
 from fastabx.task import Task
 from fastabx.utils import MIN_CELLS_FOR_TQDM
 
-type Constraints = Iterable[IntoExprColumn]
+type Constraints = Iterable[pl.Expr]
 
 
 def constraints_all_different(*columns: str) -> Constraints:
@@ -49,7 +48,7 @@ def apply_constraints(
     columns_to_retrieve = {
         name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
         for constraint in constraints
-        for name in constraint.meta.root_names()  # ty: ignore[possibly-missing-attribute]
+        for name in constraint.meta.root_names()
     }
     if not columns_to_retrieve or not columns_to_retrieve.issubset(labels.columns):
         raise NoConstraintsError
