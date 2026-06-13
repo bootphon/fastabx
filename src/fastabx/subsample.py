@@ -51,10 +51,10 @@ class Subsampler:
 
     def __call__(self, lazy_cells: pl.LazyFrame, *, with_across: bool) -> pl.LazyFrame:
         """Subsample the cells."""
-        if self.max_size_group is not None:
-            lazy_cells = subsample_each_cell(lazy_cells, self.max_size_group, self.seed)
         if with_across and self.max_x_across is not None:
             lazy_cells = subsample_across_group(lazy_cells, self.max_x_across, self.seed)
+        if self.max_size_group is not None:
+            lazy_cells = subsample_each_cell(lazy_cells, self.max_size_group, self.seed)
         return lazy_cells
 
     def description(self, *, with_across: bool) -> str:
