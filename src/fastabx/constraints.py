@@ -89,7 +89,7 @@ def constrained_cell_generator(
 
 def score_task_with_constraints(
     task: Task, distance: Distance, constraints: Constraints
-) -> tuple[list[float], list[int]]:
+) -> tuple[list[float | None], list[int | None]]:
     """Score each cell of a :py:class:`.Task` with additional constraints."""
     scores, sizes = [], []
     for cell, mask in tqdm(
@@ -98,10 +98,12 @@ def score_task_with_constraints(
         total=len(task),
         disable=len(task) < MIN_CELLS_FOR_TQDM,
     ):
-        if not mask.any():
-            scores.append(None)
-            sizes.append(None)
-        else:
-            scores.append(abx_on_cell(cell, distance, mask=mask).item())
-            sizes.append(mask.sum())
-    return scores, sizes
+        scores.append(abx_on_cell(cell, distance, mask=mask))
+        sizes.append(mask.sum())
+    if not scores:
+        return [], []
+    scores, sizes = torch.stack(scores).tolist(), torch.stack(sizes).tolist()
+    return (
+        [None if size == 0 else score for score, size in zip(scores, sizes, strict=True)],
+        [None if size == 0 else size for size in sizes],
+    )

@@ -110,7 +110,7 @@ class Score:
             else score_task_with_constraints(task, distance, constraints)
         )
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
-            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes)
+            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
         )
 
     @property
