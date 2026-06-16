@@ -3,7 +3,7 @@
 import json
 import os
 
-MIN_CELLS_FOR_TQDM = 50
+MIN_CELLS_FOR_TQDM = int(os.getenv("FASTABX_MIN_CELLS_FOR_TQDM", "50"))
 
 
 def with_librilight_bug() -> bool:
@@ -14,7 +14,7 @@ def with_librilight_bug() -> bool:
 def print_fastabx_output(score: float, **kwargs: str | int) -> None:
     """Help function to format fastabx CLI output."""
     match os.getenv("FASTABX_OUTPUT"):
-        case "jsonl":
+        case "json" | "jsonl":
             output = json.dumps(kwargs | {"score": score})
         case _:
             output = f"ABX error rate: {score:.3%}"
