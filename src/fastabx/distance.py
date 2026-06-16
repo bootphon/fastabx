@@ -85,20 +85,20 @@ def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
     return (a1.view(n1, 1, s1, 1) != a2.view(1, n2, 1, s2)).float()
 
 
-def distance_on_cell(cell: Cell, distance: Distance) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute the distance matrices between all A and X, and all B and X in the ``cell``, for a given ``distance``.
-
-    :param cell: The cell to compute the distances on.
-    :param distance: The distance function to use. It takes two tensors of shape
-        (n1, s1, d) and (n2, s2, d) and returns a tensor of shape (n1, n2, s1, s2).
-    """
-    (a, sa), (b, sb), (x, sx) = (cell.a.data, cell.a.sizes), (cell.b.data, cell.b.sizes), (cell.x.data, cell.x.sizes)
-    if cell.use_dtw:
-        dxa = dtw_batch(distance(x, a), sx, sa, symmetric=cell.is_symmetric)
-        dxb = dtw_batch(distance(x, b), sx, sb, symmetric=False)
-    else:
-        dxa, dxb = distance(x, a).squeeze(2, 3), distance(x, b).squeeze(2, 3)
-    return dxa, dxb
+def distance_matrix(
+    x: Tensor,
+    sx: Tensor,
+    y: Tensor,
+    sy: Tensor,
+    distance: Distance,
+    *,
+    use_dtw: bool,
+    symmetric: bool,
+) -> torch.Tensor:
+    """Compute the ``(nx, ny)`` distance matrix between all X and all Y, with or without DTW."""
+    if use_dtw:
+        return dtw_batch(distance(x, y), sx, sy, symmetric=symmetric)
+    return distance(x, y).squeeze(2, 3)
 
 
 def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = None) -> torch.Tensor:
@@ -109,17 +109,15 @@ def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = N
         (n1, s1, d) and (n2, s2, d) and returns a tensor of shape (n1, n2, s1, s2).
     :param mask: Optional boolean mask of shape (nx, na, nb) to select which triplets to include in the score.
     """
-    dxa, dxb = distance_on_cell(cell, distance)
-    if cell.is_symmetric:
+    use_dtw, symmetric = cell.use_dtw, cell.is_symmetric
+    x, a, b = cell.x, cell.a, cell.b
+    dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, use_dtw=use_dtw, symmetric=symmetric)
+    if symmetric:
         dxa.fill_diagonal_(float("inf"))
+    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, use_dtw=use_dtw, symmetric=False)
     nx, na = dxa.size()
     nx, nb = dxb.size()
-    dxb = dxb.view(nx, 1, nb).expand(nx, na, nb)
-    dxa = dxa.view(nx, na, 1).expand(nx, na, nb)
+    sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))
     if mask is None:
-        sc = (dxa < dxb).sum() + 0.5 * (dxa == dxb).sum()
-        sc /= len(cell)
-    else:
-        sc = (dxa < dxb)[mask].sum() + 0.5 * (dxa == dxb)[mask].sum()
-        sc /= mask.sum()
-    return 1 - sc
+        return 1 - sc.sum() / len(cell)
+    return 1 - sc[mask].sum() / mask.sum()

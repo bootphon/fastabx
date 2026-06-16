@@ -46,7 +46,6 @@ Cell
 Distance
 --------
 
-.. autofunction:: fastabx.distance.distance_on_cell
 .. autofunction:: fastabx.distance.abx_on_cell
 
 Constraints
