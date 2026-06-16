@@ -44,16 +44,22 @@ def null_distance(a1: Tensor, a2: Tensor) -> Tensor:
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
-    """KL symmetric distance. The two tensors must correspond to probability distributions."""
+    """KL symmetric distance. The two tensors must correspond to probability distributions.
+
+    Each row's log is centred to mean zero before the matmuls: equivalent for probability
+    distributions and better precision near 0 in float32.
+    """
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
-    a1_view = a1.view(n1 * s1, 1, d)
-    a2_view = a2.view(1, n2 * s2, d)
-    div1 = (a1_view + epsilon) / (a2_view + epsilon)
-    div2 = (a2_view + epsilon) / (a1_view + epsilon)
-    out1 = torch.sum(a1_view * div1.log(), dim=2)
-    out2 = torch.sum(a2_view * div2.log(), dim=2)
-    return (0.5 * out1 + 0.5 * out2).view(n1, s1, n2, s2).transpose(1, 2)
+    p, q = a1.view(n1 * s1, d), a2.view(n2 * s2, d)
+    log_p = (p + epsilon).log()
+    log_q = (q + epsilon).log()
+    log_p = log_p - log_p.mean(1, keepdim=True)
+    log_q = log_q - log_q.mean(1, keepdim=True)
+    self_p = (p * log_p).sum(1).unsqueeze(1)
+    self_q = (q * log_q).sum(1).unsqueeze(0)
+    cross = p @ log_q.T + log_p @ q.T
+    return (0.5 * (self_p + self_q - cross)).view(n1, s1, n2, s2).transpose(1, 2)
 
 
 def angular_distance(a1: Tensor, a2: Tensor) -> Tensor:
