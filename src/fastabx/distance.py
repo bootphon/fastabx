@@ -11,7 +11,7 @@ from torchdtw import dtw_batch
 from fastabx.cell import Cell
 
 type Distance = Callable[[Tensor, Tensor], Tensor]
-type DistanceName = Literal["euclidean", "cosine", "angular", "kl", "kl_symmetric", "identical", "null"]
+type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical", "null"]
 
 
 def available_distances() -> tuple[str, ...]:
@@ -26,8 +26,6 @@ def distance_function(name: DistanceName) -> Distance:
             return euclidean_distance
         case "cosine" | "angular":
             return angular_distance
-        case "kl":
-            return kl_distance
         case "kl_symmetric":
             return kl_symmetric_distance
         case "identical":
@@ -43,16 +41,6 @@ def null_distance(a1: Tensor, a2: Tensor) -> Tensor:
     n1, s1, _ = a1.size()
     n2, s2, _ = a2.size()
     return torch.zeros(n1, n2, s1, s2, device=a1.device)
-
-
-def kl_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
-    """KL distance. You might want to use kl_symmetric_distance in most cases."""
-    n1, s1, d = a1.size()
-    n2, s2, d = a2.size()
-    a1_view = a1.view(n1 * s1, 1, d)
-    a2_view = a2.view(1, n2 * s2, d)
-    div = (a1_view + epsilon) / (a2_view + epsilon)
-    return torch.sum(a1_view * div.log(), dim=2).view(n1, s1, n2, s2).transpose(1, 2)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:

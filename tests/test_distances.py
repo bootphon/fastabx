@@ -14,16 +14,6 @@ from fastabx.distance import DistanceName, distance_function
 
 BATCH, SEQ, DIM = st.integers(1, 20), st.integers(1, 10), st.integers(1, 1024)
 LOW, HIGH_MINUS_LOW = st.floats(-100, 100), st.floats(0.1, 100)
-MIN_POSITIVE = 0.1
-
-
-def kl_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
-    """KL distance. You might want to use kl_symmetric_distance in most cases."""
-    n1, s1, d = a1.size()
-    n2, s2, d = a2.size()
-    div = (a1.view(n1, 1, s1, 1, d) + epsilon) / (a2.view(1, n2, 1, s2, d) + epsilon)
-    prod = (a1.view(n1, 1, s1, 1, d)) * div.log()
-    return prod.sum(dim=4)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
@@ -54,7 +44,6 @@ def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:
 
 
 OLD_DISTANCE_FN: dict[str, Callable[[Tensor, Tensor], Tensor]] = {
-    "kl": kl_distance,
     "kl_symmetric": kl_symmetric_distance,
     "euclidean": euclidean_distance,
     "cosine": cosine_distance,
@@ -77,7 +66,8 @@ def test_distance_new_implementation(
     a = make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu")
     b = make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu")
     if name.startswith("kl"):
-        a, b = torch.clamp(a, min=MIN_POSITIVE), torch.clamp(b, min=MIN_POSITIVE)
+        a, b = torch.clamp(a, min=0.1), torch.clamp(b, min=0.1)
+        a, b = a / a.sum(dim=-1, keepdim=True), b / b.sum(dim=-1, keepdim=True)
     distance_old = OLD_DISTANCE_FN[name]
     distance_new = distance_function(name)
     assert_close(distance_new(a, b), distance_old(a, b))

@@ -94,7 +94,7 @@ class Score:
     Additional :py:type:`.Constraints` can be provided to restrict the possible triplets in each cell.
 
     :param task: The :py:class:`.Task` to score.
-    :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl", "kl_symmetric"
+    :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl_symmetric"
         or "identical". Defaults to "angular".
     :param constraints: Optional constraints to restrict the possible triplets.
     """
