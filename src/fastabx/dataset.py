@@ -14,7 +14,6 @@ import polars as pl
 import polars.selectors as cs
 import torch
 from polars.interchange.protocol import SupportsInterchange
-from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
 from fastabx.utils import with_librilight_bug
@@ -53,7 +52,7 @@ class DataAccessor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def batched(self, indices: Iterator[int]) -> Batch:
+    def batched(self, indices: Sequence[int] | np.ndarray) -> Batch:
         """Get the padded data and the original sizes of the data from a list of indices."""
 
 
@@ -65,6 +64,13 @@ class InMemoryAccessor(DataAccessor):
         self.indices = indices
         verify_empty_datapoints(self.indices)
         self.data = data.to(self.device)
+        size = max(self.indices) + 1
+        starts, lengths = np.zeros(size, dtype=np.int64), np.zeros(size, dtype=np.int64)
+        for i, (start, end) in self.indices.items():
+            starts[i], lengths[i] = start, end - start
+        self._lengths_np = lengths
+        self._starts = torch.from_numpy(starts).to(self.device)
+        self._lengths = torch.from_numpy(lengths).to(dtype=torch.int32, device=self.device)
 
     def __repr__(self) -> str:
         return f"InMemoryAccessor(data of shape {tuple(self.data.shape)}, with {len(self)} items)"
@@ -82,14 +88,23 @@ class InMemoryAccessor(DataAccessor):
         for i in self.indices:
             yield self[i]
 
-    def batched(self, indices: Iterator[int]) -> Batch:
+    def lengths(self, indices: list[int]) -> npt.NDArray[np.int64]:
+        """Get the lengths of the data from a list of indices."""
+        return self._lengths_np[indices]
+
+    def batched(self, indices: ArrayLike) -> Batch:
         """Get the padded data and the original sizes of the data from a list of indices."""
-        sizes, data = [], []
-        for i in indices:
-            this_data = self[i]
-            sizes.append(this_data.size(0))
-            data.append(this_data)
-        return Batch(pad_sequence(data, batch_first=True), torch.tensor(sizes, dtype=torch.int32, device=self.device))
+        idx_np = np.asarray(indices, dtype=np.int64)
+        smax = int(self._lengths_np[idx_np].max())
+        idx = torch.from_numpy(idx_np).to(self.device)
+        sizes = self._lengths.index_select(0, idx)
+        starts = self._starts.index_select(0, idx)
+        arange = torch.arange(smax, device=self.device)
+        mask = arange < sizes.unsqueeze(1)
+        src = torch.where(mask, starts.unsqueeze(1) + arange, 0)
+        gathered = self.data.index_select(0, src.view(-1)).view(idx.size(0), smax, -1)
+        gathered.mul_(mask.unsqueeze(-1))
+        return Batch(gathered, sizes)
 
 
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
