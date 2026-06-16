@@ -11,7 +11,7 @@ from torchdtw import dtw_batch
 from fastabx.cell import Cell
 
 type Distance = Callable[[Tensor, Tensor], Tensor]
-type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical", "null"]
+type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]
 
 
 def available_distances() -> tuple[str, ...]:
@@ -30,17 +30,8 @@ def distance_function(name: DistanceName) -> Distance:
             return kl_symmetric_distance
         case "identical":
             return identical_distance
-        case "null":
-            return null_distance
         case _:
             raise ValueError(name)
-
-
-def null_distance(a1: Tensor, a2: Tensor) -> Tensor:
-    """Null distance, useful for debugging."""
-    n1, s1, _ = a1.size()
-    n2, s2, _ = a2.size()
-    return torch.zeros(n1, n2, s1, s2, device=a1.device)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
@@ -101,14 +92,14 @@ def distance_matrix(
     return distance(x, y).squeeze(2, 3)
 
 
-def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = None) -> torch.Tensor:
+def abx_on_cell(cell: Cell, distance_name: DistanceName = "angular") -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``.
 
     :param cell: The cell to compute the ABX on.
-    :param distance: The distance function to use. It takes two tensors of shape
-        (n1, s1, d) and (n2, s2, d) and returns a tensor of shape (n1, n2, s1, s2).
-    :param mask: Optional boolean mask of shape (nx, na, nb) to select which triplets to include in the score.
+    :param distance_name: The name of the distance to use. Defaults to "angular".
+        Must be one of "euclidean", "cosine", "angular", "kl_symmetric", "identical".
     """
+    distance = distance_function(distance_name)
     use_dtw, symmetric = cell.use_dtw, cell.is_symmetric
     x, a, b = cell.x, cell.a, cell.b
     dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, use_dtw=use_dtw, symmetric=symmetric)
@@ -118,6 +109,4 @@ def abx_on_cell(cell: Cell, distance: Distance, *, mask: torch.Tensor | None = N
     nx, na = dxa.size()
     nx, nb = dxb.size()
     sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))
-    if mask is None:
-        return 1 - sc.sum() / len(cell)
-    return 1 - sc[mask].sum() / mask.sum()
+    return 1 - sc.sum() / len(cell)

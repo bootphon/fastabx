@@ -116,7 +116,7 @@ This package also provides a command line interface, a simple wrapper that expos
 
     ❯ fastabx --help
     usage: fastabx [-h] [--frequency FREQUENCY] [--speaker {within,across}] [--context {within,any}]
-                   [--distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}] [--max-size-group MAX_SIZE_GROUP]
+                   [--distance {euclidean,cosine,angular,kl_symmetric,identical}] [--max-size-group MAX_SIZE_GROUP]
                    [--max-x-across MAX_X_ACROSS] [--seed SEED]
                    item features
 
@@ -134,7 +134,7 @@ This package also provides a command line interface, a simple wrapper that expos
                             Speaker mode (default: within)
       --context {within,any}
                             Context mode (default: within)
-      --distance {euclidean,cosine,angular,kl,kl_symmetric,identical,null}
+      --distance {euclidean,cosine,angular,kl_symmetric,identical}
                             Distance (default: cosine)
       --max-size-group MAX_SIZE_GROUP
                             Maximum number of A, B, or X in a cell (default: 10)
