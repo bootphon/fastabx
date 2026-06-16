@@ -2,17 +2,10 @@
 
 import functools
 import operator
-from collections.abc import Generator, Iterable
+from collections.abc import Iterable
 
 import polars as pl
 import polars.selectors as cs
-import torch
-from tqdm import tqdm
-
-from fastabx.cell import Cell
-from fastabx.distance import Distance, abx_on_cell
-from fastabx.task import Task
-from fastabx.utils import MIN_CELLS_FOR_TQDM
 
 type Constraints = Iterable[pl.Expr]
 
@@ -34,7 +27,7 @@ class NoConstraintsError(ValueError):
     """Invalid constraints."""
 
     def __init__(self) -> None:
-        super().__init__("No valid column provided in the constraints")
+        super().__init__("No valid column provided in the constraints or a mask is missing for constrained scoring.")
 
 
 def apply_constraints(
@@ -70,40 +63,3 @@ def apply_constraints(
         .select("is_valid")
     )
     return pl.concat((cells_lazy, is_valid), how="horizontal").collect()
-
-
-def constrained_cell_generator(
-    task: Task, constraints: Constraints
-) -> Generator[tuple[Cell, torch.Tensor], None, None]:
-    """Generate cells with constraints applied, yielding (Cell, mask) tuples."""
-    is_symmetric, device = not bool(task.across), task.dataset.accessor.device
-    cells = apply_constraints(task.cells, task.dataset.labels, constraints, is_symmetric=is_symmetric)
-    columns = ["header", "description", "index_a", "index_b", "index_x", "is_valid"]
-    for header, description, index_a, index_b, index_x, is_valid in cells[columns].iter_rows():
-        a = task.dataset.accessor.batched(index_a)
-        b = task.dataset.accessor.batched(index_b)
-        x = task.dataset.accessor.batched(index_x)
-        mask = torch.tensor(is_valid, device=device).view((len(x.sizes), len(a.sizes), len(b.sizes)))
-        yield Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=is_symmetric), mask
-
-
-def score_task_with_constraints(
-    task: Task, distance: Distance, constraints: Constraints
-) -> tuple[list[float | None], list[int | None]]:
-    """Score each cell of a :py:class:`.Task` with additional constraints."""
-    scores, sizes = [], []
-    for cell, mask in tqdm(
-        constrained_cell_generator(task, constraints),
-        "Scoring each cell with constraints",
-        total=len(task),
-        disable=len(task) < MIN_CELLS_FOR_TQDM,
-    ):
-        scores.append(abx_on_cell(cell, distance, mask=mask))
-        sizes.append(mask.sum())
-    if not scores:
-        return [], []
-    scores, sizes = torch.stack(scores).tolist(), torch.stack(sizes).tolist()
-    return (
-        [None if size == 0 else score for score, size in zip(scores, sizes, strict=True)],
-        [None if size == 0 else size for size in sizes],
-    )

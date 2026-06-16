@@ -6,11 +6,11 @@ from pathlib import Path
 
 import polars as pl
 import polars.selectors as cs
-import torch
 from tqdm import tqdm
 
-from fastabx.constraints import Constraints, score_task_with_constraints
-from fastabx.distance import Distance, DistanceName, abx_on_cell, distance_function
+from fastabx.constraints import Constraints
+from fastabx.distance import Distance, DistanceName, distance_function
+from fastabx.group import GroupReducer, group_cells
 from fastabx.task import Task
 from fastabx.utils import MIN_CELLS_FOR_TQDM, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
@@ -52,14 +52,24 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
     return cells
 
 
-def score_task(task: Task, distance: Distance) -> tuple[list[float], list[int]]:
-    """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes."""
-    scores, sizes = [], []
+def score_task(
+    task: Task,
+    distance: Distance,
+    constraints: Constraints | None = None,
+) -> tuple[list[float | None], list[int | None]]:
+    """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes.
+
+    With ``constraints``, the per-triplet mask is carried through the same grouped engine; cells left with no valid
+    triplet get a ``None`` score and size.
+    """
+    reducer = GroupReducer(len(task), constrained=constraints is not None)
     disable_tqdm = len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")
-    for cell in tqdm(prefetch(task), "Scoring each cell", disable=disable_tqdm, total=len(task)):
-        scores.append(abx_on_cell(cell, distance))
-        sizes.append(len(cell))
-    return torch.stack(scores).tolist(), sizes
+    pbar = tqdm(total=len(task), desc="Scoring each cell", disable=bool(disable_tqdm))
+    for group in prefetch(group_cells(task, constraints)):
+        reducer.add(group, distance, is_symmetric=task.is_symmetric)
+        pbar.update(len(group.positions))
+    pbar.close()
+    return reducer.finalize()
 
 
 class Score:
@@ -78,11 +88,7 @@ class Score:
         distance = distance_function(distance_name)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
-        scores, sizes = (
-            score_task(task, distance)
-            if constraints is None
-            else score_task_with_constraints(task, distance, constraints)
-        )
+        scores, sizes = score_task(task, distance, constraints)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
         )
