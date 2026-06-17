@@ -261,6 +261,8 @@ def test_load_data_from_item_with_times_dimension_error(tmp_path: Path) -> None:
             {"f1": features_path},
             {"f1": times_path},
             labels,
+            torch.load,
+            torch.load,
             "#file",
             "onset",
             "offset",
@@ -283,6 +285,8 @@ def test_load_data_from_item_with_times_happy_path(tmp_path: Path) -> None:
         {"f1": features_path},
         {"f1": times_path},
         labels,
+        torch.load,
+        torch.load,
         "#file",
         "onset",
         "offset",
@@ -307,6 +311,50 @@ def test_from_item_with_times_end_to_end(tmp_path: Path) -> None:
     assert ds.accessor.data.shape[1] == 3
 
 
+def test_load_data_from_item_with_times_missing_file_raises() -> None:
+    labels = pl.DataFrame(
+        {
+            "#file": ["only_file"],
+            "onset": [Decimal("0.0")],
+            "offset": [Decimal("0.1")],
+        }
+    )
+
+    def loader(_p: str) -> torch.Tensor:
+        return torch.zeros(10, 3)
+
+    with pytest.raises(FileNotFoundError, match="missing"):
+        load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset")
+
+
+def test_load_data_from_item_with_times_non_finite_raises() -> None:
+    labels = pl.DataFrame(
+        {
+            "#file": ["f1"],
+            "onset": [Decimal("0.0")],
+            "offset": [Decimal("0.1")],
+        }
+    )
+
+    def feature_loader(_p: str) -> torch.Tensor:
+        return torch.full((10, 3), float("nan"))
+
+    def time_loader(_p: str) -> torch.Tensor:
+        return torch.linspace(0.0, 1.0, 10)
+
+    with pytest.raises(NonFiniteError, match="f1"):
+        load_data_from_item_with_times(
+            {"f1": "anything"},
+            {"f1": "anything"},
+            labels,
+            feature_loader,
+            time_loader,
+            "#file",
+            "onset",
+            "offset",
+        )
+
+
 def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
@@ -324,6 +372,8 @@ def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
             {"f1": features_path},
             {"f1": times_path},
             labels,
+            torch.load,
+            torch.load,
             "#file",
             "onset",
             "offset",

@@ -260,10 +260,12 @@ class TimesArrayFrontiersError(ValueError):
         super().__init__(f"No times were found between onset={onset}, offset={offset} for file {fileid}")
 
 
-def load_data_from_item_with_times(
-    paths_features: dict[str, Path],
-    paths_times: dict[str, Path],
+def load_data_from_item_with_times[T](
+    paths_features: Mapping[str, T],
+    paths_times: Mapping[str, T],
     labels: pl.DataFrame,
+    feature_maker: Callable[[T], torch.Tensor],
+    time_maker: Callable[[T], torch.Tensor],
     file_col: str,
     onset_col: str,
     offset_col: str,
@@ -278,8 +280,15 @@ def load_data_from_item_with_times(
     data, device, all_indices, right = [], default_device(), {}, 0
     decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
     for fileid, indices, onsets, offsets in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
-        features = torch.load(paths_features[fileid], map_location=device).detach()
-        times = torch.load(paths_times[fileid]).round(decimals=decimals)
+        try:
+            features = feature_maker(paths_features[fileid]).detach().to(device)
+            if not torch.isfinite(features).all():
+                raise NonFiniteError(fileid)
+            times = time_maker(paths_times[fileid]).round(decimals=decimals)
+        except KeyError as error:
+            raise missing_files_error(
+                set(paths_features) & set(paths_times), set(by_file[file_col].unique())
+            ) from error
         if times.ndim > 1:
             raise TimesArrayDimensionError
         for index, onset, offset in zip(indices, onsets, offsets, strict=True):
@@ -349,9 +358,12 @@ class Dataset:
     def from_item_with_times(
         cls,
         item: str | Path,
-        features: str | Path,
-        times: str | Path,
+        root_features: str | Path,
+        root_times: str | Path,
         *,
+        feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
+        time_maker: Callable[[str | Path], torch.Tensor] = torch.load,
+        extension: str = ".pt",
         file_col: str = "#file",
         onset_col: str = "onset",
         offset_col: str = "offset",
@@ -361,16 +373,22 @@ class Dataset:
         Use arrays containing the times associated to the features instead of a given frequency.
 
         :param item: Path to the item file.
-        :param features: Path to the root directory containing either the features or the audio files.
-        :param times: Path to the root directory containing the times arrays.
+        :param root_features: Path to the root directory containing either the features or the audio files.
+        :param root_times: Path to the root directory containing the times arrays.
+        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
+        :param time_maker: Function that takes a path and returns a 1D torch.Tensor. Defaults to ``torch.load``.
+        :param extension: The filename extension of the files to process in ``root_features`` and ``root_times``,
+            default is ".pt".
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
-        paths_feat = find_all_files(features, ".pt")
-        paths_time = find_all_files(times, ".pt")
-        indices, data = load_data_from_item_with_times(paths_feat, paths_time, labels, file_col, onset_col, offset_col)
+        paths_feat = find_all_files(root_features, extension)
+        paths_time = find_all_files(root_times, extension)
+        indices, data = load_data_from_item_with_times(
+            paths_feat, paths_time, labels, feature_maker, time_maker, file_col, onset_col, offset_col
+        )
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
