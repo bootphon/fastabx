@@ -16,8 +16,8 @@ The :py:class:`.Subsampler` can already be used to limit the number of :py:class
 it only operates at the cell level, not at the triplet level. It can subsample the cells, and remove some based
 on the categories used for the ON, BY, and ACROSS conditions. But there is no constrained filtering inside each cell.
 
-To achieve this finer filtering of triplets, the :py:class:`.Score` class accepts a :py:type:`.Constraints` argument.
-:py:type:`.Constraints` are lists of polars expressions that are applied to each triplet before computing the ABX
+To achieve this finer filtering of triplets, the :py:class:`.Score` class accepts a :py:class:`.Constraints` argument.
+:py:class:`.Constraints` are lists of polars expressions that are applied to each triplet before computing the ABX
 score of the individual cell. The expressions should involve the labels of the triplets contained in ``Dataset.labels``,
 suffixed by ``_a``, ``_b``, and ``_x``. This is a powerful and general mechanism, and it can be used to do any kind of filtering.
 

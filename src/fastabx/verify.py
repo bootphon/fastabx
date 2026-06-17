@@ -81,6 +81,46 @@ def verify_dataset_labels(df: pl.DataFrame) -> None:
             raise LabelSuffixError(col)
 
 
+REQUIRED_PRECOMPUTED_CELL_COLUMNS = ("header", "description", "index_a", "index_b", "index_x")
+
+
+class PrecomputedCellsError(ValueError):
+    """The precomputed cells DataFrame is not shaped like what ``Task`` expects."""
+
+
+def verify_precomputed_cells(cells: pl.DataFrame, num_items: int) -> None:
+    """Check that a user-supplied cells DataFrame is usable by ``Task.from_cells``.
+
+    Verifies the required columns are present, that the index columns hold lists of
+    integers, and that every referenced row is in ``range(num_items)``.
+    """
+    missing = [c for c in REQUIRED_PRECOMPUTED_CELL_COLUMNS if c not in cells.columns]
+    if missing:
+        msg = f"Precomputed cells are missing required columns: {missing}"
+        raise PrecomputedCellsError(msg)
+    for col in ("index_a", "index_b", "index_x"):
+        dtype = cells.schema[col]
+        if not (isinstance(dtype, pl.List) and dtype.inner.is_integer()):
+            msg = f"Column {col!r} must be a list of integers, got {dtype}"
+            raise PrecomputedCellsError(msg)
+    bounds = cells.select(
+        pl.col("index_a").list.min().min().alias("lo_a"),
+        pl.col("index_a").list.max().max().alias("hi_a"),
+        pl.col("index_b").list.min().min().alias("lo_b"),
+        pl.col("index_b").list.max().max().alias("hi_b"),
+        pl.col("index_x").list.min().min().alias("lo_x"),
+        pl.col("index_x").list.max().max().alias("hi_x"),
+    ).row(0, named=True)
+    lows = [v for v in (bounds["lo_a"], bounds["lo_b"], bounds["lo_x"]) if v is not None]
+    highs = [v for v in (bounds["hi_a"], bounds["hi_b"], bounds["hi_x"]) if v is not None]
+    if lows and min(lows) < 0:
+        msg = f"Precomputed cells contain negative indices (min={min(lows)})"
+        raise PrecomputedCellsError(msg)
+    if highs and max(highs) >= num_items:
+        msg = f"Precomputed cells reference index {max(highs)} but the dataset only has {num_items} items"
+        raise PrecomputedCellsError(msg)
+
+
 def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
     """All sizes must be integers greater than or equal to 2."""
     if not all(isinstance(s, int) and s > 1 for s in sizes if s is not None):

@@ -6,7 +6,7 @@ import torch
 
 from fastabx import Dataset
 from fastabx.dataset import InMemoryAccessor
-from fastabx.pooling import PooledDataset, hamming_pooling, pooling, pooling_function
+from fastabx.pooling import PooledDataset, hamming_pooling, pool_dataset, pooling_function
 
 
 def test_pooling_function_mean_and_hamming() -> None:
@@ -44,7 +44,7 @@ def test_pooling_returns_pooled_dataset() -> None:
         labels=pl.DataFrame({"phone": ["a", "b", "c", "d"]}),
         accessor=InMemoryAccessor(indices, data),
     )
-    pooled = pooling(dataset, "mean")
+    pooled = pool_dataset(dataset, "mean")
     assert isinstance(pooled, PooledDataset)
     assert pooled.pooling == "mean"
     # Each item now has time dim 1.
@@ -63,6 +63,6 @@ def test_pooling_mean_of_constant_sequence() -> None:
         labels=pl.DataFrame({"phone": ["a", "b"]}),
         accessor=InMemoryAccessor(indices, data),
     )
-    pooled = pooling(dataset, "mean")
+    pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:
         torch.testing.assert_close(item.squeeze(0), torch.ones(d))

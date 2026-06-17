@@ -22,10 +22,12 @@ from fastabx.verify import (
     LabelReservedNameError,
     LabelSuffixError,
     LevelsErrorType,
+    PrecomputedCellsError,
     format_score_levels,
     verify_cell,
     verify_dataset_labels,
     verify_empty_datapoints,
+    verify_precomputed_cells,
     verify_score_levels,
     verify_task_conditions,
 )
@@ -80,6 +82,53 @@ def test_format_score_levels_invalid_format_raises() -> None:
 def test_verify_score_levels_duplicates() -> None:
     with pytest.raises(InvalidLevelsError, match="duplicates"):
         verify_score_levels(["x", "y"], [("x",), ("x",)])
+
+
+def _good_cells() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "header": ["h"],
+            "description": ["d"],
+            "index_a": [[0, 1]],
+            "index_b": [[2]],
+            "index_x": [[0, 1]],
+        }
+    )
+
+
+def test_verify_precomputed_cells_accepts_well_formed() -> None:
+    verify_precomputed_cells(_good_cells(), num_items=3)
+
+
+def test_verify_precomputed_cells_missing_column() -> None:
+    bad = _good_cells().drop("description")
+    with pytest.raises(PrecomputedCellsError, match="description"):
+        verify_precomputed_cells(bad, num_items=3)
+
+
+def test_verify_precomputed_cells_wrong_index_dtype() -> None:
+    bad = _good_cells().with_columns(pl.col("index_a").cast(pl.List(pl.Float64)))
+    with pytest.raises(PrecomputedCellsError, match="list of integers"):
+        verify_precomputed_cells(bad, num_items=3)
+
+
+def test_verify_precomputed_cells_negative_index() -> None:
+    bad = pl.DataFrame(
+        {
+            "header": ["h"],
+            "description": ["d"],
+            "index_a": [[-1, 0]],
+            "index_b": [[1]],
+            "index_x": [[0]],
+        }
+    )
+    with pytest.raises(PrecomputedCellsError, match="negative"):
+        verify_precomputed_cells(bad, num_items=3)
+
+
+def test_verify_precomputed_cells_out_of_range() -> None:
+    with pytest.raises(PrecomputedCellsError, match="only has 2"):
+        verify_precomputed_cells(_good_cells(), num_items=2)
 
 
 def test_verify_score_levels_columns_missing() -> None:

@@ -127,12 +127,46 @@ def test_task_is_symmetric_iff_no_across(tiny_dataset: Dataset) -> None:
     assert asym.is_symmetric is False
 
 
-def test_task_precomputed_cells_bypasses_generation(tiny_dataset: Dataset) -> None:
+def test_task_from_cells_bypasses_generation(tiny_dataset: Dataset) -> None:
     real = Task(tiny_dataset, on="phone", by=["context"])
-    precomputed = Task(tiny_dataset, on="phone", cells=real.cells)
-    # The hardcoded cells override the construction logic.
+    precomputed = Task.from_cells(tiny_dataset, real.cells, is_symmetric=True)
     assert len(precomputed) == len(real)
     assert precomputed.cells.equals(real.cells)
+    assert precomputed.is_symmetric is True
+    # Iteration works without on/by/across being validated against the dataset.
+    assert next(iter(precomputed)).is_symmetric is True
+
+
+def test_task_from_cells_respects_is_symmetric(tiny_dataset: Dataset) -> None:
+    real = Task(tiny_dataset, on="phone", across=["speaker"])
+    precomputed = Task.from_cells(tiny_dataset, real.cells, is_symmetric=False)
+    assert precomputed.is_symmetric is False
+    assert next(iter(precomputed)).is_symmetric is False
+
+
+def test_task_from_cells_rejects_missing_columns(tiny_dataset: Dataset) -> None:
+    from fastabx.verify import PrecomputedCellsError
+
+    real = Task(tiny_dataset, on="phone", by=["context"])
+    bad = real.cells.drop("header")
+    with pytest.raises(PrecomputedCellsError, match="header"):
+        Task.from_cells(tiny_dataset, bad, is_symmetric=True)
+
+
+def test_task_from_cells_rejects_out_of_range_indices(tiny_dataset: Dataset) -> None:
+    from fastabx.verify import PrecomputedCellsError
+
+    real = Task(tiny_dataset, on="phone", by=["context"])
+    too_big = len(tiny_dataset.accessor)
+    bad = real.cells.with_columns(pl.col("index_a").list.eval(pl.element() + too_big))
+    with pytest.raises(PrecomputedCellsError, match="only has"):
+        Task.from_cells(tiny_dataset, bad, is_symmetric=True)
+
+
+def test_task_cells_setter_is_read_only(tiny_dataset: Dataset) -> None:
+    task = Task(tiny_dataset, on="phone", by=["context"])
+    with pytest.raises(AttributeError, match="no setter"):
+        task.cells = task.cells  # type: ignore[misc]
 
 
 def test_min_a_len_module_constant() -> None:

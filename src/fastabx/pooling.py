@@ -9,7 +9,7 @@ import torch
 
 from fastabx.dataset import Dataset, InMemoryAccessor
 
-__all__ = ["PooledDataset", "PoolingName", "pooling"]
+__all__ = ["PooledDataset", "PoolingName", "pool_dataset"]
 
 type PoolingName = Literal["mean", "hamming"]
 
@@ -41,7 +41,7 @@ class PooledDataset(Dataset):
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}\npooling: {self.pooling}"
 
 
-def pooling(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
+def pool_dataset(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
     """Pool the :py:class:`.Dataset` using the pooling method given by ``pooling_name``.
 
     The pooled dataset is a new one, with data stored in memory. For simplicity, we iterate through the original

@@ -12,12 +12,18 @@ from packaging.version import parse
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.linkcode",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
     "sphinx_design",
     "nbsphinx",
 ]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/main", None),
+}
 
 project = "fastabx"
 author = metadata(project)["Author"]

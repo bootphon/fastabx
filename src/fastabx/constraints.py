@@ -13,7 +13,7 @@ type Constraints = Iterable[pl.Expr]
 
 
 def constraints_all_different(*columns: str) -> Constraints:
-    """Return :py:type:`.Constraints` that ensure that each specified column has different values for A, B and X.
+    """Return :py:class:`.Constraints` that ensure that each specified column has different values for A, B and X.
 
     :param columns: The columns to apply the constraints on.
     """

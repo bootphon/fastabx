@@ -7,7 +7,7 @@ import polars as pl
 from fastabx.cell import Cell, cell_description, cell_header, cells_on_by, cells_on_by_across
 from fastabx.dataset import Dataset
 from fastabx.subsample import Subsampler
-from fastabx.verify import verify_dataset_labels, verify_task_conditions
+from fastabx.verify import verify_dataset_labels, verify_precomputed_cells, verify_task_conditions
 
 __all__ = ["Task"]
 
@@ -38,13 +38,14 @@ class Task:
     A Task builds all the :py:class:`.Cell` given ``on``, ``by`` and ``across`` conditions.
     It can be subsampled to limit the number of cells.
 
+    To bypass the standard construction with a precomputed cells DataFrame, use
+    :py:meth:`Task.from_cells` instead.
+
     :param dataset: The dataset containing the features and the labels.
     :param on: The ``on`` condition.
     :param by: The list of ``by`` conditions.
     :param across: The list of ``across`` conditions.
     :param subsampler: An optional subsampler to limit the number of cells and their sizes.
-    :param cells: An optional DataFrame of precomputed cells. Useful if you hardcode the triplets yourself.
-        All other input arguments will be ignored if this is set.
     """
 
     def __init__(
@@ -55,7 +56,6 @@ class Task:
         by: list[str] | None = None,
         across: list[str] | None = None,
         subsampler: Subsampler | None = None,
-        cells: pl.DataFrame | None = None,
     ) -> None:
         self.dataset = dataset
         self.on = on
@@ -65,7 +65,36 @@ class Task:
         verify_task_conditions([self.on, *self.by, *self.across])
         verify_dataset_labels(self.dataset.labels.select([self.on, *self.by, *self.across]))
         self._subsampler_description = subsampler.description(with_across=bool(self.across)) if subsampler else ""
-        self.cells = task_cells(self.dataset, self.on, self.by, self.across, subsampler) if cells is None else cells
+        self._cells = task_cells(self.dataset, self.on, self.by, self.across, subsampler)
+
+    @classmethod
+    def from_cells(cls, dataset: Dataset, cells: pl.DataFrame, *, is_symmetric: bool) -> "Task":
+        """Build a Task from a precomputed cells DataFrame.
+
+        Use this when you have hardcoded your own triplets and want to skip the
+        standard ``on``/``by``/``across`` construction. The DataFrame must carry the
+        columns expected by :py:meth:`Task.__iter__`: ``header``, ``description``,
+        ``index_a``, ``index_b``, ``index_x``.
+
+        :param dataset: The dataset containing the features and the labels.
+        :param cells: The precomputed cells DataFrame.
+        :param is_symmetric: Whether each cell's A and X share the same rows (no across condition).
+        """
+        verify_precomputed_cells(cells, num_items=len(dataset.accessor))
+        task = cls.__new__(cls)
+        task.dataset = dataset
+        task.on = ""
+        task.by = []
+        task.across = []
+        task.is_symmetric = is_symmetric
+        task._subsampler_description = ""  # noqa: SLF001
+        task._cells = cells  # noqa: SLF001
+        return task
+
+    @property
+    def cells(self) -> pl.DataFrame:
+        """Read-only view of the task's cells."""
+        return self._cells
 
     def __len__(self) -> int:
         return len(self.cells)

@@ -13,10 +13,15 @@ Dataset
 .. autoclass:: fastabx.Dataset
    :members: labels, accessor, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
 
+.. autoclass:: fastabx.InMemoryAccessor
+
+.. autoclass:: fastabx.Batch
+
 Task
 ----
 
 .. autoclass:: fastabx.Task
+   :members: cells, from_cells
 
 Subsample
 ---------
@@ -27,37 +32,50 @@ Score
 -----
 
 .. autoclass:: fastabx.Score
-   :members: collapse, details, write_csv
-
-Pooling
--------
-
-.. autofunction:: fastabx.pooling
+   :members: cells, collapse, details, write_csv
 
 Advanced
 ========
 
+Pooling
+-------
+
+.. autofunction:: fastabx.pool_dataset
+
+.. autoclass:: fastabx.PooledDataset
+
+.. py:class:: fastabx.PoolingName
+   :canonical: fastabx.pooling.PoolingName
+
+   Type alias for ``Literal["mean", "hamming"]``.
+
 Cell
 ----
 
-.. autoclass:: fastabx.cell.Cell
+.. autoclass:: fastabx.Cell
    :members: num_triplets, use_dtw
 
 Distance
 --------
 
-.. autofunction:: fastabx.distance.abx_on_cell
+.. autofunction:: fastabx.abx_on_cell
+
+.. py:class:: fastabx.DistanceName
+   :canonical: fastabx.distance.DistanceName
+
+   Type alias for ``Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]``.
 
 Constraints
 -----------
 
-.. py:type:: fastabx.constraints.Constraints
+.. py:class:: fastabx.Constraints
+   :canonical: fastabx.constraints.Constraints
 
    Type alias for ``Iterable[pl.Expr]``.
 
    See :ref:`constraints` to understand how to use them.
 
-.. autofunction:: fastabx.constraints.constraints_all_different
+.. autofunction:: fastabx.constraints_all_different
 
 Environment variables
 =====================

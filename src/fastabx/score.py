@@ -88,7 +88,7 @@ def score_task(
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``.
 
-    Additional :py:type:`.Constraints` can be provided to restrict the possible triplets in each cell.
+    Additional :py:class:`.Constraints` can be provided to restrict the possible triplets in each cell.
 
     The full scoring runs eagerly in ``__init__``: constructing a ``Score`` is the expensive step,
     and ``collapse``/``details`` afterwards are cheap.
