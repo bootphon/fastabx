@@ -4,9 +4,16 @@ import numpy as np
 import polars as pl
 import pytest
 import torch
+from hypothesis import settings
 
 from fastabx import Dataset
 from fastabx.dataset import InMemoryAccessor
+
+# Run more examples than hypothesis's default (100) so adversarial cases (e.g. the cosine
+# antipodal boundary in test_distances.py) get explored harder by default. Individual tests
+# can still override via their own ``@settings(...)`` decorator.
+settings.register_profile("fastabx", max_examples=500, deadline=None)
+settings.load_profile("fastabx")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

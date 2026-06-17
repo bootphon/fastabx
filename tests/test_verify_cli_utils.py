@@ -186,13 +186,18 @@ def test_librilight_bug_changes_frontiers(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_cli_version() -> None:
+    import importlib.metadata
+
     result = subprocess.run(
         [sys.executable, "-m", "fastabx", "--version"],
         capture_output=True,
         text=True,
         check=True,
     )
-    assert "fastabx" in result.stdout.lower()
+    # The contract of ``--version`` is that the package version appears in stdout. The leading
+    # program name depends on ``sys.argv[0]`` (and on argparse's interpretation of it across
+    # Python versions / environments), so don't assert on it.
+    assert importlib.metadata.version("fastabx") in result.stdout
 
 
 def test_cli_requires_max_x_across_for_across_speaker(tmp_path: Path) -> None:
