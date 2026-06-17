@@ -39,6 +39,17 @@ class CollapseError(Exception):
         super().__init__(msg)
 
 
+class IncompatibleNormalizationError(Exception):
+    """The dataset was already L2-normalized for a previous angular score and cannot be reused for this distance."""
+
+    def __init__(self, distance_name: str) -> None:
+        super().__init__(
+            f"The dataset has been L2-normalized (with a singularity border) by a previous cosine/angular "
+            f"Score and its features are no longer in their original space. Computing {distance_name!r} on it "
+            f"would be silently wrong. Build a fresh Dataset/Task for this distance."
+        )
+
+
 def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
     """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs."""
     if levels is None:
@@ -93,6 +104,8 @@ class Score:
         distance = distance_function(distance_name)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
+        elif task.dataset.accessor.is_normalized:
+            raise IncompatibleNormalizationError(distance_name)
         scores, sizes = score_task(task, distance, constraints)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)

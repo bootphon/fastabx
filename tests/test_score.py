@@ -8,7 +8,7 @@ import pytest
 
 from fastabx import Dataset, Score, Task
 from fastabx.constraints import constraints_all_different
-from fastabx.score import CollapseError, pl_weighted_mean, score_details
+from fastabx.score import CollapseError, IncompatibleNormalizationError, pl_weighted_mean, score_details
 
 
 @pytest.fixture
@@ -40,6 +40,24 @@ def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
     # Each row (excluding the appended border) must now have unit L2 norm.
     body = tiny_dataset.accessor.data[:, :-1]
     torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0)), atol=1e-5, rtol=0)
+
+
+def test_score_cosine_twice_does_not_re_normalize(tiny_dataset: Dataset) -> None:
+    """Two consecutive cosine Scores must not append the singularity border twice."""
+    task = Task(tiny_dataset, on="phone", by=["context"])
+    Score(task, "cosine")
+    width_after_first = tiny_dataset.accessor.data.shape[1]
+    assert tiny_dataset.accessor.is_normalized
+    Score(task, "cosine")
+    assert tiny_dataset.accessor.data.shape[1] == width_after_first
+
+
+def test_score_euclidean_after_cosine_raises(tiny_dataset: Dataset) -> None:
+    """Reusing a cosine-normalized dataset for a non-cosine distance must fail loudly."""
+    task = Task(tiny_dataset, on="phone", by=["context"])
+    Score(task, "cosine")
+    with pytest.raises(IncompatibleNormalizationError, match="L2-normalized"):
+        Score(task, "euclidean")
 
 
 def test_score_does_not_normalize_for_euclidean(tiny_dataset: Dataset) -> None:

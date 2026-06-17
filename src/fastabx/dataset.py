@@ -47,6 +47,7 @@ class InMemoryAccessor:
         self.indices = indices
         verify_empty_datapoints(self.indices)
         self.data = data.to(self.device)
+        self.is_normalized = False
         size = max(self.indices) + 1
         starts, lengths = np.zeros(size, dtype=np.int64), np.zeros(size, dtype=np.int64)
         for i, (start, end) in self.indices.items():
@@ -307,7 +308,7 @@ def load_data_from_item_with_times[T](
     return all_indices, torch.cat(data, dim=0)
 
 
-@dataclass(frozen=True)
+@dataclass
 class Dataset:
     """Simple interface to a dataset.
 
@@ -322,8 +323,11 @@ class Dataset:
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}"
 
     def normalize_(self) -> Self:
-        """L2 normalization of the data."""
+        """L2 normalization of the data. Idempotent: a second call is a no-op."""
+        if self.accessor.is_normalized:
+            return self
         self.accessor.data = normalize_with_singularity_(self.accessor.data)
+        self.accessor.is_normalized = True
         return self
 
     @classmethod

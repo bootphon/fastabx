@@ -31,7 +31,7 @@ def pooling_function(name: PoolingName) -> Callable[[torch.Tensor], torch.Tensor
             raise ValueError(name)
 
 
-@dataclass(frozen=True)
+@dataclass
 class PooledDataset(Dataset):
     """Pooled dataset."""
 

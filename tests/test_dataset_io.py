@@ -132,6 +132,21 @@ def test_in_memory_accessor_lengths_and_batched() -> None:
     assert torch.equal(batch.data[0, 2], torch.zeros(2))
 
 
+def test_dataset_normalize_is_idempotent() -> None:
+    """Calling ``normalize_()`` twice must not double-append the singularity border."""
+    rng = np.random.default_rng(0)
+    features = rng.standard_normal((6, 3)).astype(np.float32)
+    dataset = Dataset.from_numpy(features, {"phone": ["a", "b"] * 3})
+    assert not dataset.accessor.is_normalized
+    dataset.normalize_()
+    assert dataset.accessor.is_normalized
+    width_after_first = dataset.accessor.data.shape[1]
+    data_after_first = dataset.accessor.data.clone()
+    dataset.normalize_()
+    assert dataset.accessor.data.shape[1] == width_after_first
+    torch.testing.assert_close(dataset.accessor.data, data_after_first)
+
+
 def test_normalize_with_singularity_basic_case() -> None:
     x = torch.tensor([[3.0, 4.0], [0.0, 0.0]])
     out = normalize_with_singularity_(x.clone())
