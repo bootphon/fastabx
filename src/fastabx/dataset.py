@@ -40,16 +40,13 @@ class DataAccessor(abc.ABC):
     """
 
     @abc.abstractmethod
-    def __getitem__(self, i: int) -> torch.Tensor:
-        pass
+    def __getitem__(self, i: int) -> torch.Tensor: ...
 
     @abc.abstractmethod
-    def __len__(self) -> int:
-        pass
+    def __len__(self) -> int: ...
 
     @abc.abstractmethod
-    def __iter__(self) -> Iterator[torch.Tensor]:
-        pass
+    def __iter__(self) -> Iterator[torch.Tensor]: ...
 
     @abc.abstractmethod
     def batched(self, indices: Sequence[int] | np.ndarray) -> Batch:

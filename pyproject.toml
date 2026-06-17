@@ -54,14 +54,29 @@ doc = [
   "sphinx-copybutton>=0.5.2",
   "sphinx-design>=0.6.1",
 ]
-test = ["hypothesis>=6.135.31", "pytest>=9.0.2"]
+test = [
+  "hypothesis>=6.135.31",
+  "pytest>=9.0.2",
+  "pytest-cov>=7.1.0",
+]
 
 [build-system]
 requires = ["hatch-vcs>=0.5.0", "hatchling>=1.28.0"]
 build-backend = "hatchling.build"
 
+[tool.coverage.run]
+branch = true
+source = ["src/fastabx"]
+
+[tool.coverage.report]
+fail_under = 99
+
 [tool.hatch.version]
 source = "vcs"
+
+[tool.pytest]
+addopts = ["--cov=fastabx"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 119
@@ -78,7 +93,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "T201"]
+"tests/*" = ["D103", "EM101", "PLC0415", "S101", "S603", "T201"]
 
 [tool.ruff.lint.flake8-self]
 ignore-names = ["_check"]
