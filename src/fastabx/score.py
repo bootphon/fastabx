@@ -93,6 +93,13 @@ class Score:
     The full scoring runs eagerly in ``__init__``: constructing a ``Score`` is the expensive step,
     and ``collapse``/``details`` afterwards are cheap.
 
+    .. warning::
+        Constructing a ``Score`` with the ``"cosine"``/``"angular"`` distance **mutates the
+        shared** ``task.dataset`` **in place**: it L2-normalizes the features and appends the
+        singularity-border column, so the dataset's feature dimension grows by one and
+        ``task.dataset.accessor.is_normalized`` becomes ``True``.
+        If you need the original features back, keep a separate, un-normalized ``Dataset``.
+
     :param task: The :py:class:`.Task` to score.
     :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl_symmetric"
         or "identical". Defaults to "angular".

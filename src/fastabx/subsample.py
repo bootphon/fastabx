@@ -9,7 +9,18 @@ __all__ = ["Subsampler"]
 
 
 def subsample_each_cell(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
-    """Subsample each cell by taking at most ``size`` instances of A, B, and X independently."""
+    """Subsample each cell by taking at most ``size`` instances of A, B, and X independently.
+
+    The shuffle uses a single fixed ``seed`` under ``.over("__group")``. Because ``shuffle(seed)``
+    applies the *same* permutation to every equal-length group, this is what keeps A and X in step
+    for symmetric cells (where ``index_a == index_x``): both columns are shuffled identically, so
+    ``.head(size)`` selects the same subset and the diagonal exclusion in scoring stays valid.
+
+    The flip side is that the choice of which items survive is correlated across cells of the same
+    size rather than drawn independently per cell. This is intentional (it preserves the A/X
+    invariant and keeps the subsampling reproducible), but it is *not* an i.i.d. sample; do not rely
+    on per-cell independence of the retained items.
+    """
     return (
         df.with_columns(pl.concat_str(~cs.starts_with("index"), separator="-").alias("__group"))
         .with_columns(cs.starts_with("index").explode().shuffle(seed=seed).implode().over("__group").list.head(size))

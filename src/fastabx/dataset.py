@@ -148,7 +148,7 @@ class FrequencyTypeError(TypeError):
 
 def decimal_frequency(frequency: int | str | Decimal) -> Decimal:
     """Convert frequency to a Decimal."""
-    if isinstance(frequency, (int, str, Decimal)):
+    if isinstance(frequency, (int, str, Decimal)) and not isinstance(frequency, bool):
         return Decimal(str(frequency))
     raise FrequencyTypeError
 
@@ -290,7 +290,7 @@ def load_data_from_item_with_times[T](
             features = feature_maker(paths_features[fileid]).detach().to(device)
             if not torch.isfinite(features).all():
                 raise NonFiniteError(fileid)
-            times = time_maker(paths_times[fileid]).round(decimals=decimals)
+            times = time_maker(paths_times[fileid]).detach().to(device).round(decimals=decimals)
         except KeyError as error:
             raise missing_files_error(
                 set(paths_features) & set(paths_times), set(by_file[file_col].unique())
@@ -299,7 +299,7 @@ def load_data_from_item_with_times[T](
             raise TimesArrayDimensionError
         for index, onset, offset in zip(indices, onsets, offsets, strict=True):
             mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]
-            if not mask.any():
+            if mask.numel() == 0:
                 raise TimesArrayFrontiersError(fileid, float(onset), float(offset))
             data.append(features[mask])
             left = right
@@ -475,7 +475,10 @@ class Dataset:
             raise ValueError(msg)
         labels = df.select(cs.exclude(feature_columns))
         indices = {i: (i, i + 1) for i in range(len(labels))}
-        data = df.select(feature_columns).cast(pl.Float32).to_torch()
+        features = df.select(feature_columns)
+        if any(dtype.is_float() for dtype in features.dtypes):
+            features = features.cast(pl.Float32)
+        data = features.to_torch()
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
@@ -502,6 +505,13 @@ class Dataset:
             labels_df = pl.from_dict(labels)
         if len(features_df) != len(labels_df):
             msg = f"`features` and `labels` must have the same length, got {len(features_df)} and {len(labels_df)}"
+            raise ValueError(msg)
+        collisions = sorted(set(features_df.columns) & set(labels_df.columns))
+        if collisions:
+            msg = (
+                f"`labels` uses column name(s) {collisions} that collide with the auto-generated feature "
+                f"column names ('column_0', 'column_1', ...). Rename the offending label column(s)."
+            )
             raise ValueError(msg)
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
 

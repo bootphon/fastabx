@@ -39,7 +39,17 @@ def apply_constraints(
     *,
     is_symmetric: bool,
 ) -> pl.DataFrame:
-    """Apply constraints to the cells DataFrame."""
+    """Apply constraints to the cells DataFrame.
+
+    .. note::
+        The per-cell ``is_valid`` lists are rebuilt by exploding to triplets and then regrouping on
+        the non-index (condition) columns, in first-appearance order, before being concatenated back
+        onto ``cells``. This assumes those condition columns **uniquely identify each row of**
+        ``cells`` which holds for a standard :py:class:`.Task` (one row per ``on``/``by``/``across``
+        combination). A :py:class:`.Task` built via :py:meth:`.Task.from_cells` with duplicate or
+        arbitrary non-index columns can collapse distinct cells into one group and silently misalign
+        the ``is_valid`` column; constraints are not supported for such hand-built tasks.
+    """
     columns_to_retrieve = {
         name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
         for constraint in constraints

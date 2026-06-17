@@ -4,7 +4,7 @@ import json
 import os
 import queue
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable
 
 import torch
 
@@ -37,14 +37,23 @@ def print_fastabx_output(score: float, **kwargs: str | int) -> None:
     print(output)  # noqa: T201
 
 
-def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Iterator[T]:
-    """Wrap an iterable, producing items ahead of consumption in a background thread."""
-    q = queue.Queue(maxsize=maxsize)
+def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Generator[T, None, None]:
+    """Wrap an iterable, producing items ahead of consumption in a background thread.
+
+    The producer thread is always cleaned up. On normal completion it ends on its own; if the
+    consumer stops early (``break``, an exception, or the generator being closed), the ``finally``
+    sets ``stop`` and drains the queue until the producer's guaranteed final sentinel, so no thread
+    is left parked on a full ``put``.
+    """
+    q: queue.Queue = queue.Queue(maxsize=maxsize)
     sentinel = object()
+    stop = threading.Event()
 
     def producer() -> None:
         try:
             for item in iterable:
+                if stop.is_set():
+                    break
                 q.put(item)
         except Exception as e:  # noqa: BLE001
             q.put(e)
@@ -53,8 +62,15 @@ def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Iterator[T]:
 
     thread = threading.Thread(target=producer, daemon=True)
     thread.start()
-    while (item := q.get()) is not sentinel:
-        if isinstance(item, Exception):
-            raise item from item
-        yield item
-    thread.join()
+    consumed_sentinel = False
+    try:
+        while (item := q.get()) is not sentinel:
+            if isinstance(item, Exception):
+                raise item
+            yield item
+        consumed_sentinel = True
+    finally:
+        stop.set()
+        while not consumed_sentinel and q.get() is not sentinel:
+            pass  # drain so a producer blocked on a full put can finish and exit
+        thread.join()

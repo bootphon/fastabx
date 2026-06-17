@@ -97,19 +97,19 @@ def _good_cells() -> pl.DataFrame:
 
 
 def test_verify_precomputed_cells_accepts_well_formed() -> None:
-    verify_precomputed_cells(_good_cells(), num_items=3)
+    verify_precomputed_cells(_good_cells(), num_items=3, is_symmetric=True)
 
 
 def test_verify_precomputed_cells_missing_column() -> None:
     bad = _good_cells().drop("description")
     with pytest.raises(PrecomputedCellsError, match="description"):
-        verify_precomputed_cells(bad, num_items=3)
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=True)
 
 
 def test_verify_precomputed_cells_wrong_index_dtype() -> None:
     bad = _good_cells().with_columns(pl.col("index_a").cast(pl.List(pl.Float64)))
     with pytest.raises(PrecomputedCellsError, match="list of integers"):
-        verify_precomputed_cells(bad, num_items=3)
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=True)
 
 
 def test_verify_precomputed_cells_negative_index() -> None:
@@ -123,12 +123,34 @@ def test_verify_precomputed_cells_negative_index() -> None:
         }
     )
     with pytest.raises(PrecomputedCellsError, match="negative"):
-        verify_precomputed_cells(bad, num_items=3)
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=False)
 
 
 def test_verify_precomputed_cells_out_of_range() -> None:
     with pytest.raises(PrecomputedCellsError, match="only has 2"):
-        verify_precomputed_cells(_good_cells(), num_items=2)
+        verify_precomputed_cells(_good_cells(), num_items=2, is_symmetric=True)
+
+
+def test_verify_precomputed_cells_empty_index_list() -> None:
+    bad = pl.DataFrame(
+        {
+            "header": ["h"],
+            "description": ["d"],
+            "index_a": pl.Series([[]], dtype=pl.List(pl.Int64)),
+            "index_b": [[1]],
+            "index_x": pl.Series([[]], dtype=pl.List(pl.Int64)),
+        }
+    )
+    with pytest.raises(PrecomputedCellsError, match="empty index lists"):
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=False)
+
+
+def test_verify_precomputed_cells_symmetric_requires_a_equals_x() -> None:
+    bad = _good_cells().with_columns(pl.col("index_a").list.reverse().alias("index_x"))  # [1, 0] != [0, 1]
+    with pytest.raises(PrecomputedCellsError, match="index_a == index_x"):
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=True)
+    # The very same cells are fine for an asymmetric task.
+    verify_precomputed_cells(bad, num_items=3, is_symmetric=False)
 
 
 def test_verify_score_levels_columns_missing() -> None:

@@ -88,11 +88,13 @@ class PrecomputedCellsError(ValueError):
     """The precomputed cells DataFrame is not shaped like what ``Task`` expects."""
 
 
-def verify_precomputed_cells(cells: pl.DataFrame, num_items: int) -> None:
+def verify_precomputed_cells(cells: pl.DataFrame, num_items: int, *, is_symmetric: bool) -> None:
     """Check that a user-supplied cells DataFrame is usable by ``Task.from_cells``.
 
-    Verifies the required columns are present, that the index columns hold lists of
-    integers, and that every referenced row is in ``range(num_items)``.
+    Verifies the required columns are present, that the index columns hold lists of integers, that
+    no index list is empty, that every referenced row is in ``range(num_items)``, and, when
+    ``is_symmetric``, that ``index_a`` equals ``index_x`` row by row (symmetric scoring drops the
+    matrix diagonal and so requires X and A to be the same set in the same order).
     """
     missing = [c for c in REQUIRED_PRECOMPUTED_CELL_COLUMNS if c not in cells.columns]
     if missing:
@@ -103,6 +105,18 @@ def verify_precomputed_cells(cells: pl.DataFrame, num_items: int) -> None:
         if not (isinstance(dtype, pl.List) and dtype.inner.is_integer()):
             msg = f"Column {col!r} must be a list of integers, got {dtype}"
             raise PrecomputedCellsError(msg)
+    empty = cells.select(
+        (pl.col("index_a").list.len() == 0).any().alias("a"),
+        (pl.col("index_b").list.len() == 0).any().alias("b"),
+        (pl.col("index_x").list.len() == 0).any().alias("x"),
+    ).row(0, named=True)
+    empty_cols = [f"index_{k}" for k, v in empty.items() if v]
+    if empty_cols:
+        msg = f"Precomputed cells contain empty index lists in column(s): {empty_cols}"
+        raise PrecomputedCellsError(msg)
+    if is_symmetric and cells.select((pl.col("index_a") != pl.col("index_x")).any()).item():
+        msg = "Symmetric precomputed cells require index_a == index_x for every row (X and A must be the same set)"
+        raise PrecomputedCellsError(msg)
     bounds = cells.select(
         pl.col("index_a").list.min().min().alias("lo_a"),
         pl.col("index_a").list.max().max().alias("hi_a"),

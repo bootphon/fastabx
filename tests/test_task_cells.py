@@ -158,15 +158,31 @@ def test_task_from_cells_rejects_out_of_range_indices(tiny_dataset: Dataset) -> 
 
     real = Task(tiny_dataset, on="phone", by=["context"])
     too_big = len(tiny_dataset.accessor)
-    bad = real.cells.with_columns(pl.col("index_a").list.eval(pl.element() + too_big))
+    # Shift A and X together so they stay equal (symmetric) and only the bounds check fires.
+    bad = real.cells.with_columns(
+        pl.col("index_a").list.eval(pl.element() + too_big),
+        pl.col("index_x").list.eval(pl.element() + too_big),
+    )
     with pytest.raises(PrecomputedCellsError, match="only has"):
         Task.from_cells(tiny_dataset, bad, is_symmetric=True)
+
+
+def test_task_from_cells_symmetric_rejects_mismatched_a_and_x(tiny_dataset: Dataset) -> None:
+    """is_symmetric=True with index_a != index_x must be rejected, not silently wrongly scored."""
+    from fastabx.verify import PrecomputedCellsError
+
+    real = Task(tiny_dataset, on="phone", by=["context"])  # symmetric: index_a == index_x
+    bad = real.cells.with_columns(pl.col("index_a").list.reverse().alias("index_x"))
+    with pytest.raises(PrecomputedCellsError, match="index_a == index_x"):
+        Task.from_cells(tiny_dataset, bad, is_symmetric=True)
+    # Declaring the same cells asymmetric is allowed (no diagonal assumption).
+    Task.from_cells(tiny_dataset, bad, is_symmetric=False)
 
 
 def test_task_cells_setter_is_read_only(tiny_dataset: Dataset) -> None:
     task = Task(tiny_dataset, on="phone", by=["context"])
     with pytest.raises(AttributeError, match="no setter"):
-        task.cells = task.cells  # type: ignore[misc]
+        task.cells = task.cells  # ty: ignore[invalid-assignment]
 
 
 def test_min_a_len_module_constant() -> None:

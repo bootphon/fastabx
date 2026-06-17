@@ -77,6 +77,21 @@ def test_from_dataframe_invalid_source_raises() -> None:
         Dataset.from_dataframe(42, feature_columns=["x0"])  # ty: ignore[invalid-argument-type]
 
 
+def test_from_dataframe_preserves_integer_units() -> None:
+    # Discrete unit ids must keep an integer dtype: float32 would collapse 2**24 + 1 onto 2**24.
+    ds = Dataset.from_dataframe(
+        {"unit": [2**24 + 1, 2**24], "phone": ["a", "b"]},
+        feature_columns="unit",
+    )
+    assert not ds.accessor.data.dtype.is_floating_point
+    assert ds.accessor.data[0].item() != ds.accessor.data[1].item()
+
+
+def test_from_dataframe_casts_float_features() -> None:
+    ds = Dataset.from_dataframe({"x0": [1.0, 2.0], "phone": ["a", "b"]}, feature_columns="x0")
+    assert ds.accessor.data.dtype is torch.float32
+
+
 def test_from_numpy_polars_labels() -> None:
     features = np.arange(6, dtype=np.float32).reshape(3, 2)
     labels = pl.DataFrame({"phone": ["a", "b", "c"]})
@@ -98,6 +113,14 @@ def test_from_numpy_length_mismatch_raises() -> None:
     features = np.zeros((3, 2), dtype=np.float32)
     labels = {"phone": ["a", "b"]}
     with pytest.raises(ValueError, match="same length"):
+        Dataset.from_numpy(features, labels)
+
+
+def test_from_numpy_label_name_collides_with_feature_columns() -> None:
+    """A label column named like an auto-generated feature column must fail with a clear message."""
+    features = np.zeros((2, 3), dtype=np.float32)  # -> column_0, column_1, column_2
+    labels = {"column_1": ["a", "b"]}
+    with pytest.raises(ValueError, match=r"collide.*column_1|column_1.*collide"):
         Dataset.from_numpy(features, labels)
 
 
@@ -198,6 +221,8 @@ def test_decimal_frequency_accepts_int_str_decimal() -> None:
     assert decimal_frequency(Decimal(100)) == Decimal(100)
     with pytest.raises(FrequencyTypeError):
         decimal_frequency(50.0)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(FrequencyTypeError):
+        decimal_frequency(frequency=True)
 
 
 def test_item_frontiers_basic() -> None:
@@ -424,6 +449,19 @@ def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
             "onset",
             "offset",
         )
+
+
+def test_load_data_from_item_with_times_selects_first_frame_only(tmp_path: Path) -> None:
+    features_path = tmp_path / "f1.pt"
+    times_path = tmp_path / "f1_times.pt"
+    torch.save(torch.arange(15, dtype=torch.float32).view(5, 3), features_path)
+    torch.save(torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0]), times_path)
+    labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.0")]})
+    indices, data = load_data_from_item_with_times(
+        {"f1": features_path}, {"f1": times_path}, labels, torch.load, torch.load, "#file", "onset", "offset"
+    )
+    assert indices == {0: (0, 1)}
+    assert data.cpu().tolist() == [[0.0, 1.0, 2.0]]  # exactly frame 0
 
 
 def test_from_item_end_to_end(tmp_path: Path) -> None:

@@ -80,7 +80,7 @@ class Task:
         :param cells: The precomputed cells DataFrame.
         :param is_symmetric: Whether each cell's A and X share the same rows (no across condition).
         """
-        verify_precomputed_cells(cells, num_items=len(dataset.accessor))
+        verify_precomputed_cells(cells, num_items=len(dataset.accessor), is_symmetric=is_symmetric)
         task = cls.__new__(cls)
         task.dataset = dataset
         task.on = ""

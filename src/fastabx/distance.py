@@ -92,6 +92,13 @@ def distance_matrix(
 def abx_on_cell(cell: Cell, distance_name: DistanceName = "angular") -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``.
 
+    .. warning::
+        Unlike :py:class:`.Score`, this low-level helper does **not** normalize the features.
+        For the default ``"angular"`` (and ``"cosine"``) distance the cell's features must already
+        be L2-normalized (e.g. via :py:meth:`.Dataset.normalize_`); otherwise the dot products are
+        only clamped to ``[-1, 1]`` and the score is silently wrong. Likewise ``"kl_symmetric"``
+        expects the features to be probability distributions.
+
     :param cell: The cell to compute the ABX on.
     :param distance_name: The name of the distance to use. Defaults to "angular".
         Must be one of "euclidean", "cosine", "angular", "kl_symmetric", "identical".

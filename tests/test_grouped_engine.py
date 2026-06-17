@@ -1,9 +1,12 @@
 """Equivalence and invariance tests for the grouped scoring engine (``fastabx.group``)."""
 
+import gc
 import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -234,6 +237,44 @@ def test_prefetch_reraises_producer_exception() -> None:
         seen.extend(prefetch(gen()))
     # We should have at least consumed the items produced before the exception.
     assert 1 in seen
+
+
+def test_prefetch_cleans_up_producer_thread_on_early_exit() -> None:
+    """Abandoning the consumer must not leak the producer thread parked on a full queue."""
+    closed = threading.Event()
+
+    def gen() -> Iterable[int]:
+        try:
+            i = 0
+            while True:
+                yield i
+                i += 1
+        finally:
+            closed.set()  # runs when the producer's iterator is closed
+
+    before = threading.active_count()
+    it = prefetch(gen())
+    assert next(it) == 0
+    it.close()  # triggers prefetch's finally: stop, drain, join
+
+    # join() inside close() guarantees the producer is gone; the source generator is closed once
+    # its last reference is dropped. Wait for both rather than rely on exact GC timing.
+    deadline = time.time() + 5
+    while (threading.active_count() > before or not closed.is_set()) and time.time() < deadline:
+        gc.collect()
+        time.sleep(0.01)
+    assert threading.active_count() == before
+    assert closed.is_set()
+
+
+def test_prefetch_full_consumption_joins_thread() -> None:
+    """The normal path also leaves no lingering producer thread."""
+    before = threading.active_count()
+    assert list(prefetch(iter(range(20)))) == list(range(20))
+    deadline = time.time() + 5
+    while threading.active_count() > before and time.time() < deadline:
+        time.sleep(0.01)
+    assert threading.active_count() == before
 
 
 def test_env_var_chunking_invariance_via_subprocess(tmp_path: Path) -> None:
