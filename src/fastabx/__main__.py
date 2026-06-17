@@ -12,6 +12,7 @@ from fastabx.zerospeech import zerospeech_abx
 def main() -> None:
     """ZeroSpeech ABX evaluation."""
     parser = argparse.ArgumentParser(
+        prog="fastabx",
         description="ZeroSpeech ABX",
         allow_abbrev=False,
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -57,5 +58,5 @@ def main() -> None:
     print_fastabx_output(score, **vars(args))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

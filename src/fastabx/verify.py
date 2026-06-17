@@ -100,6 +100,7 @@ class InvalidCellError(ValueError):
     """The cell is not built correctly."""
 
     def __init__(self, error_type: CellErrorType) -> None:
+        msg = None
         match error_type:
             case CellErrorType.NDIM:
                 msg = "A, B, and X should be tensors with 3 dimensions"
@@ -107,8 +108,6 @@ class InvalidCellError(ValueError):
                 msg = "A, B, and X should have the same feature dimension"
             case CellErrorType.SIZE:
                 msg = "Invalid size specification"
-            case _:
-                msg = None
         super().__init__(msg)
 
 
@@ -135,6 +134,7 @@ class InvalidLevelsError(ValueError):
     """Levels are not well formatted."""
 
     def __init__(self, error_type: LevelsErrorType) -> None:
+        msg = None
         match error_type:
             case LevelsErrorType.FORMAT:
                 msg = "'levels' should be list[tuple[str, ...] | str]"
@@ -142,8 +142,6 @@ class InvalidLevelsError(ValueError):
                 msg = "levels should not contain duplicates"
             case LevelsErrorType.COLUMNS:
                 msg = "levels should be columns of the DataFrame"
-            case _:
-                msg = None
         super().__init__(msg)
 
 
