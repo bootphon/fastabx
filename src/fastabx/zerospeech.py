@@ -12,6 +12,8 @@ from fastabx.score import Score
 from fastabx.subsample import Subsampler
 from fastabx.task import Task
 
+__all__ = ["zerospeech_abx"]
+
 
 class InvalidSpeakerOrContextError(ValueError):
     """The speaker or context conditions are not set correctly."""

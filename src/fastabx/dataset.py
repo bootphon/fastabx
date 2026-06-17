@@ -1,6 +1,5 @@
 """Data utilities."""
 
-import abc
 import math
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,8 +15,10 @@ import torch
 from polars.interchange.protocol import SupportsInterchange
 from tqdm import tqdm
 
-from fastabx.utils import with_librilight_bug
+from fastabx.utils import default_device, with_librilight_bug
 from fastabx.verify import verify_empty_datapoints
+
+__all__ = ["Batch", "Dataset", "InMemoryAccessor"]
 
 type ArrayLike = npt.ArrayLike  # Better rendering in docs
 
@@ -33,31 +34,11 @@ class Batch:
         return f"Batch(data=Tensor(shape={self.data.shape}, dtype={self.data.dtype}), sizes={self.sizes})"
 
 
-class DataAccessor(abc.ABC):
-    """Abstract class for data accessors.
-
-    A data accessor is a way to access a torch.Tensor given an index.
-    """
-
-    @abc.abstractmethod
-    def __getitem__(self, i: int) -> torch.Tensor: ...
-
-    @abc.abstractmethod
-    def __len__(self) -> int: ...
-
-    @abc.abstractmethod
-    def __iter__(self) -> Iterator[torch.Tensor]: ...
-
-    @abc.abstractmethod
-    def batched(self, indices: Sequence[int] | np.ndarray) -> Batch:
-        """Get the padded data and the original sizes of the data from a list of indices."""
-
-
-class InMemoryAccessor(DataAccessor):
+class InMemoryAccessor:
     """Data accessor where everything is in memory."""
 
     def __init__(self, indices: dict[int, tuple[int, int]], data: torch.Tensor) -> None:
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = default_device()
         self.indices = indices
         verify_empty_datapoints(self.indices)
         self.data = data.to(self.device)
@@ -74,7 +55,8 @@ class InMemoryAccessor(DataAccessor):
 
     def __getitem__(self, i: int) -> torch.Tensor:
         if i not in self.indices:
-            raise IndexError
+            msg = f"No item at index {i} (the accessor has {len(self.indices)} items)"
+            raise IndexError(msg)
         start, end = self.indices[i]
         return self.data[start:end]
 
@@ -242,7 +224,7 @@ def load_data_from_item[T](
     by_file_lazy = lazy.select(file_col, "start", "end").group_by(file_col, maintain_order=True).agg("start", "end")
     indices, by_file = pl.collect_all([indices_lazy, by_file_lazy])
 
-    data, device = [], torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data, device = [], default_device()
     for fileid, start_indices, end_indices in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
         try:
             features = feature_maker(mapping[fileid]).detach().to(device)
@@ -293,7 +275,7 @@ def load_data_from_item_with_times(
         .group_by(file_col, maintain_order=True)
         .agg("index", onset_col, offset_col)
     )
-    data, device, all_indices, right = [], torch.device("cuda" if torch.cuda.is_available() else "cpu"), {}, 0
+    data, device, all_indices, right = [], default_device(), {}, 0
     decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
     for fileid, indices, onsets, offsets in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
         features = torch.load(paths_features[fileid], map_location=device).detach()
@@ -487,7 +469,8 @@ class Dataset:
             pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)  # ty: ignore[call-non-callable]
         )
         if len(features_df) != len(labels_df):
-            raise ValueError
+            msg = f"`features` and `labels` must have the same length, got {len(features_df)} and {len(labels_df)}"
+            raise ValueError(msg)
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
 
 

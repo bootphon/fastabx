@@ -11,7 +11,7 @@ Dataset
 -------
 
 .. autoclass:: fastabx.Dataset
-   :members: labels, accessor, from_csv, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
+   :members: labels, accessor, from_csv, from_dataframe, from_dict, from_dicts, from_item, from_item_with_times, from_item_and_units, from_numpy
 
 Task
 ----
@@ -53,9 +53,8 @@ Constraints
 
 .. py:type:: fastabx.constraints.Constraints
 
-   Type alias for ``Iterable[pl.Expr | pl.Series | str]``.
+   Type alias for ``Iterable[pl.Expr]``.
 
-   Should be a valid input to ``pl.DataFrame.filter``.
    See :ref:`constraints` to understand how to use them.
 
 .. autofunction:: fastabx.constraints.constraints_all_different
@@ -69,3 +68,6 @@ Environment variables
   match Libri-Light. Every feature will now be one frame shorter. This should be set only if you want
   to replicate previous results obtained with Libri-Light / ZeroSpeech 2021. See :ref:`slicing` for more details
   on how features are sliced.
+- :code:`FASTABX_OUTPUT`: Controls the output format of the ``fastabx`` CLI. Defaults to a human-readable
+  ``"ABX error rate: ..."`` line; set to ``json`` (or ``jsonl``) to emit a single JSON object containing
+  the score and all CLI arguments instead.

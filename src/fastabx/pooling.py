@@ -9,10 +9,12 @@ import torch
 
 from fastabx.dataset import Dataset, InMemoryAccessor
 
+__all__ = ["PooledDataset", "PoolingName", "pooling"]
+
 type PoolingName = Literal["mean", "hamming"]
 
 
-def hamming_window(x: torch.Tensor) -> torch.Tensor:
+def hamming_pooling(x: torch.Tensor) -> torch.Tensor:
     """Apply the hamming window on the input Tensor."""
     window = torch.hamming_window(x.size(0), device=x.device)
     return (window @ x) / window.sum()
@@ -24,7 +26,7 @@ def pooling_function(name: PoolingName) -> Callable[[torch.Tensor], torch.Tensor
         case "mean":
             return partial(torch.mean, dim=0)
         case "hamming":
-            return hamming_window
+            return hamming_pooling
         case _:
             raise ValueError(name)
 

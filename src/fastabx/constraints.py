@@ -7,6 +7,8 @@ from collections.abc import Iterable
 import polars as pl
 import polars.selectors as cs
 
+__all__ = ["Constraints", "constraints_all_different"]
+
 type Constraints = Iterable[pl.Expr]
 
 

@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal, get_args
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -10,13 +10,10 @@ from torchdtw import dtw_batch
 
 from fastabx.cell import Cell
 
+__all__ = ["Distance", "DistanceName", "abx_on_cell"]
+
 type Distance = Callable[[Tensor, Tensor], Tensor]
 type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]
-
-
-def available_distances() -> tuple[str, ...]:
-    """Names of the available distances."""
-    return get_args(DistanceName.__value__)
 
 
 def distance_function(name: DistanceName) -> Distance:

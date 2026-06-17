@@ -6,11 +6,20 @@ import queue
 import threading
 from collections.abc import Iterable, Iterator
 
+import torch
+
+__all__ = []
+
 # Environment variables to control fastabx behavior. Normal usage should not require changing these.
 MIN_CELLS_FOR_TQDM = int(os.getenv("FASTABX_MIN_CELLS_FOR_TQDM", "50"))
 MAX_SCORE_CHUNK_ROWS = int(os.getenv("FASTABX_MAX_SCORE_CHUNK_ROWS", "8192"))
 GATHER_CHUNK_ROWS = int(os.getenv("FASTABX_GATHER_CHUNK_ROWS", "8192"))
 REDUCTION_FLUSH_COLS = int(os.getenv("FASTABX_REDUCTION_FLUSH_COLS", "262144"))
+
+
+def default_device() -> torch.device:
+    """Return the default device used by fastabx: CUDA if available, otherwise CPU."""
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def with_librilight_bug() -> bool:
@@ -29,7 +38,7 @@ def print_fastabx_output(score: float, **kwargs: str | int) -> None:
 
 
 def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Iterator[T]:
-    """Wrap an iterator, producing items ahead of consumption in a background thread."""
+    """Wrap an iterable, producing items ahead of consumption in a background thread."""
     q = queue.Queue(maxsize=maxsize)
     sentinel = object()
 

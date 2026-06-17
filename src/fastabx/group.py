@@ -15,6 +15,8 @@ from fastabx.distance import Distance, distance_matrix
 from fastabx.task import Task
 from fastabx.utils import GATHER_CHUNK_ROWS, MAX_SCORE_CHUNK_ROWS, REDUCTION_FLUSH_COLS
 
+__all__ = []
+
 
 @dataclass(frozen=True, slots=True)
 class CellGroup:

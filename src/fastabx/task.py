@@ -9,6 +9,8 @@ from fastabx.dataset import Dataset
 from fastabx.subsample import Subsampler
 from fastabx.verify import verify_dataset_labels, verify_task_conditions
 
+__all__ = ["Task"]
+
 
 def task_cells(
     dataset: Dataset,
@@ -70,7 +72,8 @@ class Task:
 
     def __getitem__(self, i: int) -> Cell:
         if i < 0 or i >= len(self):
-            raise IndexError
+            msg = f"Cell index {i} out of range for a task with {len(self)} cells"
+            raise IndexError(msg)
         a = self.dataset.accessor.batched(self.cells[i, "index_a"])
         b = self.dataset.accessor.batched(self.cells[i, "index_b"])
         x = self.dataset.accessor.batched(self.cells[i, "index_x"])

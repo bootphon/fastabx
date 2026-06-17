@@ -15,6 +15,8 @@ from fastabx.task import Task
 from fastabx.utils import MIN_CELLS_FOR_TQDM, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
 
+__all__ = ["Score"]
+
 
 def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
     """Generate a Polars aggregation expression to take a weighted mean.
@@ -77,6 +79,9 @@ class Score:
 
     Additional :py:type:`.Constraints` can be provided to restrict the possible triplets in each cell.
 
+    The full scoring runs eagerly in ``__init__``: constructing a ``Score`` is the expensive step,
+    and ``collapse``/``details`` afterwards are cheap.
+
     :param task: The :py:class:`.Task` to score.
     :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl_symmetric"
         or "identical". Defaults to "angular".
@@ -98,23 +103,21 @@ class Score:
         """Return the scored cells."""
         return self._cells
 
-    @cells.setter
-    def cells(self, _: pl.DataFrame) -> None:
-        msg = "The `cells` attribute is read-only."
-        raise AttributeError(msg)
-
     def __repr__(self) -> str:
         return f"Score({len(self.cells)} cells, {self.distance_name} distance)"
 
     def write_csv(self, file: str | Path) -> None:
         """Write the results of all the cells to a CSV file.
 
+        Nested list columns (the per-cell ``index_a``/``index_b``/``index_x``) are dropped, since
+        CSV cannot represent them. Use ``self.cells`` directly to keep them.
+
         :param file: Path to the output CSV file.
         """
         nested = [name for name, dtype in self.cells.schema.items() if dtype == pl.List]
         (self.cells.select(cs.exclude(nested)) if nested else self.cells).write_csv(file)
 
-    def details(self, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
+    def details(self, *, levels: Sequence[tuple[str, ...] | str] | None = None) -> pl.DataFrame:
         """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs.
 
         :param levels: List of levels to collapse. The order matters a lot.

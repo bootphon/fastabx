@@ -14,7 +14,6 @@ from torchdtw import dtw_batch
 from fastabx.distance import (
     DistanceName,
     angular_distance,
-    available_distances,
     distance_function,
     distance_matrix,
     euclidean_distance,
@@ -24,12 +23,6 @@ from fastabx.distance import (
 
 NAMES: list[DistanceName] = list(get_args(DistanceName.__value__))
 KL_FLOAT32_TOL = 1e-5  # observed slack of mean-centered KL in float32 is well under this
-
-
-def test_available_distances_matches_literal() -> None:
-    assert set(available_distances()) == set(NAMES)
-    assert "cosine" in available_distances()
-    assert "angular" in available_distances()
 
 
 @pytest.mark.parametrize("name", NAMES)

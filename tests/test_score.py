@@ -25,7 +25,7 @@ def test_score_repr_and_cells(small_score: Score) -> None:
 
 
 def test_score_cells_setter_is_read_only(small_score: Score) -> None:
-    with pytest.raises(AttributeError, match="read-only"):
+    with pytest.raises(AttributeError, match="no setter"):
         small_score.cells = small_score.cells  # type: ignore[misc]
 
 

@@ -1,4 +1,4 @@
-"""Task module. The Task class builds all the cells for the 'by', 'on' and 'across' conditions."""
+"""Cell module. A ``Cell`` is the unit of work for the ABX :py:class:`.Task` and :py:class:`.Score`."""
 
 from dataclasses import dataclass
 
@@ -7,6 +7,8 @@ import polars.selectors as cs
 
 from fastabx.dataset import Batch
 from fastabx.verify import verify_cell
+
+__all__ = ["Cell"]
 
 MIN_A_LEN = 2  # Minimum length of A in the ABX task.
 

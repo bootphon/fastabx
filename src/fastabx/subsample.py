@@ -5,6 +5,8 @@ import polars.selectors as cs
 
 from fastabx.verify import verify_subsampler_params
 
+__all__ = ["Subsampler"]
+
 
 def subsample_each_cell(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
     """Subsample each cell by taking at most ``size`` instances of A, B, and X independently."""

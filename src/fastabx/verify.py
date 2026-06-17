@@ -7,6 +7,8 @@ from itertools import chain
 import polars as pl
 from torch import Tensor
 
+__all__ = []
+
 NDIM = 3
 INVALID_COLUMN_SUFFIX = ("_a", "_b", "_x")
 INVALID_COLUMN_NAMES = {"index", "score", "size", "is_valid", "__group", "__lookup", "__pos"}
@@ -80,9 +82,9 @@ def verify_dataset_labels(df: pl.DataFrame) -> None:
 
 
 def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
-    """All sizes must be positive integers."""
+    """All sizes must be integers greater than or equal to 2."""
     if not all(isinstance(s, int) and s > 1 for s in sizes if s is not None):
-        msg = "sizes should be positive integers"
+        msg = "sizes should be integers >= 2"
         raise TypeError(msg)
     if not isinstance(seed, int):
         raise InputTypeError(int, type(seed))

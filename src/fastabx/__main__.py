@@ -4,7 +4,6 @@ import argparse
 import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
-from fastabx.distance import available_distances
 from fastabx.utils import print_fastabx_output
 from fastabx.zerospeech import zerospeech_abx
 
@@ -38,7 +37,12 @@ def main() -> None:
     parser.add_argument("--frequency", type=int, default=50, help="Feature frequency (in Hz)")
     parser.add_argument("--speaker", choices=["within", "across"], default="within", help="Speaker mode")
     parser.add_argument("--context", choices=["within", "any"], default="within", help="Context mode")
-    parser.add_argument("--distance", choices=available_distances(), default="angular", help="Distance")
+    parser.add_argument(
+        "--distance",
+        choices=["angular", "euclidean", "kl_symmetric", "identical"],
+        default="angular",
+        help="Distance",
+    )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     args = parser.parse_args()
 

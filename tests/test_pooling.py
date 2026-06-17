@@ -6,7 +6,7 @@ import torch
 
 from fastabx import Dataset
 from fastabx.dataset import InMemoryAccessor
-from fastabx.pooling import PooledDataset, hamming_window, pooling, pooling_function
+from fastabx.pooling import PooledDataset, hamming_pooling, pooling, pooling_function
 
 
 def test_pooling_function_mean_and_hamming() -> None:
@@ -30,7 +30,7 @@ def test_hamming_window_matches_manual() -> None:
     x = torch.arange(8, dtype=torch.float32).view(4, 2)
     window = torch.hamming_window(x.size(0))
     expected = (window @ x) / window.sum()
-    torch.testing.assert_close(hamming_window(x), expected)
+    torch.testing.assert_close(hamming_pooling(x), expected)
 
 
 def test_pooling_returns_pooled_dataset() -> None:
