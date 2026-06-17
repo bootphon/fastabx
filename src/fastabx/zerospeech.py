@@ -19,12 +19,22 @@ class InvalidSpeakerOrContextError(ValueError):
     """The speaker or context conditions are not set correctly."""
 
 
+class MissingMaxXAcrossError(ValueError):
+    """``max_x_across`` must be set in the "across" speaker mode."""
+
+    def __init__(self) -> None:
+        super().__init__("max_x_across is required when speaker='across' (pass None explicitly to disable it).")
+
+
+_UNSET = object()
+
+
 def zerospeech_abx(
     item: str | Path,
     root: str | Path,
     *,
     max_size_group: int | None,
-    max_x_across: int | None,
+    max_x_across: int | None = _UNSET,  # ty: ignore[invalid-parameter-default]
     speaker: Literal["within", "across"] = "within",
     context: Literal["within", "any"] = "within",
     distance: DistanceName = "angular",
@@ -42,10 +52,11 @@ def zerospeech_abx(
     :param root: Path to the root directory containing either the features or the audio files.
     :param max_size_group: Maximum number of instances of A, B, or X in each :py:class:`.Cell`.
         Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`. Set to 10 in the original ZeroSpeech ABX code.
-        Disabled if set to ``None``.
+        Required; disabled if set to ``None``.
     :param max_x_across: In the "across" speaker mode, maximum number of X considered for given values of A and B.
         Passed to the :py:class:`.Subsampler` of the :py:class:`.Task`.
-        Set to 5 in the original ZeroSpeech ABX code. Disabled if set to ``None``.
+        Set to 5 in the original ZeroSpeech ABX code. Required when ``speaker="across"`` (pass ``None`` explicitly to
+        disable it); ignored otherwise.
     :param speaker: The speaker mode, either "within" or "across". Defaults to "within".
     :param context: The context mode, either "within" or "any". Always use "within" with representations of triphones.
         Defaults to "within".
@@ -57,6 +68,10 @@ def zerospeech_abx(
     :param extension: The filename extension of the files to process in ``root``, default is ".pt".
     :param seed: The random seed for the subsampling, default is 0.
     """
+    if speaker == "across" and max_x_across is _UNSET:
+        raise MissingMaxXAcrossError
+    if max_x_across is _UNSET:
+        max_x_across = None
     dataset = Dataset.from_item(item, root, frequency, feature_maker=feature_maker, extension=extension)
     by: list[str] | None
     across: list[str] | None

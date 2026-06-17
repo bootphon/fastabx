@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from fastabx import zerospeech_abx
-from fastabx.zerospeech import InvalidSpeakerOrContextError
+from fastabx.zerospeech import InvalidSpeakerOrContextError, MissingMaxXAcrossError
 
 
 def _build_tiny_corpus(tmp_path: Path) -> tuple[Path, Path]:
@@ -51,6 +51,22 @@ def test_zerospeech_abx_all_modes(
         frequency=50,
         seed=0,
     )
+    assert 0.0 <= score <= 1.0
+
+
+def test_zerospeech_abx_max_x_across_required_across(tmp_path: Path) -> None:
+    """In "across" mode, omitting ``max_x_across`` is an error; ``None`` explicitly disables it."""
+    item, feats = _build_tiny_corpus(tmp_path)
+    with pytest.raises(MissingMaxXAcrossError):
+        zerospeech_abx(item, feats, max_size_group=None, speaker="across", distance="euclidean")
+    score = zerospeech_abx(item, feats, max_size_group=None, max_x_across=None, speaker="across", distance="euclidean")
+    assert 0.0 <= score <= 1.0
+
+
+def test_zerospeech_abx_max_x_across_optional_within(tmp_path: Path) -> None:
+    """In "within" mode, ``max_x_across`` can be omitted entirely (it is ignored)."""
+    item, feats = _build_tiny_corpus(tmp_path)
+    score = zerospeech_abx(item, feats, max_size_group=None, speaker="within", distance="euclidean")
     assert 0.0 <= score <= 1.0
 
 
