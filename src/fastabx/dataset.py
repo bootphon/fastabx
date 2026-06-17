@@ -12,7 +12,6 @@ import numpy.typing as npt
 import polars as pl
 import polars.selectors as cs
 import torch
-from polars.interchange.protocol import SupportsInterchange
 from tqdm import tqdm
 
 from fastabx.utils import default_device, with_librilight_bug
@@ -21,6 +20,12 @@ from fastabx.verify import verify_empty_datapoints
 __all__ = ["Batch", "Dataset", "InMemoryAccessor"]
 
 type ArrayLike = npt.ArrayLike  # Better rendering in docs
+
+
+def _is_pandas_dataframe(obj: object) -> bool:
+    """Check if ``obj`` is a pandas DataFrame without importing pandas."""
+    cls = type(obj)
+    return cls.__name__ == "DataFrame" and cls.__module__.split(".", 1)[0] == "pandas"
 
 
 @dataclass(frozen=True)
@@ -292,7 +297,7 @@ def load_data_from_item_with_times[T](
         if times.ndim > 1:
             raise TimesArrayDimensionError
         for index, onset, offset in zip(indices, onsets, offsets, strict=True):
-            mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]  # ty: ignore[invalid-argument-type]
+            mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]
             if not mask.any():
                 raise TimesArrayFrontiersError(fileid, float(onset), float(offset))
             data.append(features[mask])
@@ -431,61 +436,66 @@ class Dataset:
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
-    def from_dataframe(cls, df: SupportsInterchange, feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a DataFrame (polars or pandas).
+    def from_dataframe(
+        cls,
+        source: str | Path | pl.DataFrame | Mapping[str, Sequence[object]] | Iterable[Mapping[str, Any]],
+        feature_columns: str | Collection[str],
+        *,
+        separator: str = ",",
+    ) -> "Dataset":
+        """Create a dataset from any tabular source containing both the labels and the features.
 
-        :param df: DataFrame containing both the labels and the features.
+        Accepted inputs for ``source``:
+
+        - ``str`` or ``Path``: path to a CSV file (uses ``separator``).
+        - A polars or pandas ``DataFrame``.
+        - ``Mapping[str, Sequence]`` (column name → values).
+        - ``Iterable[Mapping]`` (sequence of row dictionaries).
+
+        :param source: The tabular source. See above for accepted types.
         :param feature_columns: Column name or list of column names containing the features.
+        :param separator: Separator used in the CSV file. Only relevant when ``source`` is a path.
         """
-        df = pl.from_dataframe(df.__dataframe__())
+        if isinstance(source, (str, Path)):
+            df = pl.read_csv(source, separator=separator)
+        elif isinstance(source, pl.DataFrame):
+            df = source
+        elif _is_pandas_dataframe(source):
+            df: pl.DataFrame = pl.from_pandas(source)  # ty: ignore[invalid-assignment]
+        elif isinstance(source, Mapping):
+            df = pl.from_dict(source)  # ty: ignore[invalid-argument-type]
+        elif isinstance(source, Iterable):
+            df = pl.from_dicts(source)
+        else:
+            msg = "Type of given `source` in Dataset.from_dataframe is not valid"
+            raise ValueError(msg)
         labels = df.select(cs.exclude(feature_columns))
         indices = {i: (i, i + 1) for i in range(len(labels))}
         data = df.select(feature_columns).cast(pl.Float32).to_torch()
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
 
     @classmethod
-    def from_csv(cls, path: str | Path, feature_columns: str | Collection[str], *, separator: str = ",") -> "Dataset":
-        """Create a dataset from a CSV file.
-
-        :param path: Path to the CSV file containing both the labels and the features.
-        :param feature_columns: Column name or list of column names containing the features.
-        :param separator: Separator used in the CSV file.
-        """
-        return cls.from_dataframe(pl.read_csv(path, separator=separator), feature_columns)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Sequence[object]], feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a dictionary of sequences.
-
-        :param data: Dictionary of sequences containing both the labels and the features.
-        :param feature_columns: Column name or list of column names containing the features.
-        """
-        return cls.from_dataframe(pl.from_dict(data), feature_columns)
-
-    @classmethod
-    def from_dicts(cls, data: Iterable[dict[str, Any]], feature_columns: str | Collection[str]) -> "Dataset":
-        """Create a dataset from a sequence of dictionaries.
-
-        :param data: Sequence of dictionaries containing both the labels and the features.
-        :param feature_columns: Column name or list of column names containing the features.
-        """
-        return cls.from_dataframe(pl.from_dicts(data), feature_columns)
-
-    @classmethod
     def from_numpy(
         cls,
         features: ArrayLike,
-        labels: Mapping[str, Sequence[object]] | SupportsInterchange,
+        labels: pl.DataFrame | Mapping[str, Sequence[object]],
     ) -> "Dataset":
-        """Create a dataset from the features (numpy array) and the labels (dictionary of sequences).
+        """Create a dataset from the features and the labels.
+
+        Despite the name, ``features`` is not restricted to a numpy array: any input accepted by ``np.asarray``
+        works (Python lists, tuples, CPU torch tensors via the ``__array__`` protocol, ...).
+        CUDA tensors must be moved to CPU first.
 
         :param features: 2D array-like containing the features.
-        :param labels: Dictionary of sequences or DataFrame containing the labels.
+        :param labels: Dictionary of sequences, or polars/pandas DataFrame containing the labels.
         """
         features_df = pl.from_numpy(np.asarray(features))
-        labels_df = (
-            pl.from_dataframe(labels.__dataframe__()) if hasattr(labels, "__dataframe__") else pl.from_dict(labels)  # ty: ignore[call-non-callable]
-        )
+        if isinstance(labels, pl.DataFrame):
+            labels_df = labels
+        elif _is_pandas_dataframe(labels):
+            labels_df: pl.DataFrame = pl.from_pandas(labels)  # ty: ignore[invalid-assignment]
+        else:
+            labels_df = pl.from_dict(labels)
         if len(features_df) != len(labels_df):
             msg = f"`features` and `labels` must have the same length, got {len(features_df)} and {len(labels_df)}"
             raise ValueError(msg)

@@ -37,8 +37,8 @@ def test_batch_repr() -> None:
     assert "shape" in rep
 
 
-def test_from_dict_basic() -> None:
-    ds = Dataset.from_dict(
+def test_from_dataframe_mapping_basic() -> None:
+    ds = Dataset.from_dataframe(
         {"x0": [1.0, 2.0, 3.0], "x1": [0.5, 0.5, 0.5], "phone": ["a", "b", "c"]},
         feature_columns=["x0", "x1"],
     )
@@ -47,26 +47,57 @@ def test_from_dict_basic() -> None:
     assert len(ds.accessor) == 3
 
 
-def test_from_dicts_basic() -> None:
-    ds = Dataset.from_dicts(
+def test_from_dataframe_iterable_of_dicts_basic() -> None:
+    ds = Dataset.from_dataframe(
         [{"x0": 1.0, "x1": 2.0, "phone": "a"}, {"x0": 3.0, "x1": 4.0, "phone": "b"}],
         feature_columns=["x0", "x1"],
     )
     assert len(ds.accessor) == 2
 
 
-def test_from_csv_basic(tmp_path: Path) -> None:
+def test_from_dataframe_csv_path(tmp_path: Path) -> None:
     path = tmp_path / "data.csv"
     path.write_text("x0,x1,phone\n1,2,a\n3,4,b\n")
-    ds = Dataset.from_csv(path, feature_columns=["x0", "x1"])
+    ds = Dataset.from_dataframe(path, feature_columns=["x0", "x1"])
     assert len(ds.accessor) == 2
     assert ds.labels.columns == ["phone"]
+
+
+def test_from_dataframe_pandas_basic() -> None:
+    pd = pytest.importorskip("pandas")
+    # All columns are simple numpy-backed dtypes so polars doesn't require pyarrow.
+    pdf = pd.DataFrame({"x0": [1.0, 2.0], "x1": [3.0, 4.0], "phone_id": [0, 1]})
+    ds = Dataset.from_dataframe(pdf, feature_columns=["x0", "x1"])
+    assert len(ds.accessor) == 2
+    assert ds.labels.columns == ["phone_id"]
+
+
+def test_from_dataframe_invalid_source_raises() -> None:
+    with pytest.raises(ValueError, match="not valid"):
+        Dataset.from_dataframe(42, feature_columns=["x0"])  # ty: ignore[invalid-argument-type]
+
+
+def test_from_numpy_polars_labels() -> None:
+    features = np.arange(6, dtype=np.float32).reshape(3, 2)
+    labels = pl.DataFrame({"phone": ["a", "b", "c"]})
+    ds = Dataset.from_numpy(features, labels)
+    assert ds.labels.columns == ["phone"]
+    assert len(ds.accessor) == 3
+
+
+def test_from_numpy_pandas_labels() -> None:
+    pd = pytest.importorskip("pandas")
+    features = np.arange(6, dtype=np.float32).reshape(3, 2)
+    labels = pd.DataFrame({"phone_id": [0, 1, 2]})  # numpy-backed dtype — no pyarrow needed
+    ds = Dataset.from_numpy(features, labels)
+    assert ds.labels.columns == ["phone_id"]
+    assert len(ds.accessor) == 3
 
 
 def test_from_numpy_length_mismatch_raises() -> None:
     features = np.zeros((3, 2), dtype=np.float32)
     labels = {"phone": ["a", "b"]}
-    with pytest.raises(ValueError):  # noqa: PT011 - raised without a message
+    with pytest.raises(ValueError, match="same length"):
         Dataset.from_numpy(features, labels)
 
 
@@ -393,7 +424,7 @@ def test_from_item_end_to_end(tmp_path: Path) -> None:
 
 
 def test_dataset_repr_contains_labels_and_accessor() -> None:
-    ds = Dataset.from_dict({"x0": [1.0, 2.0], "phone": ["a", "b"]}, feature_columns="x0")
+    ds = Dataset.from_dataframe({"x0": [1.0, 2.0], "phone": ["a", "b"]}, feature_columns="x0")
     rep = repr(ds)
     assert "labels" in rep
     assert "accessor" in rep

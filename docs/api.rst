@@ -11,7 +11,7 @@ Dataset
 -------
 
 .. autoclass:: fastabx.Dataset
-   :members: labels, accessor, from_csv, from_dataframe, from_dict, from_dicts, from_item, from_item_with_times, from_item_and_units, from_numpy
+   :members: labels, accessor, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
 
 Task
 ----
