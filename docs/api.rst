@@ -11,7 +11,7 @@ Dataset
 -------
 
 .. autoclass:: fastabx.Dataset
-   :members: labels, accessor, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
+   :members: labels, accessor, normalize_, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
 
 .. autoclass:: fastabx.InMemoryAccessor
 
@@ -40,6 +40,12 @@ Advanced
 Pooling
 -------
 
+Pooling collapses the frame-level features of each token into a single vector, so that every token is
+represented by one fixed-size embedding instead of a variable-length sequence. This is useful when you
+want token-level (rather than frame-level) representations: the comparison no longer relies on DTW, which
+makes the distance computation faster. Two methods are available: ``"mean"`` averages the frames, and
+``"hamming"`` averages them using a Hamming window (giving less weight to the boundary frames).
+
 .. autofunction:: fastabx.pool_dataset
 
 .. autoclass:: fastabx.PooledDataset
@@ -64,6 +70,13 @@ Distance
    :canonical: fastabx.distance.DistanceName
 
    Type alias for ``Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]``.
+   ``"cosine"`` is an alias for ``"angular"``.
+
+.. py:class:: fastabx.Distance
+   :canonical: fastabx.distance.Distance
+
+   Type alias for ``Callable[[torch.Tensor, torch.Tensor], torch.Tensor]``: a function taking two batches
+   of representations and returning their pairwise distances.
 
 Constraints
 -----------

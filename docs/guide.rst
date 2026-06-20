@@ -21,7 +21,6 @@ It is also available through a command line interface.
        item,
        features,
        max_size_group=10,
-       max_x_across=5,
        speaker="within",
        context="within",
        distance="angular",
@@ -44,7 +43,24 @@ an item file and a function to extract representations.
    item, features, frequency = "./triphone-dev-clean.item", "./hubert-l11-dev-clean", 50
    dataset = Dataset.from_item(item, features, frequency)
 
-The ABX :class:`.Task` is build given a :class:`.Dataset` and the ON, BY and ACROSS conditions.
+When the labels and the features both live in a single table (a CSV file, or a polars or pandas DataFrame),
+use :meth:`.Dataset.from_dataframe` and point ``feature_columns`` at the columns holding the features.
+
+.. code-block:: python
+
+   import polars as pl
+   from fastabx import Dataset
+
+   df = pl.DataFrame(
+       {
+           "label": ["a", "a", "b", "b"],
+           "x": [0.1, 0.2, 1.0, 1.1],
+           "y": [0.0, 0.1, 0.9, 1.2],
+       }
+   )
+   dataset = Dataset.from_dataframe(df, feature_columns=["x", "y"])
+
+The ABX :class:`.Task` is built given a :class:`.Dataset` and the ON, BY and ACROSS conditions.
 It efficiently pre-computes all cell specifications using the lazy operations of the Polars library.
 The :class:`.Task` is an iterable where each member is an instance of a :class:`.Cell`.
 A :class:`.Cell` contains all instances of :math:`a`, :math:`b`, and :math:`x` that satisfy the specified
@@ -82,11 +98,11 @@ that :math:`x` can take for the ON attribute (with :code:`max_x_across`).
 
    subsampler = Subsampler(max_size_group=10, max_x_across=5)
    task = Task(
-	dataset,
-	on="#phone",
-	by=["next-phone", "prev-phone"],
-	across=["speaker"],
-	subsampler=subsampler,
+       dataset,
+       on="#phone",
+       by=["next-phone", "prev-phone"],
+       across=["speaker"],
+       subsampler=subsampler,
    )
    print(len(task))
    # 1346484
@@ -94,7 +110,7 @@ that :math:`x` can take for the ON attribute (with :code:`max_x_across`).
 Once the task is built, the actual evaluation is conducted using the :class:`.Score` class.
 A :class:`.Score` is instantiated with the :class:`.Task` and the name of a distance (such as "angular", "euclidean", etc.).
 After the scores of each :class:`.Cell` have been computed, they can be aggregated using the :meth:`.collapse` method.
-The user can either obtain a final score by weighting according to cell size (using :code:`weigted=True`),
+The user can either obtain a final score by weighting according to cell size (using :code:`weighted=True`),
 or they can aggregate by averaging across subsequent attributes (with :code:`levels=...`).
 
 .. code-block:: python
@@ -115,9 +131,11 @@ This package also provides a command line interface, a simple wrapper that expos
 .. code-block:: console
 
     ❯ fastabx --help
-    usage: fastabx [-h] [--frequency FREQUENCY] [--speaker {within,across}] [--context {within,any}]
-                   [--distance {euclidean,cosine,angular,kl_symmetric,identical}] [--max-size-group MAX_SIZE_GROUP]
-                   [--max-x-across MAX_X_ACROSS] [--seed SEED]
+    usage: fastabx [-h] [-V] --max-size-group MAX_SIZE_GROUP
+                   [--max-x-across MAX_X_ACROSS] [--frequency FREQUENCY]
+                   [--speaker {within,across}] [--context {within,any}]
+                   [--distance {angular,euclidean,kl_symmetric,identical}]
+                   [--seed SEED]
                    item features
 
     ZeroSpeech ABX
@@ -128,18 +146,23 @@ This package also provides a command line interface, a simple wrapper that expos
 
     options:
       -h, --help            show this help message and exit
+      -V, --version         show program's version number and exit
+      --max-size-group MAX_SIZE_GROUP
+                            Maximum number of A, B, or X in a cell. Set to 10 in
+                            the original ZeroSpeech ABX. Disabled if negative
+                            value. (default: None)
+      --max-x-across MAX_X_ACROSS
+                            With 'across', maximum number of X given (A, B). Set
+                            to 5 in the original ZeroSpeech ABX. Disabled if
+                            negative value. (default: None)
       --frequency FREQUENCY
                             Feature frequency (in Hz) (default: 50)
       --speaker {within,across}
                             Speaker mode (default: within)
       --context {within,any}
                             Context mode (default: within)
-      --distance {euclidean,cosine,angular,kl_symmetric,identical}
-                            Distance (default: cosine)
-      --max-size-group MAX_SIZE_GROUP
-                            Maximum number of A, B, or X in a cell (default: 10)
-      --max-x-across MAX_X_ACROSS
-                            With 'across', maximum number of X given (A, B) (default: 5)
+      --distance {angular,euclidean,kl_symmetric,identical}
+                            Distance (default: angular)
       --seed SEED           Random seed (default: 0)
 
 Motivation

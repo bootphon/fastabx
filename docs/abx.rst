@@ -15,29 +15,33 @@ other than to those from a different category.
    :width: 70%
    :align: center
    :class: only-light
+   :alt: Illustration of the ABX discriminability task.
 
 .. image:: ./static/abx_dark.svg
    :width: 70%
    :align: center
    :class: only-dark
+   :alt: Illustration of the ABX discriminability task.
 
 The A, B, and X in the name ABX refer to the methodology. The discriminability of category :math:`A` from category
 :math:`B` is the probability that a token :math:`x` of category :math:`A` is closer to another :math:`a \in A` than
 to a token :math:`b \in B`. For example, to measure the discriminability of the phoneme /a/ from /e/, we construct
 :math:`A` as the set of all the instances of /a/ in our corpus and :math:`B` as all instances of /e/.
 
-Below is an example of the ABX task where the categories of to discriminate are the indices of the underlying
+Below is an example of the ABX task where the categories to discriminate are the indices of the underlying
 Gaussians. The Gaussians follow :math:`\mathcal{N}(\mathbf{0}, I)` and :math:`\mathcal{N}(\mathbf{\mu}, I)`.
 
 .. image:: ./static/gaussians_light.svg
    :width: 100%
    :align: center
    :class: only-light
+   :alt: ABX task on samples drawn from two Gaussians.
 
 .. image:: ./static/gaussians_dark.svg
    :width: 100%
    :align: center
    :class: only-dark
+   :alt: ABX task on samples drawn from two Gaussians.
 
 In this initial formulation, categories have a single attribute: phoneme in our example. However, in many cases,
 the input signal is characterized simultaneously by multiple attributes. In speech, for instance, the signal at a

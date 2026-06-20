@@ -9,7 +9,7 @@ With constraints
     In most cases, it is not necessary to use constraints.
 
 In the majority of applications, the ABX evaluation is fully specified using only the ON, BY, and ACROSS conditions.
-However, in some cases, because of the specificites of the dataset or the hierarchy of attributes, it can be
+However, in some cases, because of the specificities of the dataset or the hierarchy of attributes, it can be
 necessary to filter the triplets further.
 
 The :py:class:`.Subsampler` can already be used to limit the number of :py:class:`.Cell` in a :py:class:`.Task`, but

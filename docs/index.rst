@@ -6,7 +6,7 @@ Welcome to fastabx documentation
 
 fastabx is a Python package for efficient computation of ABX discriminability.
 
-The ABX discriminability is measures how well categories of interest are separated in the representation space
+The ABX discriminability measures how well categories of interest are separated in the representation space
 by determining whether tokens from the same category are closer to each other than to those from a different category.
 While ABX has been mostly used to evaluate speech representations,
 it is a generic framework that can be applied to other domains of representation learning.

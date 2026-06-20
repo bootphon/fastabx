@@ -30,7 +30,7 @@ The second implementation of ABX comes from `Libri-Light <https://github.com/fac
 It has been integrated into the ZeroSpeech 2021 challenge, and `extended here <https://github.com/zerospeech/libri-light-abx2>`_
 to allow for controlling the context condition.
 
-fastabx provides much more flexibility that Libri-Light, while being faster. If you only want the final triphone or phoneme
+fastabx provides much more flexibility than Libri-Light, while being faster. If you only want the final triphone or phoneme
 ABX error rate, you can use the :code:`fastabx` CLI or :func:`.zerospeech_abx` function that take arguments similar
 as those provided to the Libri-Light codebase.
 
@@ -38,7 +38,7 @@ as those provided to the Libri-Light codebase.
   There is a bug in the Libri-Light (and ZeroSpeech 2021) ABX codebase.
   When slicing the features to find the frames between the "onset" and "offset" of the phoneme / triphone,
   the end index is incorrect. The features have always one frame less than what they should.
-  This is especially problematic for model that have large features (40 or 80 ms).
+  This is especially problematic for models that have large features (40 or 80 ms).
   The bug is fixed in fastabx, but if you want to still keep the Libri-Light behaviour, set
   :code:`FASTABX_WITH_LIBRILIGHT_BUG=1` (see :ref:`this <librilight-bug>` for reference).
   Overall, with the bug fixed the discriminability is a bit worse.
