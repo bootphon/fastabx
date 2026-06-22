@@ -17,8 +17,16 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
     "sphinx_design",
-    "nbsphinx",
+    "sphinx_gallery.gen_gallery",
 ]
+
+sphinx_gallery_conf = {
+    "examples_dirs": "../examples",
+    "gallery_dirs": "examples/gallery",
+    "remove_config_comments": True,
+    "download_all_examples": False,
+    "write_computation_times": False,
+}
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -37,6 +45,8 @@ autodoc_typehints = "description"
 add_function_parentheses = False
 exclude_patterns = ["build"]
 html_theme = "furo"
+html_static_path = ["_static"]
+html_css_files = ["sphinx_gallery_overrides.css"]
 mathjax3_config = {"tex": {"macros": {"onset": "t_\\text{on}", "offset": "t_\\text{off}"}}}
 toc_object_entries_show_parents = "hide"
 

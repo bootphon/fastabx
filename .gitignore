@@ -7,4 +7,5 @@ __pycache__
 *.code-workspace
 .envrc
 build
+docs/examples/gallery
 .coverage

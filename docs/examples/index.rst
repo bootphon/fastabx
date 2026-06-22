@@ -4,6 +4,6 @@ Examples
 
 .. toctree::
 
-    gaussians
+    gallery/plot_gaussians
     external
     constraints
