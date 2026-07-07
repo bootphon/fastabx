@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: togitlab-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   push:
     name: Push to Gitlab

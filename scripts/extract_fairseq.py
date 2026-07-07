@@ -26,7 +26,7 @@ def read_manifest(path: Path | str) -> list[tuple[Path, int]]:
         manifest = []
         for line in f.readlines():
             file, num_samples = line.strip().split("\t")
-            manifest.append((root / file, num_samples))
+            manifest.append((root / file, int(num_samples)))
     return manifest
 
 

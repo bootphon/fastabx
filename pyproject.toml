@@ -13,10 +13,10 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
   "Operating System :: OS Independent",
-  "Programming Language :: C++",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -102,6 +102,9 @@ allow-magic-value-types = ["str", "int"]
 
 [tool.tombi.files]
 exclude = ["uv.lock"]
+
+[tool.ty.src]
+exclude = ["scripts", "docs", "examples"]
 
 [tool.typos.default.extend-words]
 IY = "IY"

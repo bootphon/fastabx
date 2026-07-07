@@ -201,7 +201,7 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
     """Error to raise when some files are missing."""
     return FileNotFoundError(
         f"{len(to_find - found)} files missing to build the Dataset. "
-        f"Only {len(found)} out of {len(to_find)} have been found. "
+        f"Only {len(found & to_find)} out of {len(to_find)} have been found. "
         "Make sure to use the correct directory and file extension."
     )
 

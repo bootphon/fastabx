@@ -23,9 +23,10 @@ repos:
   rev: 0.11.21
   hooks:
     - id: uv-lock
-- repo: https://github.com/astral-sh/uv-pre-commit
-  rev: 0.11.21
-  hooks:
-    - id: uv-lock
     - id: uv-audit
       args: [ --ignore, CVE-2025-3000]
+- repo: https://github.com/astral-sh/ty-pre-commit
+  rev: v0.0.56
+  hooks:
+    - id: ty
+      args: [ --group=test ]

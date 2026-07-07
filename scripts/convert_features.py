@@ -2,9 +2,9 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #    "tqdm>=4.67.1",
-#    "torch>=2.6",
-#    "numpy>=2.2",
-#    "h5features==1.4.1",
+#    "torch>=2.11.0",
+#    "numpy>=2.4.4",
+#    "h5features>=2.0.0",
 # ]
 # ///
 """Utility to convert h5features to torch tensors, and back, intended to be used alongside ABXpy."""
@@ -20,42 +20,39 @@ from tqdm import tqdm
 
 def torch_to_h5features(root: Path, dest: Path, step: float, group: str = "features") -> None:
     """Convert a list of torch tensors to a single h5features file."""
-    items, labels, features = [], [], []
+    items = []
     for path in sorted(root.glob("*.pt")):
         feats = torch.load(path, map_location="cpu").squeeze().numpy(force=True)
         if feats.ndim != 2:
             raise ValueError(path)
         times = np.arange(step / 2, feats.shape[0] * step, step, dtype=np.float64)
-        items.append(path.stem)
-        labels.append(times)
-        features.append(feats)
+        items.append(h5features.Item(path.stem, feats, times))
     dest.parent.mkdir(exist_ok=True, parents=True)
-    h5features.write(dest, group, items, labels, features)
+    h5features.Writer(dest, group=group).write(items)
 
 
 def torch_to_h5features_with_times(root_features: Path, root_times: Path, dest: Path, group: str = "features") -> None:
     """Convert lists of torch tensors (features and times) to a single h5features file."""
-    items, labels, features = [], [], []
+    items = []
     for path in sorted(root_features.glob("*.pt")):
         feats = torch.load(path, map_location="cpu").squeeze().numpy(force=True)
         if feats.ndim != 2:
             raise ValueError(path)
-        times = root_times / path.name
-        items.append(path.stem)
-        labels.append(times)
-        features.append(feats)
+        times = torch.load(root_times / path.name).numpy()
+        items.append(h5features.Item(path.stem, feats, times))
     dest.parent.mkdir(exist_ok=True, parents=True)
-    h5features.write(dest, group, items, labels, features)
+    h5features.Writer(dest, group=group).write(items)
 
 
 def h5features_to_torch(path: Path, root_features: Path, root_times: Path) -> None:
     """Convert a h5features file to torch tensors."""
     root_features.mkdir(exist_ok=True, parents=True)
     root_times.mkdir(exist_ok=True, parents=True)
-    times, features = h5features.read(path)
-    for item, feats in tqdm(features.items()):
-        torch.save(torch.as_tensor(feats, dtype=torch.float32), root_features / f"{item}.pt")
-        torch.save(torch.as_tensor(times[item], dtype=torch.float64), root_times / f"{item}.pt")
+    reader = h5features.Reader(path)
+    names = reader.items()
+    for item in tqdm((reader.read(name) for name in names), total=len(names)):
+        torch.save(torch.as_tensor(item.features, dtype=torch.float32), root_features / f"{item}.pt")
+        torch.save(torch.as_tensor(item.times, dtype=torch.float64), root_times / f"{item}.pt")
 
 
 if __name__ == "__main__":
