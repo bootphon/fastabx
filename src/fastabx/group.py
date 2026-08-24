@@ -166,7 +166,7 @@ def grouped_distances(
     total = targets.size(0)
     if total <= MAX_SCORE_CHUNK_ROWS:
         return distance_matrix(x, sx, targets, target_sizes, distance, use_dtw=use_dtw, symmetric=False)
-    out = x.new_empty(x.size(0), total)
+    out = x.new_empty(x.size(0), total, dtype=x.dtype if x.is_floating_point() else torch.float32)
     for start in range(0, total, MAX_SCORE_CHUNK_ROWS):
         end = min(start + MAX_SCORE_CHUNK_ROWS, total)
         chunk, chunk_sizes = targets[start:end], target_sizes[start:end]
