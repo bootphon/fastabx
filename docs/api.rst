@@ -44,9 +44,26 @@ Score
 -----
 
 .. autoclass:: fastabx.Score
-   :members: cells, collapse, details, write_csv
+   :members: cells, collapse, details, write_csv, replicates, n_replicates
 
    See :ref:`alignment` to change how sequences spanning several frames are compared.
+
+Bootstrap
+---------
+
+.. autoclass:: fastabx.Bootstrap
+   :members: weights
+
+See :ref:`bootstrap` for how to use it and what it does and does not measure.
+
+Statistics
+----------
+
+.. autofunction:: fastabx.stats.bootstrap_collapse
+
+.. autofunction:: fastabx.stats.percentile_interval
+
+.. autoclass:: fastabx.NestedBootstrapWarning
 
 Advanced
 ========
@@ -179,6 +196,8 @@ have memory to spare and the cells are small.
 - :code:`FASTABX_REDUCTION_FLUSH_COLS` (default 262144): Number of accumulated columns after which the
   per-cell reduction is flushed. Larger values amortise the reduction over more cells, at the cost of
   keeping more intermediate counts around.
+- :code:`FASTABX_BOOTSTRAP_CHUNK_ELEMS` (default 16777216): Bound, in elements, on the intermediate tensors of
+  the bootstrap contraction. Turn down if a bootstrap with many replicates runs out of memory.
 
 Exceptions
 ==========
@@ -217,12 +236,16 @@ Building a Task
 Scoring
 -------
 
+.. autoexception:: fastabx.BootstrapConstraintsError
+.. autoexception:: fastabx.BootstrapSubsampledTaskError
 .. autoexception:: fastabx.CollapseError
 .. autoexception:: fastabx.EmptyScoreError
 .. autoexception:: fastabx.IdenticalDistanceDimensionError
 .. autoexception:: fastabx.IncompatibleNormalizationError
 .. autoexception:: fastabx.InvalidLevelsError
+.. autoexception:: fastabx.InvalidResampleError
 .. autoexception:: fastabx.NaNDistanceError
+.. autoexception:: fastabx.NoBootstrapError
 .. autoexception:: fastabx.NoConstraintsError
 .. autoexception:: fastabx.PoolingNormalizedError
 

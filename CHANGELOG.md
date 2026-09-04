@@ -10,6 +10,11 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Added
 
+- Bootstrap: `Score(..., bootstrap=Bootstrap(n))` resamples the tokens of every cell, reusing the distance
+  computations of the point estimate. `fastabx.stats.bootstrap_collapse` collapses the replicates and can also
+  resample categories (speakers, contexts, phones) without rescoring. `fastabx.stats.percentile_interval`
+  gives a confidence interval from the replicates.
+- `Task.is_subsampled`.
 - CI and releases install the wheel and source distribution in clean environments and smoke-test them.
 - Documentation on hierarchical versus triplet-weighted averaging, count precision, timestamp validation
   and subsampling reproducibility.

@@ -53,6 +53,11 @@ def reduction_flush_cols() -> int:
     return positive_int_from_env("FASTABX_REDUCTION_FLUSH_COLS", 262144)
 
 
+def bootstrap_chunk_elems() -> int:
+    """Bound, in elements, on the intermediate tensors of the bootstrap contraction."""
+    return positive_int_from_env("FASTABX_BOOTSTRAP_CHUNK_ELEMS", 1 << 24)
+
+
 def resolve_device(device: str | torch.device | None) -> torch.device:
     """Resolve where the features are stored, from what the user asked for."""
     if device is None:

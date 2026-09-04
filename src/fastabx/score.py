@@ -3,20 +3,31 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
+import numpy.typing as npt
 import polars as pl
 import polars.selectors as cs
 from tqdm import tqdm
 
 from fastabx.alignment import Alignment, AlignmentName, alignment_function
+from fastabx.bootstrap import Bootstrap, BootstrapReducer
 from fastabx.cell import INDEX_COLUMNS
 from fastabx.constraints import Constraints
 from fastabx.distance import Distance, DistanceName, distance_function
-from fastabx.group import GroupReducer, group_cells
+from fastabx.group import GroupReducer, group_cells, group_distance_matrix
 from fastabx.task import Task
-from fastabx.utils import display_name, hide_progress, prefetch
+from fastabx.utils import display_name, hide_progress, max_score_chunk_rows, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
 
-__all__ = ["CollapseError", "EmptyScoreError", "IncompatibleNormalizationError", "Score"]
+__all__ = [
+    "BootstrapConstraintsError",
+    "BootstrapSubsampledTaskError",
+    "CollapseError",
+    "EmptyScoreError",
+    "IncompatibleNormalizationError",
+    "NoBootstrapError",
+    "Score",
+]
 
 
 def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
@@ -67,8 +78,38 @@ class IncompatibleNormalizationError(Exception):
         )
 
 
-def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
-    """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs."""
+class BootstrapConstraintsError(Exception):
+    """Bootstrap and constraints cannot be combined yet."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "`bootstrap` and `constraints` cannot be used together: the per-triplet constraint mask is indexed "
+            "by position in the cell, and the bootstrap reweights the items behind those positions."
+        )
+
+
+class BootstrapSubsampledTaskError(Exception):
+    """Bootstrapping a subsampled task would measure the variability of the subsample, not of the data."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "`bootstrap` cannot be used on a subsampled Task: the cells only hold a subsample of their items, so "
+            "resampling them measures the variability of that subsample, not of the data. Build the Task without "
+            "a Subsampler."
+        )
+
+
+class NoBootstrapError(Exception):
+    """The ``Score`` was built without a ``Bootstrap``, so there are no replicates to read."""
+
+    def __init__(self) -> None:
+        super().__init__("This Score has no bootstrap replicates. Build it with `Score(..., bootstrap=Bootstrap(n))`.")
+
+
+def collapse_levels(
+    cells: pl.DataFrame, levels: Sequence[tuple[str, ...] | str] | None
+) -> tuple[pl.DataFrame, list[tuple[str, ...]]]:
+    """Validate the ``levels`` of a collapse and drop the columns it never groups by (indices and ``_x`` labels)."""
     if levels is None:
         conditions = [c for c in cells.columns if c not in {"index_a", "index_b", "index_x", "score", "size"}]
         if len(conditions) != 2:
@@ -77,6 +118,12 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
     cells = cells.select(~(INDEX_COLUMNS | cs.ends_with("_x")))
     levels_in_tuples = format_score_levels(levels)
     verify_score_levels(cells.columns, levels_in_tuples)
+    return cells, levels_in_tuples
+
+
+def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
+    """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs."""
+    cells, levels_in_tuples = collapse_levels(cells, levels)
     for level in levels_in_tuples:
         group_key = cs.exclude("score", "size", *level)
         cells = cells.group_by(group_key, maintain_order=True).agg(pl.col("score").mean(), pl.col("size").sum())
@@ -90,16 +137,24 @@ def score_task(
     alignment: Alignment,
     constraints: Constraints | None = None,
     progress: bool = True,
+    bootstrap: BootstrapReducer | None = None,
 ) -> tuple[list[float | None], list[int | None]]:
     """Score each cell of a :py:class:`.Task` using a given distance and alignment, and return scores and sizes.
 
     With ``constraints``, the per-triplet mask is carried through the same grouped engine; cells left with no valid
     triplet get a ``None`` score and size.
+
+    :param bootstrap: An optional :py:class:`.BootstrapReducer`, filled **in place** with the per-replicate
+        scores. It reuses each group's distance matrix, so the replicates cost no extra distance computation.
     """
     reducer = GroupReducer(len(task), constrained=constraints is not None)
+    max_rows = max_score_chunk_rows()
     pbar = tqdm(total=len(task), desc="Scoring each cell", disable=hide_progress(progress=progress))
     for group in prefetch(group_cells(task, constraints=constraints)):
-        reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
+        distances = group_distance_matrix(group, distance, alignment, max_rows)
+        reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric, distances=distances)
+        if bootstrap is not None:
+            bootstrap.add(group, distances, is_symmetric=task.is_symmetric)
         pbar.update(len(group.positions))
     pbar.close()
     return reducer.finalize()
@@ -131,6 +186,9 @@ class Score:
         Defaults to "dtw". Bypassed entirely when the dataset is pooled, since there is nothing to align.
     :param constraints: Optional constraints to restrict the possible triplets.
     :param progress: Whether to display a progress bar while scoring the cells.
+    :param bootstrap: Optional :py:class:`.Bootstrap` scheme. When given, every cell is additionally scored on
+        ``bootstrap.n_replicates`` with-replacement resamples of its items, reusing the same distance
+        computations as the point estimate. Collapse the replicates with :py:func:`fastabx.stats.bootstrap_collapse`.
     """
 
     def __init__(
@@ -141,6 +199,7 @@ class Score:
         alignment: AlignmentName | Alignment = "dtw",
         constraints: Constraints | None = None,
         progress: bool = True,
+        bootstrap: Bootstrap | None = None,
     ) -> None:
         self.distance_name = distance_name
         self.alignment = alignment
@@ -150,10 +209,18 @@ class Score:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(display_name(distance_name))
-        scores, sizes = score_task(task, distance, alignment=align, constraints=constraints, progress=progress)
+        if bootstrap is not None and constraints is not None:
+            raise BootstrapConstraintsError
+        if bootstrap is not None and task.is_subsampled:
+            raise BootstrapSubsampledTaskError
+        reducer = BootstrapReducer(len(task), bootstrap) if bootstrap is not None else None
+        scores, sizes = score_task(
+            task, distance, alignment=align, constraints=constraints, progress=progress, bootstrap=reducer
+        )
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float64), size=pl.Series(sizes, dtype=pl.Int64)
         )
+        self._replicates = reducer.finalize() if reducer is not None else None
 
     @property
     def cells(self) -> pl.DataFrame:
@@ -163,9 +230,28 @@ class Score:
         """
         return self._cells
 
+    @property
+    def replicates(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """Per-cell token bootstrap replicates, as ``(scores, sizes)`` arrays of shape ``(num_cells, n_replicates)``.
+
+        Rows follow the order of :py:attr:`cells`. Degenerate replicates (no valid ``x != a`` pair left after
+        resampling) are ``nan`` in both arrays. Use :py:func:`fastabx.stats.bootstrap_collapse` to collapse them.
+
+        :raises NoBootstrapError: If the ``Score`` was built without a :py:class:`.Bootstrap`.
+        """
+        if self._replicates is None:
+            raise NoBootstrapError
+        return self._replicates
+
+    @property
+    def n_replicates(self) -> int:
+        """Number of bootstrap replicates, 0 when the ``Score`` was built without a :py:class:`.Bootstrap`."""
+        return 0 if self._replicates is None else self._replicates[0].shape[1]
+
     def __repr__(self) -> str:
         distance, align = display_name(self.distance_name), display_name(self.alignment)
-        return f"Score({len(self.cells)} cells, {distance} distance, {align} alignment)"
+        bootstrap = f", {self.n_replicates} bootstrap replicates" if self._replicates is not None else ""
+        return f"Score({len(self.cells)} cells, {distance} distance{bootstrap}, {align} alignment)"
 
     def write_csv(self, file: str | Path) -> None:
         """Write the results of all the cells to a CSV file.

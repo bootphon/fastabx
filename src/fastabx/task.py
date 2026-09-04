@@ -123,6 +123,11 @@ class Task:
         """Read-only view of the task's cells."""
         return self._cells
 
+    @property
+    def is_subsampled(self) -> bool:
+        """Whether the cells were built with a :py:class:`.Subsampler`."""
+        return bool(self._subsampler_description)
+
     def __len__(self) -> int:
         return len(self.cells)
 

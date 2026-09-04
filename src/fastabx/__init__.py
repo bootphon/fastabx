@@ -2,6 +2,7 @@
 
 from fastabx.accessor import Accessor, Batch, InMemoryAccessor
 from fastabx.alignment import Alignment, AlignmentName
+from fastabx.bootstrap import Bootstrap
 from fastabx.cell import Cell
 from fastabx.constraints import Constraints, NoConstraintsError, constraints_all_different
 from fastabx.dataset import (
@@ -22,7 +23,16 @@ from fastabx.distance import (
     abx_on_cell,
 )
 from fastabx.pooling import PooledDataset, PoolingName, PoolingNormalizedError, pool_dataset
-from fastabx.score import CollapseError, EmptyScoreError, IncompatibleNormalizationError, Score
+from fastabx.score import (
+    BootstrapConstraintsError,
+    BootstrapSubsampledTaskError,
+    CollapseError,
+    EmptyScoreError,
+    IncompatibleNormalizationError,
+    NoBootstrapError,
+    Score,
+)
+from fastabx.stats import InvalidResampleError, NestedBootstrapWarning
 from fastabx.subsample import Subsampler
 from fastabx.task import Task
 from fastabx.utils import InvalidEnvironmentVariableError
@@ -52,6 +62,9 @@ __all__ = [
     "Alignment",
     "AlignmentName",
     "Batch",
+    "Bootstrap",
+    "BootstrapConstraintsError",
+    "BootstrapSubsampledTaskError",
     "Cell",
     "CollapseError",
     "Constraints",
@@ -77,6 +90,7 @@ __all__ = [
     "InvalidFeaturesError",
     "InvalidItemFileError",
     "InvalidLevelsError",
+    "InvalidResampleError",
     "InvalidSpeakerOrContextError",
     "InvalidTimesError",
     "LabelReservedNameError",
@@ -84,6 +98,8 @@ __all__ = [
     "MissingLabelError",
     "MissingMaxXAcrossError",
     "NaNDistanceError",
+    "NestedBootstrapWarning",
+    "NoBootstrapError",
     "NoConstraintsError",
     "NonContiguousIndicesError",
     "NonFiniteError",
