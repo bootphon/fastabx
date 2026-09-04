@@ -42,9 +42,17 @@ Score
 -----
 
 .. autoclass:: fastabx.Score
-   :members: cells, collapse, details, write_csv
+   :members: cells, collapse, details, write_csv, n_replicates, bootstrap_collapse, confidence_interval
 
    See :ref:`alignment` to change how sequences spanning several frames are compared.
+
+Bootstrap
+---------
+
+.. autoclass:: fastabx.Bootstrap
+   :members: weights
+
+See :ref:`bootstrap` for how to use it and what it does and does not measure.
 
 Advanced
 ========
@@ -157,6 +165,7 @@ Behaviour
   match Libri-Light. Every feature will now be one frame shorter. This should be set only if you want
   to replicate previous results obtained with Libri-Light / ZeroSpeech 2021. See :ref:`slicing` for more details
   on how features are sliced.
+<<<<<<< HEAD
 - :code:`TQDM_DISABLE`: If set, every fastabx progress bar is hidden, overriding ``progress`` arguments and ``--quiet``
   flags.
 
@@ -227,3 +236,10 @@ Configuration
 -------------
 
 .. autoexception:: fastabx.InvalidEnvironmentVariableError
+=======
+- :code:`FASTABX_BOOTSTRAP_CHUNK_ELEMS`: Bound, in elements, on the intermediate tensor of the bootstrap
+  contraction. Lower it if a bootstrap run with many replicates runs out of memory. Defaults to ``16777216``.
+- :code:`FASTABX_OUTPUT`: Controls the output format of the ``fastabx`` CLI. Defaults to a human-readable
+  ``"ABX error rate: ..."`` line; set to ``json`` (or ``jsonl``) to emit a single JSON object containing
+  the score and all CLI arguments instead.
+>>>>>>> 1f3904c (bootstrap)

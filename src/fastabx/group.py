@@ -32,6 +32,10 @@ class CellGroup:
     :param mask: The optional ``(nx, na, sum(b_rows))`` per-triplet constraint mask (every cell's ``(nx, na, nb)``
         mask concatenated along the B axis, in the same order as the B blocks of ``targets``);
         ``None`` when scoring without constraints.
+    :param indices: The flat gather list the group was built from (X only when X != A, then A, then every B), kept so
+        consumers that resample the underlying items (see :py:mod:`fastabx.bootstrap`) can recover the dataset row
+        indices behind each block. Defaults to ``()`` for hand-built groups that don't need it.
+    :param nx: The X count, needed alongside ``indices`` to split off the X block when X != A.
     """
 
     x: Batch
@@ -39,6 +43,8 @@ class CellGroup:
     rows: list[int]
     positions: list[int]
     mask: Tensor | None = None
+    indices: tuple[int, ...] = ()
+    nx: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +91,15 @@ def gather_chunk(accessor: Accessor, chunk: list[GroupSpec]) -> Generator[CellGr
         else:
             x, targets = Batch(data[: spec.nx], sizes[: spec.nx]), Batch(data[spec.nx :], sizes[spec.nx :])
         mask = None if spec.mask is None else torch.from_numpy(spec.mask).to(accessor.device)
-        yield CellGroup(x=x, targets=targets, rows=spec.rows, positions=spec.positions, mask=mask)
+        yield CellGroup(
+            x=x,
+            targets=targets,
+            rows=spec.rows,
+            positions=spec.positions,
+            mask=mask,
+            indices=tuple(spec.indices),
+            nx=spec.nx,
+        )
 
 
 def group_cells(task: Task, *, constraints: Constraints | None = None) -> Generator[CellGroup, None, None]:
@@ -179,6 +193,45 @@ def grouped_distances(
     return out
 
 
+def group_distance_matrix(group: CellGroup, distance: Distance, alignment: Alignment, max_rows: int) -> Tensor:
+    """Compute the ``(nx, na + sum(b_rows))`` distance matrix of a group, X against every target.
+
+    Split out of :py:meth:`GroupReducer.add` so a single distance computation can feed several reducers
+    (the point estimate and the bootstrap replicates) instead of being repeated per consumer.
+    """
+    return grouped_distances(
+        group.x.data,
+        group.x.sizes,
+        group.targets.data,
+        group.targets.sizes,
+        distance,
+        alignment=alignment,
+        max_rows=max_rows,
+    )
+
+
+def group_pools(
+    group: CellGroup, *, is_symmetric: bool
+) -> tuple[tuple[int, ...], tuple[int, ...], list[tuple[int, ...]]]:
+    """Split a group's flat gather list back into the X pool, the A pool, and one B pool per cell.
+
+    These are dataset row indices, so consumers can identify *which items* a block is made of, not just how many.
+    For a symmetric group X and A are the same pool and the same object is returned twice.
+    """
+    na, indices = group.rows[0], group.indices
+    if is_symmetric:
+        index_x = index_a = indices[:na]
+        offset = na
+    else:
+        index_x, index_a = indices[: group.nx], indices[group.nx : group.nx + na]
+        offset = group.nx + na
+    blocks = []
+    for nb in group.rows[1:]:
+        blocks.append(indices[offset : offset + nb])
+        offset += nb
+    return index_x, index_a, blocks
+
+
 def grouped_contributions(dxa: Tensor, dxb_all: Tensor, mask: Tensor | None = None) -> Tensor:
     """Per-B-column ABX contribution of a group: ``0.5 * (1 - sign(dxa - dxb))`` summed over the X and A axes.
 
@@ -219,23 +272,26 @@ class GroupReducer:
         self._flush_cols = reduction_flush_cols()
         self._max_score_rows = max_score_chunk_rows()
 
-    def add(self, group: CellGroup, distance: Distance, *, alignment: Alignment, is_symmetric: bool) -> None:
+    def add(
+        self,
+        group: CellGroup,
+        distance: Distance,
+        *,
+        alignment: Alignment,
+        is_symmetric: bool,
+        distances: Tensor | None = None,
+    ) -> None:
         """Register a group's distance matrix: keep its per-B counts, record per-cell metadata, flush if full.
 
         :param group: The group's gathered data and metadata.
         :param distance: The distance function to use.
         :param alignment: The alignment used to reduce the frame-level cost lattice to one distance per pair.
         :param is_symmetric: Whether the group is symmetric (X == A) or not.
+        :param distances: The group's already-computed distance matrix, to avoid recomputing it when another
+            reducer needs it too. Computed from ``distance`` when omitted.
         """
-        distances = grouped_distances(
-            group.x.data,
-            group.x.sizes,
-            group.targets.data,
-            group.targets.sizes,
-            distance,
-            alignment=alignment,
-            max_rows=self._max_score_rows,
-        )
+        if distances is None:
+            distances = group_distance_matrix(group, distance, alignment, self._max_score_rows)
         na, nx = group.rows[0], group.x.data.size(0)
         dxa = distances[:, :na]
         if is_symmetric:

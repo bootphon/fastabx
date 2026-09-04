@@ -10,6 +10,9 @@ import torch
 
 __all__ = ["InvalidEnvironmentVariableError"]
 
+# Bound on the ``(n_replicates, na, chunk)`` intermediate of the bootstrap contraction, in elements.
+BOOTSTRAP_CHUNK_ELEMS = int(os.getenv("FASTABX_BOOTSTRAP_CHUNK_ELEMS", str(1 << 24)))
+
 
 class InvalidEnvironmentVariableError(ValueError):
     """A ``FASTABX_*`` environment variable does not hold the kind of value it expects."""

@@ -233,6 +233,15 @@ def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
         raise InputTypeError(int, type(seed))
 
 
+def verify_bootstrap_params(n_replicates: int, *, seed: int) -> None:
+    """Check that the number of replicates is a positive integer."""
+    if not isinstance(n_replicates, int) or isinstance(n_replicates, bool) or n_replicates < 1:
+        msg = "n_replicates should be an integer >= 1"
+        raise TypeError(msg)
+    if not isinstance(seed, int):
+        raise InputTypeError(int, type(seed))
+
+
 class CellErrorType(enum.Enum):
     """All types of errors coming from a ``Cell``."""
 

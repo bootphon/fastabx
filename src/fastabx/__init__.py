@@ -2,6 +2,7 @@
 
 from fastabx.accessor import Accessor, Batch, InMemoryAccessor
 from fastabx.alignment import Alignment, AlignmentName
+from fastabx.bootstrap import Bootstrap
 from fastabx.cell import Cell
 from fastabx.constraints import Constraints, NoConstraintsError, constraints_all_different
 from fastabx.dataset import (
@@ -41,6 +42,7 @@ __all__ = [
     "Alignment",
     "AlignmentName",
     "Batch",
+    "Bootstrap",
     "Cell",
     "CollapseError",
     "Constraints",
