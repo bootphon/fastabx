@@ -18,7 +18,7 @@ def _build_dataset(distance: DistanceName) -> Dataset:
     features = rng.standard_normal((n, d)).astype(np.float32)
     if distance == "kl_symmetric":
         features = np.abs(features) + 0.1
-        features = features / features.sum(1, keepdims=True)
+        features /= features.sum(1, keepdims=True)
     if distance == "identical":
         features = (np.arange(n) % 4).reshape(-1, 1).astype(np.float32)
     phones = ["a", "b", "c"] * 12

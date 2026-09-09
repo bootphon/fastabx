@@ -87,8 +87,8 @@ class Task:
         task.by = []
         task.across = []
         task.is_symmetric = is_symmetric
-        task._subsampler_description = ""  # noqa: SLF001
-        task._cells = cells  # noqa: SLF001
+        task._subsampler_description = ""  # ruff: ignore[private-member-access]
+        task._cells = cells  # ruff: ignore[private-member-access]
         return task
 
     @property

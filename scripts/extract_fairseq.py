@@ -34,8 +34,7 @@ def fairseq_to_torch(output: Path, tsv: Path, npy_file: Path, len_file: Path) ->
     """Extract concatenated fairseq features."""
     output.mkdir(exist_ok=True)
     manifest = read_manifest(tsv)
-    with Path(len_file).open("r") as file:
-        lengths = [int(length) for length in file.read().splitlines()]
+    lengths = [int(length) for length in Path(len_file).read_text(encoding="utf-8").splitlines()]
     fairseq_feats, start_idx = np.load(npy_file, mmap_mode="r+"), 0
     already_seen = set()
     for length, (file, _) in tqdm(list(zip(lengths, manifest, strict=True))):

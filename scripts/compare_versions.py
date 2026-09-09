@@ -5,7 +5,6 @@
 # ]
 # ///
 
-# ruff: noqa: S603
 """Compare the currently installed fastabx against a reference version from PyPI.
 
 Calls :func:`fastabx.zerospeech.zerospeech_abx` with the exact same arguments and options against:
@@ -93,7 +92,7 @@ def run_both_versions(
     runs: int,
 ) -> tuple[float, list[float], float, list[float]]:
     """Run both the reference and current versions, returning their scores and elapsed times."""
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".py", delete=False) as f:
         f.write(RUNNER)
         runner = f.name
     try:

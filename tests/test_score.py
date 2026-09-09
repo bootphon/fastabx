@@ -213,5 +213,5 @@ def test_score_details_single_level_aggregates_correctly() -> None:
             strict=True,
         )
     )
-    assert rows[("a", "b")] == pytest.approx(0.2, abs=1e-6)
-    assert rows[("b", "a")] == pytest.approx(0.3, abs=1e-6)
+    assert rows["a", "b"] == pytest.approx(0.2, abs=1e-6)
+    assert rows["b", "a"] == pytest.approx(0.3, abs=1e-6)

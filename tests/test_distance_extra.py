@@ -67,10 +67,10 @@ def test_identical_known_values() -> None:
     b = torch.tensor([[[1.0]], [[3.0]]])
     out = identical_distance(a, b)
     assert out.shape == (2, 2, 1, 1)
-    assert out[0, 0, 0, 0].item() == 0.0
-    assert out[0, 1, 0, 0].item() == 1.0
-    assert out[1, 0, 0, 0].item() == 1.0
-    assert out[1, 1, 0, 0].item() == 1.0
+    assert out[0, 0, 0, 0] == torch.tensor([0.0])
+    assert out[0, 1, 0, 0] == torch.tensor([1.0])
+    assert out[1, 0, 0, 0] == torch.tensor([1.0])
+    assert out[1, 1, 0, 0] == torch.tensor([1.0])
 
 
 def test_kl_symmetric_zero_distance_for_same_distribution() -> None:
@@ -113,8 +113,8 @@ def test_angular_output_in_unit_interval() -> None:
     rng = torch.Generator().manual_seed(0)
     a = torch.randn(5, 1, 8, generator=rng)
     b = torch.randn(4, 1, 8, generator=rng)
-    a = a / a.norm(dim=-1, keepdim=True)
-    b = b / b.norm(dim=-1, keepdim=True)
+    a /= a.norm(dim=-1, keepdim=True)
+    b /= b.norm(dim=-1, keepdim=True)
     out = angular_distance(a, b)
     assert (out >= 0).all()
     assert (out <= 1).all()

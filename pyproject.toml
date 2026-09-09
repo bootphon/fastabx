@@ -80,31 +80,65 @@ testpaths = ["tests"]
 line-length = 119
 
 [tool.ruff.lint]
-select = ["ALL"]
+preview = true
+select = [
+  "correctness",
+  "suspicious",
+  "complexity",
+  "performance",
+  "style",
+  "security",
+  "pedantic",
+  "formatting",
+]
 ignore = [
-  "COM812",  # missing-trailing-comma
-  "D105",  # undocumented-magic-method
-  "D107",  # undocumented-public-init
-  "D203",  # incorrect-blank-line-before-class
-  "D213",  # multi-line-summary-second-line
-  "PLR0913",  # too-many-arguments
+  "docstring-missing-exception",
+  "docstring-missing-returns",
+  "docstring-missing-yields",
+  "incorrect-blank-line-before-class",
+  "missing-copyright-notice",
+  "missing-trailing-comma",
+  "multi-line-summary-second-line",
+  "subprocess-without-shell-equals-true",
+  "suspicious-subprocess-import",
+  "too-many-arguments",
+  "too-many-positional-arguments",
+  "undocumented-magic-method",
+  "undocumented-public-init",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D103", "EM101", "PLC0415", "S101", "S603", "T201"]
-"examples/*" = ["D", "E501", "INP001"]
-
-[tool.ruff.lint.flake8-self]
-ignore-names = ["_check"]
+"docs/conf.py" = [
+  "builtin-variable-shadowing",
+  "implicit-namespace-package",
+]
+"tests/*" = [
+  "undocumented-public-function",
+  "import-outside-top-level",
+]
+"examples/*" = [
+  "D",
+  "line-too-long",
+  "implicit-namespace-package",
+]
+"scripts/check_features_and_item.py" = [
+  "undocumented-public-class",
+  "undocumented-public-method",
+  "undocumented-public-function",
+]
+"scripts/compare_versions.py" = [
+  "too-many-locals",
+]
 
 [tool.ruff.lint.pylint]
 allow-magic-value-types = ["str", "int"]
 
-[tool.tombi.files]
-exclude = ["uv.lock"]
-
 [tool.ty.src]
-exclude = ["scripts", "docs", "examples"]
+exclude = [
+  "scripts",
+  "docs",
+  "examples",
+]
 
 [tool.typos.default.extend-words]
 IY = "IY"

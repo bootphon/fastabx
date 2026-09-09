@@ -1,4 +1,3 @@
-# ruff: noqa: INP001, A001
 """Sphinx configuration."""
 
 import functools

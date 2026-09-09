@@ -34,7 +34,7 @@ def print_fastabx_output(score: float, **kwargs: str | int) -> None:
             output = json.dumps(kwargs | {"score": score})
         case _:
             output = f"ABX error rate: {score:.3%}"
-    print(output)  # noqa: T201
+    print(output)
 
 
 def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Generator[T, None, None]:
@@ -55,7 +55,7 @@ def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Generator[T, None, N
                 if stop.is_set():
                     break
                 q.put(item)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # ruff: ignore[blind-except]
             q.put(e)
         finally:
             q.put(sentinel)

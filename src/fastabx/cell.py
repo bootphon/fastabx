@@ -41,7 +41,7 @@ class Cell:
 
     @property
     def num_triplets(self) -> int:
-        """Get the number of triplets in the cell."""
+        """Number of triplets in the cell."""
         nx = self.a.data.size(0) - 1 if self.is_symmetric else self.x.data.size(0)
         return self.a.data.size(0) * self.b.data.size(0) * nx
 

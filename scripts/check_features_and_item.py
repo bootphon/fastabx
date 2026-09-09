@@ -1,6 +1,5 @@
 """Check that the configuration of the convolutions is compatible with the item file."""
 
-# ruff: noqa: D101, D102, D103, S603, T201
 import argparse
 import subprocess
 import uuid

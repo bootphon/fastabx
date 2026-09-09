@@ -120,7 +120,7 @@ class Score:
 
     @property
     def cells(self) -> pl.DataFrame:
-        """Return the scored cells."""
+        """Scored cells."""
         return self._cells
 
     def __repr__(self) -> str:

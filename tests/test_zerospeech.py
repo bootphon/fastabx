@@ -60,7 +60,7 @@ def test_zerospeech(
     """Test reproducibility."""
     if (speaker, context) not in REFERENCE_SCORES[item.name]:
         pytest.skip(f"Configuration not supported for {item.stem}: {speaker} speaker, {context} context")
-    reference = REFERENCE_SCORES[item.name][(speaker, context)]
+    reference = REFERENCE_SCORES[item.name][speaker, context]
     score = zerospeech_abx(
         item,
         features,

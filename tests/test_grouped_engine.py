@@ -230,10 +230,10 @@ def test_prefetch_reraises_producer_exception() -> None:
     def gen() -> Iterable[int]:
         yield 1
         yield 2
-        raise BadError("boom")
+        raise BadError
 
     seen: list[int] = []
-    with pytest.raises(BadError, match="boom"):
+    with pytest.raises(BadError):
         seen.extend(prefetch(gen()))
     # We should have at least consumed the items produced before the exception.
     assert 1 in seen

@@ -42,8 +42,8 @@ def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tens
     p, q = a1.view(n1 * s1, d), a2.view(n2 * s2, d)
     log_p = (p + epsilon).log()
     log_q = (q + epsilon).log()
-    log_p = log_p - log_p.mean(1, keepdim=True)
-    log_q = log_q - log_q.mean(1, keepdim=True)
+    log_p -= log_p.mean(1, keepdim=True)
+    log_q -= log_q.mean(1, keepdim=True)
     self_p = (p * log_p).sum(1).unsqueeze(1)
     self_q = (q * log_q).sum(1).unsqueeze(0)
     cross = p @ log_q.T + log_p @ q.T
