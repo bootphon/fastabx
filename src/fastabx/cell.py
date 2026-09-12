@@ -46,11 +46,8 @@ class Cell:
         return self.a.data.size(0) * self.b.data.size(0) * nx
 
     @property
-    def use_dtw(self) -> bool:
-        """Whether or not to use the DTW when computing the distances for this cell.
-
-        We don't need DTW if all samples in the cell have a time dimension of 1.
-        """
+    def needs_alignment(self) -> bool:
+        """Whether any sample in this cell spans several frames, and so has to be aligned."""
         return not (1 == self.a.data.size(1) == self.b.data.size(1) == self.x.data.size(1))
 
     def __len__(self) -> int:

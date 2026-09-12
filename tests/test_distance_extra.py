@@ -161,7 +161,7 @@ def test_distance_matrix_no_dtw_squeezes() -> None:
     a = torch.randn(3, 1, 5)
     b = torch.randn(4, 1, 5)
     sa, sb = torch.tensor([1, 1, 1], dtype=torch.int32), torch.tensor([1, 1, 1, 1], dtype=torch.int32)
-    out = distance_matrix(a, sa, b, sb, euclidean_distance, use_dtw=False, symmetric=False)
+    out = distance_matrix(a, sa, b, sb, euclidean_distance, alignment=dtw_batch, symmetric=False)
     assert out.shape == (3, 4)
     expected = euclidean_distance(a, b).squeeze(2, 3)
     assert_close(out, expected)
@@ -173,7 +173,7 @@ def test_distance_matrix_dtw_matches_torchdtw() -> None:
     b = torch.randn(2, 4, 4, generator=rng)
     sa = torch.tensor([3, 2], dtype=torch.int32)
     sb = torch.tensor([4, 3], dtype=torch.int32)
-    out = distance_matrix(a, sa, b, sb, euclidean_distance, use_dtw=True, symmetric=False)
+    out = distance_matrix(a, sa, b, sb, euclidean_distance, alignment=dtw_batch, symmetric=False)
     expected = dtw_batch(euclidean_distance(a, b), sa, sb, symmetric=False)
     assert_close(out, expected)
 
@@ -182,8 +182,8 @@ def test_distance_matrix_symmetric_flag_passed_through() -> None:
     rng = torch.Generator().manual_seed(0)
     a = torch.randn(3, 3, 4, generator=rng)
     sa = torch.tensor([3, 2, 3], dtype=torch.int32)
-    sym = distance_matrix(a, sa, a, sa, euclidean_distance, use_dtw=True, symmetric=True)
-    asym = distance_matrix(a, sa, a, sa, euclidean_distance, use_dtw=True, symmetric=False)
+    sym = distance_matrix(a, sa, a, sa, euclidean_distance, alignment=dtw_batch, symmetric=True)
+    asym = distance_matrix(a, sa, a, sa, euclidean_distance, alignment=dtw_batch, symmetric=False)
     # Same numerical contract; symmetric=True only changes how torchdtw fills the upper triangle.
     assert sym.shape == asym.shape == (3, 3)
     # Diagonal is the self-DTW cost, which equals the sum of pointwise self-distances on the path

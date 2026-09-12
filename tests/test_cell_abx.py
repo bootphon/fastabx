@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import torch
 from torch.testing import assert_close
+from torchdtw import dtw_batch
 
 from fastabx import Dataset
 from fastabx.cell import MIN_A_LEN, Cell
@@ -120,8 +121,8 @@ def test_abx_on_cell_grouped_matches_per_cell_for_sequential(seq_dataset: Datase
     from fastabx.score import score_task
 
     task = Task(seq_dataset, on="phone", by=["context"], across=["speaker"])
-    assert any(cell.use_dtw for cell in task)
-    grouped_scores, grouped_sizes = score_task(task, distance_function("euclidean"))
+    assert any(cell.needs_alignment for cell in task)
+    grouped_scores, grouped_sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     for i, cell in enumerate(task):
         per_cell = float(abx_on_cell(cell, "euclidean"))
         assert grouped_scores[i] == per_cell  # bit-identical
@@ -173,13 +174,13 @@ def test_cell_num_triplets_asymmetric_and_symmetric() -> None:
     assert cell_sym.num_triplets == 4 * 2 * (4 - 1)
 
 
-def test_cell_use_dtw_property() -> None:
+def test_cell_needs_alignment_property() -> None:
     pooled_a = _make_pooled_batch(np.zeros((2, 3), dtype=np.float32))
     seq_a = _make_seq_batch([np.zeros((2, 3), dtype=np.float32), np.zeros((3, 3), dtype=np.float32)])
     pooled_cell = Cell(a=pooled_a, b=pooled_a, x=pooled_a, header="h", description="d", is_symmetric=False)
     seq_cell = Cell(a=seq_a, b=seq_a, x=seq_a, header="h", description="d", is_symmetric=False)
-    assert pooled_cell.use_dtw is False
-    assert seq_cell.use_dtw is True
+    assert pooled_cell.needs_alignment is False
+    assert seq_cell.needs_alignment is True
 
 
 def test_cell_min_a_len_constant() -> None:

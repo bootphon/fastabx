@@ -1,5 +1,6 @@
 """Full ABX."""
 
+from fastabx.alignment import Alignment, AlignmentName
 from fastabx.cell import Cell
 from fastabx.constraints import Constraints, constraints_all_different
 from fastabx.dataset import Batch, Dataset, InMemoryAccessor
@@ -11,6 +12,8 @@ from fastabx.task import Task
 from fastabx.zerospeech import zerospeech_abx
 
 __all__ = [
+    "Alignment",
+    "AlignmentName",
     "Batch",
     "Cell",
     "Constraints",

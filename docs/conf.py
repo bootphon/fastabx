@@ -41,6 +41,7 @@ version = parse(metadata(project)["Version"]).base_version
 release = version
 
 autodoc_typehints = "description"
+autodoc_preserve_defaults = True
 add_function_parentheses = False
 exclude_patterns = ["build"]
 html_theme = "furo"

@@ -34,6 +34,8 @@ Score
 .. autoclass:: fastabx.Score
    :members: cells, collapse, details, write_csv
 
+   See :ref:`alignment` to change how sequences spanning several frames are compared.
+
 Advanced
 ========
 
@@ -42,9 +44,10 @@ Pooling
 
 Pooling collapses the frame-level features of each token into a single vector, so that every token is
 represented by one fixed-size embedding instead of a variable-length sequence. This is useful when you
-want token-level (rather than frame-level) representations: the comparison no longer relies on DTW, which
-makes the distance computation faster. Two methods are available: ``"mean"`` averages the frames, and
-``"hamming"`` averages them using a Hamming window (giving less weight to the boundary frames).
+want token-level (rather than frame-level) representations: the comparison no longer needs an
+:ref:`alignment <alignment>`, which makes the distance computation faster. Two methods are available:
+``"mean"`` averages the frames, and ``"hamming"`` averages them using a Hamming window (giving less
+weight to the boundary frames).
 
 .. autofunction:: fastabx.pool_dataset
 
@@ -59,7 +62,7 @@ Cell
 ----
 
 .. autoclass:: fastabx.Cell
-   :members: num_triplets, use_dtw
+   :members: num_triplets, needs_alignment
 
 Distance
 --------
@@ -76,7 +79,38 @@ Distance
    :canonical: fastabx.distance.Distance
 
    Type alias for ``Callable[[torch.Tensor, torch.Tensor], torch.Tensor]``: a function taking two batches
-   of representations and returning their pairwise distances.
+   of representations and returning their pairwise **frame-level** distances, as a ``(n1, n2, s1, s2)``
+   cost lattice. Reducing that lattice to one distance per pair of sequences is the job of an
+   :ref:`alignment <alignment>`.
+
+.. _alignment:
+
+Alignment
+---------
+
+A :py:class:`.Distance` compares individual frames while an ``Alignment`` turns the resulting ``(n1, n2, s1, s2)``
+cost lattice into the ``(n1, n2)`` distance between the sequences themselves. Dynamic time warping is the
+default. When every sample has a single frame (a pooled dataset, see `Pooling`_), the alignment is bypassed and the
+frame cost is used directly.
+
+.. py:class:: fastabx.AlignmentName
+   :canonical: fastabx.alignment.AlignmentName
+
+   Type alias for ``Literal["dtw"]``, the only alignment available for now.
+
+.. autoclass:: fastabx.Alignment()
+   :members: __call__
+
+   Anywhere an ``AlignmentName`` is accepted, a custom callable satisfying this protocol is accepted too.
+   The lattice and the two length tensors are passed positionally, so an implementation may name them freely.
+   Extension entry-point for alignments that fastabx does not ship, such as an edit distance:
+
+   .. code-block:: python
+
+      def edit(cost: Tensor, sx: Tensor, sy: Tensor, *, symmetric: bool) -> Tensor:
+          ...  # your dynamic program over the lattice
+
+      Score(task, "identical", alignment=edit)
 
 Constraints
 -----------

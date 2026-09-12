@@ -8,6 +8,7 @@ import polars as pl
 import polars.selectors as cs
 from tqdm import tqdm
 
+from fastabx.alignment import Alignment, AlignmentName, alignment_function
 from fastabx.constraints import Constraints
 from fastabx.distance import Distance, DistanceName, distance_function
 from fastabx.group import GroupReducer, group_cells
@@ -68,9 +69,11 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
 def score_task(
     task: Task,
     distance: Distance,
+    *,
+    alignment: Alignment,
     constraints: Constraints | None = None,
 ) -> tuple[list[float | None], list[int | None]]:
-    """Score each cell of a :py:class:`.Task` using a given distance, and return scores and sizes.
+    """Score each cell of a :py:class:`.Task` using a given distance and alignment, and return scores and sizes.
 
     With ``constraints``, the per-triplet mask is carried through the same grouped engine; cells left with no valid
     triplet get a ``None`` score and size.
@@ -78,8 +81,8 @@ def score_task(
     reducer = GroupReducer(len(task), constrained=constraints is not None)
     disable_tqdm = len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")
     pbar = tqdm(total=len(task), desc="Scoring each cell", disable=bool(disable_tqdm))
-    for group in prefetch(group_cells(task, constraints)):
-        reducer.add(group, distance, is_symmetric=task.is_symmetric)
+    for group in prefetch(group_cells(task, constraints=constraints)):
+        reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
         pbar.update(len(group.positions))
     pbar.close()
     return reducer.finalize()
@@ -103,17 +106,29 @@ class Score:
     :param task: The :py:class:`.Task` to score.
     :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl_symmetric"
         or "identical". Defaults to "angular".
+    :param alignment: How to reduce the frame-level cost lattice to one distance per pair of sequences,
+        either the name of a built-in alignment ("dtw") or a custom :py:class:`.Alignment`.
+        Defaults to "dtw". Bypassed entirely when the dataset is pooled, since there is nothing to align.
     :param constraints: Optional constraints to restrict the possible triplets.
     """
 
-    def __init__(self, task: Task, distance_name: DistanceName, *, constraints: Constraints | None = None) -> None:
+    def __init__(
+        self,
+        task: Task,
+        distance_name: DistanceName,
+        *,
+        alignment: AlignmentName | Alignment = "dtw",
+        constraints: Constraints | None = None,
+    ) -> None:
         self.distance_name = distance_name
+        self.alignment = alignment
         distance = distance_function(distance_name)
+        align = alignment_function(alignment)
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(distance_name)
-        scores, sizes = score_task(task, distance, constraints)
+        scores, sizes = score_task(task, distance, alignment=align, constraints=constraints)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
         )
@@ -124,7 +139,9 @@ class Score:
         return self._cells
 
     def __repr__(self) -> str:
-        return f"Score({len(self.cells)} cells, {self.distance_name} distance)"
+        align = self.alignment
+        name = align if isinstance(align, str) else getattr(align, "__name__", type(align).__name__)
+        return f"Score({len(self.cells)} cells, {self.distance_name} distance, {name} alignment)"
 
     def write_csv(self, file: str | Path) -> None:
         """Write the results of all the cells to a CSV file.

@@ -41,7 +41,7 @@ def tiny_dataset() -> Dataset:
 
 @pytest.fixture
 def seq_dataset() -> Dataset:
-    """Dataset with variable time lengths per item (forces use_dtw=True)."""
+    """Dataset with variable time lengths per item (forces needs_alignment=True)."""
     rng = np.random.default_rng(1)
     d = 3
     phones = ["a", "b", "c"] * 6

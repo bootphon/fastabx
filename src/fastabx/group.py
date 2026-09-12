@@ -9,6 +9,7 @@ import polars as pl
 import torch
 from torch import Tensor
 
+from fastabx.alignment import Alignment
 from fastabx.constraints import Constraints, NoConstraintsError, apply_constraints
 from fastabx.dataset import Batch, InMemoryAccessor
 from fastabx.distance import Distance, distance_matrix
@@ -87,7 +88,7 @@ def gather_chunk(accessor: InMemoryAccessor, chunk: list[GroupSpec]) -> Generato
         yield CellGroup(x=x, targets=targets, rows=spec.rows, positions=spec.positions, mask=mask)
 
 
-def group_cells(task: Task, constraints: Constraints | None = None) -> Generator[CellGroup, None, None]:
+def group_cells(task: Task, *, constraints: Constraints | None = None) -> Generator[CellGroup, None, None]:
     """Yield groups of cells sharing the same X and A sample sets, gathering many groups per ``batched`` call.
 
     Each group's targets (A first, then every cell's B, with X prepended when X != A) are concatenated into a single
@@ -148,7 +149,7 @@ def grouped_distances(
     target_sizes: Tensor,
     distance: Distance,
     *,
-    use_dtw: bool,
+    alignment: Alignment,
 ) -> Tensor:
     """Distance matrix between the shared ``x`` and every target of a group, in as few launches as possible.
 
@@ -160,17 +161,18 @@ def grouped_distances(
         then every cell's B samples; built in one gather by :py:func:`fastabx.group.group_cells`).
     :param target_sizes: The real lengths of the targets.
     :param distance: The distance function to use.
-    :param use_dtw: Whether to use DTW or not. DTW is needed unless every sample is pooled (time dimension of 1).
+    :param alignment: The alignment used to reduce the frame-level cost lattice to one distance per pair.
+        Bypassed when every sample is pooled (time dimension of 1).
     :returns: A ``(x.size(0), targets.size(0))`` tensor of distances in the target order.
     """
     total = targets.size(0)
     if total <= MAX_SCORE_CHUNK_ROWS:
-        return distance_matrix(x, sx, targets, target_sizes, distance, use_dtw=use_dtw, symmetric=False)
+        return distance_matrix(x, sx, targets, target_sizes, distance, alignment=alignment, symmetric=False)
     out = x.new_empty(x.size(0), total, dtype=x.dtype if x.is_floating_point() else torch.float32)
     for start in range(0, total, MAX_SCORE_CHUNK_ROWS):
         end = min(start + MAX_SCORE_CHUNK_ROWS, total)
         chunk, chunk_sizes = targets[start:end], target_sizes[start:end]
-        out[:, start:end] = distance_matrix(x, sx, chunk, chunk_sizes, distance, use_dtw=use_dtw, symmetric=False)
+        out[:, start:end] = distance_matrix(x, sx, chunk, chunk_sizes, distance, alignment=alignment, symmetric=False)
     return out
 
 
@@ -212,11 +214,12 @@ class GroupReducer:
         self._nb: list[int] = []  # number of B per cell
         self._cols = 0
 
-    def add(self, group: CellGroup, distance: Distance, *, is_symmetric: bool) -> None:
+    def add(self, group: CellGroup, distance: Distance, *, alignment: Alignment, is_symmetric: bool) -> None:
         """Register a group's distance matrix: keep its per-B counts, record per-cell metadata, flush if full.
 
         :param group: The group's gathered data and metadata.
         :param distance: The distance function to use.
+        :param alignment: The alignment used to reduce the frame-level cost lattice to one distance per pair.
         :param is_symmetric: Whether the group is symmetric (X == A) or not.
         """
         distances = grouped_distances(
@@ -225,7 +228,7 @@ class GroupReducer:
             group.targets.data,
             group.targets.sizes,
             distance,
-            use_dtw=group.targets.data.size(1) > 1 or group.x.data.size(1) > 1,
+            alignment=alignment,
         )
         na, nx = group.rows[0], group.x.data.size(0)
         dxa = distances[:, :na]

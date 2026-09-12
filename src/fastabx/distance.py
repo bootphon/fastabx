@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 from torchdtw import dtw_batch
 
+from fastabx.alignment import Alignment
 from fastabx.cell import Cell
 
 __all__ = ["Distance", "DistanceName", "abx_on_cell"]
@@ -80,16 +81,25 @@ def distance_matrix(
     sy: Tensor,
     distance: Distance,
     *,
-    use_dtw: bool,
+    alignment: Alignment,
     symmetric: bool,
 ) -> torch.Tensor:
-    """Compute the ``(nx, ny)`` distance matrix between all X and all Y, with or without DTW."""
-    if use_dtw:
-        return dtw_batch(distance(x, y), sx, sy, symmetric=symmetric)
-    return distance(x, y).squeeze(2, 3)
+    """Compute the ``(nx, ny)`` distance matrix between all X and all Y.
+
+    ``distance`` builds the frame-level cost lattice and ``alignment`` reduces it to one distance per pair.
+    """
+    cost = distance(x, y)
+    if cost.size(2) == 1 and cost.size(3) == 1:
+        return cost.squeeze(2, 3)
+    return alignment(cost, sx, sy, symmetric=symmetric)
 
 
-def abx_on_cell(cell: Cell, distance_name: DistanceName = "angular") -> torch.Tensor:
+def abx_on_cell(
+    cell: Cell,
+    distance_name: DistanceName = "angular",
+    *,
+    alignment: Alignment = dtw_batch,
+) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``.
 
     .. warning::
@@ -102,14 +112,16 @@ def abx_on_cell(cell: Cell, distance_name: DistanceName = "angular") -> torch.Te
     :param cell: The cell to compute the ABX on.
     :param distance_name: The name of the distance to use. Defaults to "angular".
         Must be one of "euclidean", "cosine", "angular", "kl_symmetric", "identical".
+    :param alignment: How to align sequences that span several frames, as an :py:class:`.Alignment` callable.
+        Defaults to ``torchdtw.dtw_batch``. Never called on the distance matrices whose lattice is ``1x1``.
     """
     distance = distance_function(distance_name)
-    use_dtw, symmetric = cell.use_dtw, cell.is_symmetric
+    symmetric = cell.is_symmetric
     x, a, b = cell.x, cell.a, cell.b
-    dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, use_dtw=use_dtw, symmetric=symmetric)
+    dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, alignment=alignment, symmetric=symmetric)
     if symmetric:
         dxa.fill_diagonal_(float("inf"))
-    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, use_dtw=use_dtw, symmetric=False)
+    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
     nx, na = dxa.size()
     nx, nb = dxb.size()
     sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))

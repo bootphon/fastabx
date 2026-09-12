@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import torch
 from torch.testing import assert_close
+from torchdtw import dtw_batch
 
 from fastabx import Dataset, Task
 from fastabx.constraints import constraints_all_different
@@ -57,7 +58,7 @@ def test_score_task_matches_abx_on_cell(distance: DistanceName, *, with_across: 
     by = ["context"]
     across = ["speaker"] if with_across else []
     task = Task(dataset, on="phone", by=by, across=across)
-    grouped_scores, grouped_sizes = score_task(task, distance_function(distance))
+    grouped_scores, grouped_sizes = score_task(task, distance_function(distance), alignment=dtw_batch)
     for i, cell in enumerate(task):
         per_cell = float(abx_on_cell(cell, distance))
         # Plan's central claim: "grouped == per-cell, bit-for-bit".
@@ -111,9 +112,9 @@ def test_max_score_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> Non
     """Forcing tiny score-chunk rows must not change the output of score_task."""
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
-    baseline_scores, baseline_sizes = score_task(task, distance_function("euclidean"))
+    baseline_scores, baseline_sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     monkeypatch.setattr("fastabx.group.MAX_SCORE_CHUNK_ROWS", 4)
-    chunked_scores, chunked_sizes = score_task(task, distance_function("euclidean"))
+    chunked_scores, chunked_sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert baseline_scores == chunked_scores
     assert baseline_sizes == chunked_sizes
 
@@ -121,18 +122,18 @@ def test_max_score_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_gather_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
-    baseline_scores, _ = score_task(task, distance_function("euclidean"))
+    baseline_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     monkeypatch.setattr("fastabx.group.GATHER_CHUNK_ROWS", 4)
-    chunked_scores, _ = score_task(task, distance_function("euclidean"))
+    chunked_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert baseline_scores == chunked_scores
 
 
 def test_reduction_flush_cols_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
-    baseline_scores, _ = score_task(task, distance_function("euclidean"))
+    baseline_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     monkeypatch.setattr("fastabx.group.REDUCTION_FLUSH_COLS", 2)
-    flushed_scores, _ = score_task(task, distance_function("euclidean"))
+    flushed_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     for a, b in zip(baseline_scores, flushed_scores, strict=True):
         assert_close(a, b, atol=1e-6, rtol=0)
 
@@ -143,10 +144,10 @@ def test_group_reducer_finalize_flushes_remainder() -> None:
     reducer = GroupReducer(len(task))
     distance = distance_function("euclidean")
     for group in group_cells(task):
-        reducer.add(group, distance, is_symmetric=task.is_symmetric)
+        reducer.add(group, distance, alignment=dtw_batch, is_symmetric=task.is_symmetric)
     # Don't flush manually — finalize() must do it.
     scores, sizes = reducer.finalize()
-    expected_scores, expected_sizes = score_task(task, distance)
+    expected_scores, expected_sizes = score_task(task, distance, alignment=dtw_batch)
     assert scores == expected_scores
     assert sizes == expected_sizes
 
@@ -161,7 +162,12 @@ def test_constrained_score_none_for_unsatisfiable_cells() -> None:
     }
     dataset = Dataset.from_numpy(features, labels)
     task = Task(dataset, on="phone")
-    scores, sizes = score_task(task, distance_function("euclidean"), constraints_all_different("context"))
+    scores, sizes = score_task(
+        task,
+        distance_function("euclidean"),
+        alignment=dtw_batch,
+        constraints=constraints_all_different("context"),
+    )
     assert all(s is None for s in scores)
     assert all(sz is None for sz in sizes)
 
@@ -181,7 +187,7 @@ def test_constrained_score_sizes_equal_mask_sums() -> None:
     dataset = Dataset.from_numpy(features, labels)
     task = Task(dataset, on="phone", across=["speaker"])
     cstrs = list(constraints_all_different("context"))
-    _, sizes = score_task(task, distance_function("euclidean"), cstrs)
+    _, sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch, constraints=cstrs)
 
     # Build the expected sizes from the mask directly.
     masked = apply_constraints(task.cells, dataset.labels, cstrs, is_symmetric=False)
@@ -213,7 +219,7 @@ def test_group_reducer_constrained_without_mask_raises() -> None:
     targets = Batch(torch.zeros(3, 1, 3), torch.tensor([1, 1, 1], dtype=torch.int32))
     group = CellGroup(x=x, targets=targets, rows=[2, 1], positions=[0], mask=None)
     with pytest.raises(NoConstraintsError):
-        reducer.add(group, distance_function("euclidean"), is_symmetric=False)
+        reducer.add(group, distance_function("euclidean"), alignment=dtw_batch, is_symmetric=False)
 
 
 def test_prefetch_yields_same_items_as_generator() -> None:
