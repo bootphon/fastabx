@@ -54,7 +54,7 @@ class Accessor(Protocol):
         """Iterate over the features of every datapoint, in index order."""
         ...
 
-    def lengths(self, indices: list[int]) -> npt.NDArray[np.int64]:
+    def lengths(self, indices: list[int]) -> np.ndarray[tuple[int], np.dtype[np.int64]]:
         """Return the number of frames of each given datapoint, without reading the features themselves.
 
         :param indices: The indices of the datapoints.
@@ -116,7 +116,7 @@ class InMemoryAccessor:
         for i in self.indices:
             yield self[i]
 
-    def lengths(self, indices: list[int]) -> npt.NDArray[np.int64]:
+    def lengths(self, indices: list[int]) -> np.ndarray[tuple[int], np.dtype[np.int64]]:
         """Get the lengths of the data from a list of indices."""
         return self._lengths_np[indices]
 

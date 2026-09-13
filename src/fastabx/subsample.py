@@ -24,7 +24,9 @@ def subsample_each_cell(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
     """
     return (
         df.with_columns(pl.concat_str(~INDEX_COLUMNS, separator="-").alias("__group"))
-        .with_columns(INDEX_COLUMNS.explode().shuffle(seed=seed).implode().over("__group").list.head(size))
+        .with_columns(
+            INDEX_COLUMNS.explode(empty_as_null=False).shuffle(seed=seed).implode().over("__group").list.head(size)
+        )
         .select(cs.exclude("__group"))
     )
 
@@ -37,7 +39,7 @@ def subsample_across_group(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFra
     return (
         df.group_by("__group", maintain_order=True)
         .agg((cs.ends_with("_x") & (~INDEX_COLUMNS)).unique(maintain_order=True).shuffle(seed).head(size))
-        .explode(x_cols)
+        .explode(x_cols, empty_as_null=False)
         .join(df, on=["__group", *x_cols], how="left")
         .select(cs.exclude("__group"))
     )

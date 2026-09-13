@@ -422,7 +422,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=1.26.4" },
-    { name = "polars", specifier = ">=1.35.1" },
+    { name = "polars", specifier = ">=1.39.3" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchdtw", specifier = ">=0.4.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
