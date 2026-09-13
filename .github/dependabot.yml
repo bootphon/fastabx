@@ -12,3 +12,25 @@ updates:
       actions:
         patterns:
           - "*"
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: yearly
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 30
+    groups:
+      uv:
+        patterns:
+          - "*"
+  - package-ecosystem: pre-commit
+    directory: "/"
+    schedule:
+      interval: yearly
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 30
+    groups:
+      pre-commit:
+        patterns:
+          - "*"

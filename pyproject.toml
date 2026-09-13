@@ -8,7 +8,13 @@ authors = [
   { name = "Maxime Poli" },
   { name = "CoML", email = "dev@cognitive-ml.fr" },
 ]
-keywords = ["machine learning", "speech"]
+keywords = [
+  "abx",
+  "evaluation",
+  "machine learning",
+  "representation learning",
+  "speech",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
@@ -19,6 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
 ]
 dependencies = [
   "numpy>=1.26.4",
@@ -30,9 +37,10 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-changelog = "https://github.com/bootphon/fastabx/releases"
+changelog = "https://github.com/bootphon/fastabx/blob/main/CHANGELOG.md"
 documentation = "https://docs.cognitive-ml.fr/fastabx"
 homepage = "https://docs.cognitive-ml.fr/fastabx"
+issues = "https://github.com/bootphon/fastabx/issues"
 repository = "https://github.com/bootphon/fastabx"
 
 [project.scripts]
@@ -75,6 +83,7 @@ source = "vcs"
 
 [tool.pytest]
 addopts = ["--cov=fastabx"]
+filterwarnings = ["error"]
 testpaths = ["tests"]
 
 [tool.ruff]

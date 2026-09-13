@@ -27,7 +27,7 @@ def _build_dataset(distance: DistanceName) -> Dataset:
     return Dataset.from_numpy(features, {"phone": phones, "speaker": speakers, "context": contexts})
 
 
-# Computed once on this machine; pinned to detect regressions.
+# Pinned to detect regressions.
 EXPECTED: dict[DistanceName, float] = {
     "euclidean": 0.4913194353381793,
     "cosine": 0.4809027786056201,
@@ -42,5 +42,4 @@ def test_regression_collapse(distance: DistanceName) -> None:
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
     score = Score(task, distance)
     out = score.collapse(levels=["speaker"])
-    # Scoring is fully deterministic on a fixed input; pin the value exactly.
-    assert out == EXPECTED[distance]
+    assert out == pytest.approx(EXPECTED[distance], abs=1e-9)

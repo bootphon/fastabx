@@ -6,7 +6,7 @@ variables:
 
 before_script:
   - apt-get update || true
-  - apt-get -y install curl make g++ git
+  - apt-get -y install curl make git
   - curl -LsSf https://astral.sh/uv/install.sh | sh
   - source $HOME/.local/bin/env
 
@@ -17,7 +17,8 @@ deploy:
   only:
     - main
   script:
-    - UV_CACHE_DIR=".uv-cache" CXX="g++" make docs
-    - mkdir -p $DOCS
-    - rm -rf $DOCS/*
-    - cp -R docs/build/* $DOCS/
+    - set -eu
+    - UV_CACHE_DIR=".uv-cache" make docs
+    - mkdir -p "$DOCS"
+    - rm -rf "${DOCS:?}"/*
+    - cp -R docs/build/* "$DOCS"/

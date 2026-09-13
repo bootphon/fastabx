@@ -29,7 +29,7 @@ jobs:
       - name: Push
         shell: bash
         run: |
+          set -eu
           git config --global user.name "github-actions[bot]"
-          git remote add gitlab https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}
-          git push gitlab HEAD:main --force
-          git push gitlab --tags
+          git push "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}" HEAD:main --force
+          git push "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}" --tags

@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+title: fastabx
+abstract: A library for efficient computation of ABX discriminability.
+message: If you use fastabx in your work, please cite the preprint below.
+type: software
+authors:
+  - family-names: Poli
+    given-names: Maxime
+  - family-names: Chemla
+    given-names: Emmanuel
+  - family-names: Dupoux
+    given-names: Emmanuel
+license: MIT
+repository-code: https://github.com/bootphon/fastabx
+url: https://docs.cognitive-ml.fr/fastabx
+keywords:
+  - ABX discriminability
+  - machine learning
+  - representation learning
+  - speech
+preferred-citation:
+  type: article
+  title: "fastabx: A library for efficient computation of ABX discriminability"
+  authors:
+    - family-names: Poli
+      given-names: Maxime
+    - family-names: Chemla
+      given-names: Emmanuel
+    - family-names: Dupoux
+      given-names: Emmanuel
+  year: 2025
+  journal: arXiv
+  url: https://arxiv.org/abs/2505.02692
+  identifiers:
+    - type: other
+      value: arXiv:2505.02692
+      description: arXiv preprint
