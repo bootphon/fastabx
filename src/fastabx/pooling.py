@@ -45,8 +45,8 @@ class PooledDataset(Dataset):
 def pool_dataset(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
     """Pool the :py:class:`.Dataset` using the pooling method given by ``pooling_name``.
 
-    The pooled dataset is a new one, with data stored in memory. For simplicity, we iterate through the original
-    dataset and apply pooling on each element.
+    The pooled dataset is a new one, with data stored in memory on the same device as ``dataset``. For simplicity,
+    we iterate through the original dataset and apply pooling on each element.
 
     :param dataset: The dataset to pool.
     :param pooling_name: The pooling method, either "mean" or "hamming".
@@ -55,4 +55,5 @@ def pool_dataset(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
     indices = {i: (i, i + 1) for i in range(len(labels))}
     pooling_fn = pooling_function(pooling_name)
     data = torch.stack([pooling_fn(x) for x in dataset.accessor], dim=0)
-    return PooledDataset(pooling=pooling_name, labels=labels, accessor=InMemoryAccessor(indices, data))
+    accessor = InMemoryAccessor(indices, data, dataset.accessor.device)
+    return PooledDataset(pooling=pooling_name, labels=labels, accessor=accessor)

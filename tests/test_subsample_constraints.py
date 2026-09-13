@@ -258,6 +258,6 @@ def test_condition_named_like_an_index_column_is_not_treated_as_one() -> None:
     dataset = _dataset_with_index_prefixed_label()
     task = Task(dataset, on="phone", by=["indexer"], subsampler=Subsampler(2, None))
     assert "indexer" in task.cells.columns
-    score = Score(task, "euclidean")
+    score = Score(task, "euclidean", progress=False)
     assert "indexer" in score.details(levels=[]).columns
     assert 0 <= score.collapse(levels=["indexer"]) <= 1

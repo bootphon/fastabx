@@ -5,8 +5,9 @@ import pytest
 import torch
 
 from fastabx import Dataset
-from fastabx.dataset import InMemoryAccessor
+from fastabx.accessor import InMemoryAccessor
 from fastabx.pooling import PooledDataset, hamming_pooling, pool_dataset, pooling_function
+from tests.conftest import DEVICE
 
 
 def test_pooling_function_mean_and_hamming() -> None:
@@ -67,7 +68,7 @@ def test_pooling_returns_pooled_dataset() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b", "c", "d"]}),
-        accessor=InMemoryAccessor(indices, data),
+        accessor=InMemoryAccessor(indices, data, DEVICE),
     )
     pooled = pool_dataset(dataset, "mean")
     assert isinstance(pooled, PooledDataset)
@@ -86,7 +87,7 @@ def test_pooling_mean_of_constant_sequence() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b"]}),
-        accessor=InMemoryAccessor(indices, data),
+        accessor=InMemoryAccessor(indices, data, DEVICE),
     )
     pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:

@@ -14,7 +14,7 @@ from fastabx.alignment import Alignment
 from fastabx.constraints import Constraints, NoConstraintsError, apply_constraints
 from fastabx.distance import Distance, distance_matrix
 from fastabx.task import Task
-from fastabx.utils import GATHER_CHUNK_ROWS, MAX_SCORE_CHUNK_ROWS, REDUCTION_FLUSH_COLS
+from fastabx.utils import gather_chunk_rows, max_score_chunk_rows, reduction_flush_cols
 
 __all__ = []
 
@@ -92,7 +92,7 @@ def group_cells(task: Task, *, constraints: Constraints | None = None) -> Genera
     """Yield groups of cells sharing the same X and A sample sets, gathering many groups per ``batched`` call.
 
     Each group's targets (A first, then every cell's B, with X prepended when X != A) are concatenated into a single
-    index list. Groups are length-sorted and gathered in chunks of up to ``GATHER_CHUNK_ROWS``
+    index list. Groups are length-sorted and gathered in chunks of up to :py:func:`.gather_chunk_rows`
     rows, one ``batched`` call per chunk, then sliced back into individual groups.
 
     With ``constraints``, :py:func:`fastabx.constraints.apply_constraints` adds an ``is_valid`` column to the cells.
@@ -131,9 +131,10 @@ def group_cells(task: Task, *, constraints: Constraints | None = None) -> Genera
         specs.append(GroupSpec(smax, task.is_symmetric, nx, indices, rows, list(positions), mask))
     specs.sort(key=lambda spec: spec.smax)
 
+    max_chunk_rows = gather_chunk_rows()
     chunk, chunk_rows = [], 0
     for spec in specs:
-        if chunk and chunk_rows + len(spec.indices) > GATHER_CHUNK_ROWS:
+        if chunk and chunk_rows + len(spec.indices) > max_chunk_rows:
             yield from gather_chunk(accessor, chunk)
             chunk, chunk_rows = [], 0
         chunk.append(spec)
@@ -150,10 +151,11 @@ def grouped_distances(
     distance: Distance,
     *,
     alignment: Alignment,
+    max_rows: int,
 ) -> Tensor:
     """Distance matrix between the shared ``x`` and every target of a group, in as few launches as possible.
 
-    Groups with more than ``MAX_SCORE_CHUNK_ROWS`` rows are scored in row-chunks to bound the peak memory cost.
+    Groups with more than ``max_rows`` rows are scored in row-chunks to bound the peak memory cost.
 
     :param x: The group's X samples already concatenated and padded to a common length.
     :param sx: The real lengths of the X samples.
@@ -163,14 +165,15 @@ def grouped_distances(
     :param distance: The distance function to use.
     :param alignment: The alignment used to reduce the frame-level cost lattice to one distance per pair.
         Bypassed when every sample is pooled (time dimension of 1).
+    :param max_rows: Maximum number of target rows compared in one go, from :py:func:`.max_score_chunk_rows`.
     :returns: A ``(x.size(0), targets.size(0))`` tensor of distances in the target order.
     """
     total = targets.size(0)
-    if total <= MAX_SCORE_CHUNK_ROWS:
+    if total <= max_rows:
         return distance_matrix(x, sx, targets, target_sizes, distance, alignment=alignment, symmetric=False)
     out = x.new_empty(x.size(0), total, dtype=x.dtype if x.is_floating_point() else torch.float32)
-    for start in range(0, total, MAX_SCORE_CHUNK_ROWS):
-        end = min(start + MAX_SCORE_CHUNK_ROWS, total)
+    for start in range(0, total, max_rows):
+        end = min(start + max_rows, total)
         chunk, chunk_sizes = targets[start:end], target_sizes[start:end]
         out[:, start:end] = distance_matrix(x, sx, chunk, chunk_sizes, distance, alignment=alignment, symmetric=False)
     return out
@@ -199,7 +202,7 @@ class GroupReducer:
     For each group the cheap, unavoidable part — the half-integer count per B column
     (:py:func:`grouped_contributions`) — is computed eagerly. The per-group segment machinery that turns those
     counts into per-cell scores (a host→device index build plus an ``index_add_`` and a division) is instead
-    amortised over many groups: it runs once per ``REDUCTION_FLUSH_COLS`` columns rather than once per
+    amortised over many groups: it runs once per :py:func:`.reduction_flush_cols` columns rather than once per
     group. This is bit-identical to the per-group reduction (the counts are exact half-integers), but removes the
     per-group overhead that dominates when groups are tiny (``nx ≈ na ≈ 2``), as in the across-speaker task.
     """
@@ -213,6 +216,8 @@ class GroupReducer:
         self._positions: list[int] = []  # cell position in the DataFrame, one per cell
         self._nb: list[int] = []  # number of B per cell
         self._cols = 0
+        self._flush_cols = reduction_flush_cols()
+        self._max_score_rows = max_score_chunk_rows()
 
     def add(self, group: CellGroup, distance: Distance, *, alignment: Alignment, is_symmetric: bool) -> None:
         """Register a group's distance matrix: keep its per-B counts, record per-cell metadata, flush if full.
@@ -229,6 +234,7 @@ class GroupReducer:
             group.targets.sizes,
             distance,
             alignment=alignment,
+            max_rows=self._max_score_rows,
         )
         na, nx = group.rows[0], group.x.data.size(0)
         dxa = distances[:, :na]
@@ -249,7 +255,7 @@ class GroupReducer:
                 self.sizes[position] = nb * factor
 
         self._cols += distances.size(1) - na
-        if self._cols >= REDUCTION_FLUSH_COLS:
+        if self._cols >= self._flush_cols:
             self.flush()
 
     def flush(self) -> None:

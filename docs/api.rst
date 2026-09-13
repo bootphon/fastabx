@@ -139,12 +139,31 @@ Constraints
 Environment variables
 =====================
 
+Behaviour
+---------
+
 .. _librilight-bug:
 
 - :code:`FASTABX_WITH_LIBRILIGHT_BUG`: If set to 1, changes the behaviour of :meth:`.Dataset.from_item` to
   match Libri-Light. Every feature will now be one frame shorter. This should be set only if you want
   to replicate previous results obtained with Libri-Light / ZeroSpeech 2021. See :ref:`slicing` for more details
   on how features are sliced.
-- :code:`FASTABX_OUTPUT`: Controls the output format of the ``fastabx`` CLI. Defaults to a human-readable
-  ``"ABX error rate: ..."`` line; set to ``json`` (or ``jsonl``) to emit a single JSON object containing
-  the score and all CLI arguments instead.
+- :code:`TQDM_DISABLE`: If set, every fastabx progress bar is hidden, overriding ``progress`` arguments and ``--quiet``
+  flags.
+
+.. _perf-env:
+
+Performance tuning
+------------------
+
+The variables below bound the size of the intermediate tensors in the scoring engine.
+Normal usage should not require changing them: lower them if the scoring runs out of memory, raise them if you
+have memory to spare and the cells are small.
+
+- :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` (default 8192): Maximum number of rows compared at once when scoring a
+  group of cells. Turn down if you have an out-of-memory error.
+- :code:`FASTABX_GATHER_CHUNK_ROWS` (default 8192): Maximum number of rows gathered and padded in a single
+  batched read from the :class:`.InMemoryAccessor`.
+- :code:`FASTABX_REDUCTION_FLUSH_COLS` (default 262144): Number of accumulated columns after which the
+  per-cell reduction is flushed. Larger values amortise the reduction over more cells, at the cost of
+  keeping more intermediate counts around.

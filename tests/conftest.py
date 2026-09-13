@@ -8,6 +8,11 @@ from hypothesis import settings
 
 from fastabx import Dataset
 from fastabx.accessor import InMemoryAccessor
+from fastabx.utils import resolve_device
+
+# Device used everywhere in the tests: the same default as normal usage, so the CUDA transfers
+# are exercised when a GPU is available.
+DEVICE = resolve_device(None)
 
 # Run more examples than hypothesis's default (100) so adversarial cases (e.g. the cosine
 # antipodal boundary in test_distances.py) get explored harder by default. Individual tests
@@ -65,4 +70,4 @@ def seq_dataset() -> Dataset:
         cursor += length
     data = torch.from_numpy(np.concatenate(pieces, axis=0))
     labels = pl.DataFrame({"phone": phones, "speaker": speakers, "context": ["c1", "c2", "c1"] * 6})
-    return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+    return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, DEVICE))

@@ -26,7 +26,8 @@ from fastabx.dataset import (
     load_data_from_item_with_times,
     read_labels,
 )
-from tests.conftest import accessor_data
+from fastabx.utils import resolve_device
+from tests.conftest import DEVICE, accessor_data
 
 
 def test_batch_repr() -> None:
@@ -123,10 +124,31 @@ def test_from_numpy_label_name_collides_with_feature_columns() -> None:
         Dataset.from_numpy(features, labels)
 
 
+def test_resolve_device() -> None:
+    assert resolve_device(None) == (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    assert resolve_device("cpu") == torch.device("cpu")
+    assert resolve_device(torch.device("cpu")) == torch.device("cpu")
+    assert resolve_device("cuda:1") == torch.device("cuda:1")
+
+
+def test_dataset_constructors_honour_device() -> None:
+    """An explicit device overrides the default, and reaches both the data and the accessor."""
+    features = np.arange(12, dtype=np.float32).reshape(6, 2)
+    labels = {"phone": ["a", "b", "c", "a", "b", "c"]}
+    dataset = Dataset.from_numpy(features, labels, device="cpu")
+    assert dataset.accessor.device == torch.device("cpu")
+    assert accessor_data(dataset).device.type == "cpu"
+    assert dataset.accessor.batched([0, 1]).data.device.type == "cpu"
+
+    df = pl.DataFrame({"phone": ["a", "b"], "x": [0.0, 1.0], "y": [1.0, 0.0]})
+    from_df = Dataset.from_dataframe(df, ["x", "y"], device=torch.device("cpu"))
+    assert from_df.accessor.device == torch.device("cpu")
+
+
 def test_in_memory_accessor_iter_and_getitem() -> None:
     data = torch.arange(20, dtype=torch.float32).view(10, 2)
     indices = {i: (i, i + 1) for i in range(10)}
-    acc = InMemoryAccessor(indices, data)
+    acc = InMemoryAccessor(indices, data, DEVICE)
     assert len(acc) == 10
     items = list(acc)
     assert len(items) == 10
@@ -146,7 +168,7 @@ def test_in_memory_accessor_lengths_and_batched() -> None:
         indices[i] = (cursor, cursor + length)
         cursor += length
     data = torch.arange(cursor * 2, dtype=torch.float32).view(cursor, 2)
-    acc = InMemoryAccessor(indices, data)
+    acc = InMemoryAccessor(indices, data, DEVICE)
     assert list(acc.lengths([0, 1, 2, 3])) == lengths
     batch = acc.batched([0, 1])
     assert batch.data.shape == (2, 3, 2)  # padded to max length
@@ -262,7 +284,7 @@ def test_load_data_from_item_missing_file_raises() -> None:
         return torch.zeros(10, 3)
 
     with pytest.raises(FileNotFoundError, match="missing"):
-        load_data_from_item(mapping, labels, 50, loader, "#file", "onset", "offset")
+        load_data_from_item(mapping, labels, 50, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_non_finite_raises() -> None:
@@ -279,7 +301,7 @@ def test_load_data_from_item_non_finite_raises() -> None:
         return bad
 
     with pytest.raises(NonFiniteError, match="f1"):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset")
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_features_size_error() -> None:
@@ -295,7 +317,7 @@ def test_load_data_from_item_features_size_error() -> None:
         return torch.zeros(5, 3)  # way too short
 
     with pytest.raises(FeaturesSizeError, match="f1"):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset")
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_empty_features_error() -> None:
@@ -311,7 +333,7 @@ def test_load_data_from_item_empty_features_error() -> None:
         return torch.zeros(100, 3)
 
     with pytest.raises(EmptyFeaturesError):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset")
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_with_times_dimension_error(tmp_path: Path) -> None:
@@ -336,6 +358,7 @@ def test_load_data_from_item_with_times_dimension_error(tmp_path: Path) -> None:
             "#file",
             "onset",
             "offset",
+            DEVICE,
         )
 
 
@@ -360,6 +383,7 @@ def test_load_data_from_item_with_times_happy_path(tmp_path: Path) -> None:
         "#file",
         "onset",
         "offset",
+        DEVICE,
     )
     assert set(indices.keys()) == {0, 1}
     for start, end in indices.values():
@@ -394,7 +418,7 @@ def test_load_data_from_item_with_times_missing_file_raises() -> None:
         return torch.zeros(10, 3)
 
     with pytest.raises(FileNotFoundError, match="missing"):
-        load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset")
+        load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_with_times_non_finite_raises() -> None:
@@ -422,6 +446,7 @@ def test_load_data_from_item_with_times_non_finite_raises() -> None:
             "#file",
             "onset",
             "offset",
+            DEVICE,
         )
 
 
@@ -447,6 +472,7 @@ def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
             "#file",
             "onset",
             "offset",
+            DEVICE,
         )
 
 
@@ -457,7 +483,7 @@ def test_load_data_from_item_with_times_selects_first_frame_only(tmp_path: Path)
     torch.save(torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0]), times_path)
     labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.0")]})
     indices, data = load_data_from_item_with_times(
-        {"f1": features_path}, {"f1": times_path}, labels, torch.load, torch.load, "#file", "onset", "offset"
+        {"f1": features_path}, {"f1": times_path}, labels, torch.load, torch.load, "#file", "onset", "offset", DEVICE
     )
     assert indices == {0: (0, 1)}
     assert data.cpu().tolist() == [[0.0, 1.0, 2.0]]  # exactly frame 0
@@ -492,3 +518,25 @@ def test_from_item_and_units(tmp_path: Path) -> None:
     assert ds.labels.height == 2
     # The unit tensor is unsqueezed to add a feature dim of 1.
     assert accessor_data(ds).shape[1] == 1
+
+
+def test_from_item_progress_flag_silences_the_bar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``progress=False`` hides the "Building dataset" bar, and ``TQDM_DISABLE`` hides it regardless."""
+    features = tmp_path / "feats"
+    features.mkdir()
+    torch.save(torch.zeros(50, 3), features / "f1.pt")
+    item = tmp_path / "x.item"
+    item.write_text("#file onset offset #phone\nf1 0.10 0.30 a\n")
+    monkeypatch.delenv("TQDM_DISABLE", raising=False)
+
+    Dataset.from_item(item, features, 50, progress=False)
+    assert "Building dataset" not in capsys.readouterr().err
+
+    Dataset.from_item(item, features, 50, progress=True)
+    assert "Building dataset" in capsys.readouterr().err
+
+    monkeypatch.setenv("TQDM_DISABLE", "1")
+    Dataset.from_item(item, features, 50, progress=True)
+    assert "Building dataset" not in capsys.readouterr().err

@@ -13,9 +13,9 @@ import torch
 from tqdm import tqdm
 
 from fastabx.accessor import Accessor, ArrayLike, InMemoryAccessor
-from fastabx.utils import default_device, with_librilight_bug
+from fastabx.utils import hide_progress, resolve_device, with_librilight_bug
 
-__all__ = ["Dataset"]
+__all__ = ["Dataset", "InMemoryAccessor"]
 
 
 def _is_pandas_dataframe(obj: object) -> bool:
@@ -138,8 +138,11 @@ def load_data_from_item[T](
     file_col: str,
     onset_col: str,
     offset_col: str,
+    device: torch.device,
+    *,
+    progress: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
-    """Load all data in memory. Return a dictionary of indices and a tensor of data."""
+    """Load all data in memory on ``device``. Return a dictionary of indices and a tensor of data."""
     metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     frontiers = item_frontiers(frequency, onset_col, offset_col)
     lazy = metadata.lazy().sort(file_col, maintain_order=True).with_columns(*frontiers)
@@ -147,8 +150,13 @@ def load_data_from_item[T](
     by_file_lazy = lazy.select(file_col, "start", "end").group_by(file_col, maintain_order=True).agg("start", "end")
     indices, by_file = pl.collect_all([indices_lazy, by_file_lazy])
 
-    data, device = [], default_device()
-    for fileid, start_indices, end_indices in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
+    data = []
+    for fileid, start_indices, end_indices in tqdm(
+        by_file.iter_rows(),
+        desc="Building dataset",
+        total=len(by_file),
+        disable=hide_progress(progress=progress),
+    ):
         try:
             features = feature_maker(mapping[fileid]).detach().to(device)
             if not torch.isfinite(features).all():
@@ -192,17 +200,25 @@ def load_data_from_item_with_times[T](
     file_col: str,
     onset_col: str,
     offset_col: str,
+    device: torch.device,
+    *,
+    progress: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
-    """Load all data in memory using features and times array. This is smaller than using a predefined frequency."""
+    """Load all data in memory on ``device``, using features and times array."""
     metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     by_file = (
         metadata.sort(file_col, maintain_order=True)
         .group_by(file_col, maintain_order=True)
         .agg("index", onset_col, offset_col)
     )
-    data, device, all_indices, right = [], default_device(), {}, 0
+    data, all_indices, right = [], {}, 0
     decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
-    for fileid, indices, onsets, offsets in tqdm(by_file.iter_rows(), desc="Building dataset", total=len(by_file)):
+    for fileid, indices, onsets, offsets in tqdm(
+        by_file.iter_rows(),
+        desc="Building dataset",
+        total=len(by_file),
+        disable=hide_progress(progress=progress),
+    ):
         try:
             features = feature_maker(paths_features[fileid]).detach().to(device)
             if not torch.isfinite(features).all():
@@ -256,6 +272,8 @@ class Dataset:
         file_col: str = "#file",
         onset_col: str = "onset",
         offset_col: str = "offset",
+        device: str | torch.device | None = None,
+        progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file.
 
@@ -271,11 +289,25 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param device: Device on which to store the features, such as "cpu" or "cuda:1".
+            Defaults to CUDA if available, and CPU otherwise.
+        :param progress: Whether to display a progress bar while building the dataset.
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         paths = find_all_files(root, extension)
-        indices, data = load_data_from_item(paths, labels, frequency, feature_maker, file_col, onset_col, offset_col)
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+        resolved = resolve_device(device)
+        indices, data = load_data_from_item(
+            paths,
+            labels,
+            frequency,
+            feature_maker,
+            file_col,
+            onset_col,
+            offset_col,
+            resolved,
+            progress=progress,
+        )
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_item_with_times(
@@ -290,6 +322,8 @@ class Dataset:
         file_col: str = "#file",
         onset_col: str = "onset",
         offset_col: str = "offset",
+        device: str | torch.device | None = None,
+        progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file.
 
@@ -305,14 +339,27 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param device: Device on which to store the features, such as "cpu" or "cuda:1".
+            Defaults to CUDA if available, and CPU otherwise.
+        :param progress: Whether to display a progress bar while building the dataset.
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         paths_feat = find_all_files(root_features, extension)
         paths_time = find_all_files(root_times, extension)
+        resolved = resolve_device(device)
         indices, data = load_data_from_item_with_times(
-            paths_feat, paths_time, labels, feature_maker, time_maker, file_col, onset_col, offset_col
+            paths_feat,
+            paths_time,
+            labels,
+            feature_maker,
+            time_maker,
+            file_col,
+            onset_col,
+            offset_col,
+            resolved,
+            progress=progress,
         )
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_item_and_units(
@@ -326,6 +373,8 @@ class Dataset:
         file_col: str = "#file",
         onset_col: str = "onset",
         offset_col: str = "offset",
+        device: str | torch.device | None = None,
+        progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file with the units all described in a single JSONL file.
 
@@ -338,6 +387,9 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param device: Device on which to store the features, such as "cpu" or "cuda:1".
+            Defaults to CUDA if available, and CPU otherwise.
+        :param progress: Whether to display a progress bar while building the dataset.
         """
         labels = read_labels(item, file_col, onset_col, offset_col)
         units_df = (
@@ -350,8 +402,19 @@ class Dataset:
             return torch.tensor(units_df[idx, units_key]).unsqueeze(1)
 
         mapping: dict[str, int] = dict(zip(units_df[audio_key], range(len(units_df)), strict=True))
-        indices, data = load_data_from_item(mapping, labels, frequency, feature_maker, file_col, onset_col, offset_col)
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+        resolved = resolve_device(device)
+        indices, data = load_data_from_item(
+            mapping,
+            labels,
+            frequency,
+            feature_maker,
+            file_col,
+            onset_col,
+            offset_col,
+            resolved,
+            progress=progress,
+        )
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_dataframe(
@@ -360,6 +423,7 @@ class Dataset:
         feature_columns: str | Collection[str],
         *,
         separator: str = ",",
+        device: str | torch.device | None = None,
     ) -> "Dataset":
         """Create a dataset from any tabular source containing both the labels and the features.
 
@@ -373,6 +437,8 @@ class Dataset:
         :param source: The tabular source. See above for accepted types.
         :param feature_columns: Column name or list of column names containing the features.
         :param separator: Separator used in the CSV file. Only relevant when ``source`` is a path.
+        :param device: Device on which to store the features, such as "cpu" or "cuda:1".
+            Defaults to CUDA if available, and CPU otherwise.
         """
         if isinstance(source, (str, Path)):
             df = pl.read_csv(source, separator=separator)
@@ -393,13 +459,15 @@ class Dataset:
         if any(dtype.is_float() for dtype in features.dtypes):
             features = features.cast(pl.Float32)
         data = features.to_torch()
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data))
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolve_device(device)))
 
     @classmethod
     def from_numpy(
         cls,
         features: ArrayLike,
         labels: pl.DataFrame | Mapping[str, Sequence[object]],
+        *,
+        device: str | torch.device | None = None,
     ) -> "Dataset":
         """Create a dataset from the features and the labels.
 
@@ -409,6 +477,8 @@ class Dataset:
 
         :param features: 2D array-like containing the features.
         :param labels: Dictionary of sequences, or polars/pandas DataFrame containing the labels.
+        :param device: Device on which to store the features, such as "cpu" or "cuda:1".
+            Defaults to CUDA if available, and CPU otherwise.
         """
         features_df = pl.from_numpy(np.asarray(features))
         if isinstance(labels, pl.DataFrame):
@@ -427,4 +497,5 @@ class Dataset:
                 f"column names ('column_0', 'column_1', ...). Rename the offending label column(s)."
             )
             raise ValueError(msg)
-        return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
+        data = pl.concat((features_df, labels_df), how="horizontal")
+        return cls.from_dataframe(data, features_df.columns, device=device)

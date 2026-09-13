@@ -113,7 +113,7 @@ def test_max_score_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> Non
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
     baseline_scores, baseline_sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
-    monkeypatch.setattr("fastabx.group.MAX_SCORE_CHUNK_ROWS", 4)
+    monkeypatch.setenv("FASTABX_MAX_SCORE_CHUNK_ROWS", "4")
     chunked_scores, chunked_sizes = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert baseline_scores == chunked_scores
     assert baseline_sizes == chunked_sizes
@@ -123,7 +123,7 @@ def test_gather_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
     baseline_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
-    monkeypatch.setattr("fastabx.group.GATHER_CHUNK_ROWS", 4)
+    monkeypatch.setenv("FASTABX_GATHER_CHUNK_ROWS", "4")
     chunked_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert baseline_scores == chunked_scores
 
@@ -132,7 +132,7 @@ def test_reduction_flush_cols_invariance(monkeypatch: pytest.MonkeyPatch) -> Non
     dataset = _dataset_for_distance("euclidean")
     task = Task(dataset, on="phone", by=["context"], across=["speaker"])
     baseline_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
-    monkeypatch.setattr("fastabx.group.REDUCTION_FLUSH_COLS", 2)
+    monkeypatch.setenv("FASTABX_REDUCTION_FLUSH_COLS", "2")
     flushed_scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     for a, b in zip(baseline_scores, flushed_scores, strict=True):
         assert_close(a, b, atol=1e-6, rtol=0)

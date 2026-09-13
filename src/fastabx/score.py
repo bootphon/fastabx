@@ -1,6 +1,5 @@
 """Score the ABX task for each cell and collapse the scores into a final score."""
 
-import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from fastabx.constraints import Constraints
 from fastabx.distance import Distance, DistanceName, distance_function
 from fastabx.group import GroupReducer, group_cells
 from fastabx.task import Task
-from fastabx.utils import MIN_CELLS_FOR_TQDM, display_name, prefetch
+from fastabx.utils import display_name, hide_progress, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
 
 __all__ = ["Score"]
@@ -73,6 +72,7 @@ def score_task(
     *,
     alignment: Alignment,
     constraints: Constraints | None = None,
+    progress: bool = True,
 ) -> tuple[list[float | None], list[int | None]]:
     """Score each cell of a :py:class:`.Task` using a given distance and alignment, and return scores and sizes.
 
@@ -80,8 +80,7 @@ def score_task(
     triplet get a ``None`` score and size.
     """
     reducer = GroupReducer(len(task), constrained=constraints is not None)
-    disable_tqdm = len(task) < MIN_CELLS_FOR_TQDM or os.getenv("TQDM_DISABLE")
-    pbar = tqdm(total=len(task), desc="Scoring each cell", disable=bool(disable_tqdm))
+    pbar = tqdm(total=len(task), desc="Scoring each cell", disable=hide_progress(progress=progress))
     for group in prefetch(group_cells(task, constraints=constraints)):
         reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
         pbar.update(len(group.positions))
@@ -111,6 +110,7 @@ class Score:
         either the name of a built-in alignment ("dtw") or a custom :py:class:`.Alignment`.
         Defaults to "dtw". Bypassed entirely when the dataset is pooled, since there is nothing to align.
     :param constraints: Optional constraints to restrict the possible triplets.
+    :param progress: Whether to display a progress bar while scoring the cells.
     """
 
     def __init__(
@@ -120,6 +120,7 @@ class Score:
         *,
         alignment: AlignmentName | Alignment = "dtw",
         constraints: Constraints | None = None,
+        progress: bool = True,
     ) -> None:
         self.distance_name = distance_name
         self.alignment = alignment
@@ -129,7 +130,7 @@ class Score:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(display_name(distance_name))
-        scores, sizes = score_task(task, distance, alignment=align, constraints=constraints)
+        scores, sizes = score_task(task, distance, alignment=align, constraints=constraints, progress=progress)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
         )

@@ -4,12 +4,39 @@ import argparse
 import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
+from fastabx.cell import MIN_A_LEN
 from fastabx.utils import print_fastabx_output
 from fastabx.zerospeech import zerospeech_abx
 
 
-def main() -> None:
-    """ZeroSpeech ABX evaluation."""
+def subsample_size(value: str) -> int:
+    """Parse a subsampling size: an integer of at least ``MIN_A_LEN``, or a negative one to disable it."""
+    try:
+        size = int(value)
+    except ValueError:
+        msg = f"invalid integer value: {value!r}"
+        raise argparse.ArgumentTypeError(msg) from None
+    if 0 <= size < MIN_A_LEN:
+        msg = f"must be at least {MIN_A_LEN}, or negative to disable the subsampling, not {size}"
+        raise argparse.ArgumentTypeError(msg)
+    return size
+
+
+def positive_int(value: str) -> int:
+    """Parse a strictly positive integer."""
+    try:
+        parsed = int(value)
+    except ValueError:
+        msg = f"invalid integer value: {value!r}"
+        raise argparse.ArgumentTypeError(msg) from None
+    if parsed < 1:
+        msg = f"must be strictly positive, not {parsed}"
+        raise argparse.ArgumentTypeError(msg)
+    return parsed
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser of the ``fastabx`` CLI. Also used by sphinx-argparse to document it."""
     parser = argparse.ArgumentParser(
         prog="fastabx",
         description="ZeroSpeech ABX",
@@ -23,18 +50,18 @@ def main() -> None:
     parser.add_argument("features", help="Path to the features directory")
     parser.add_argument(
         "--max-size-group",
-        type=int,
+        type=subsample_size,
         required=True,
-        help="Maximum number of A, B, or X in a cell. Set to 10 in the original ZeroSpeech ABX. "
+        help="Maximum number of A, B, or X in a cell, at least 2. Set to 10 in the original ZeroSpeech ABX. "
         "Disabled if negative value.",
     )
     parser.add_argument(
         "--max-x-across",
-        type=int,
-        help="With 'across', maximum number of X given (A, B). Set to 5 in the original ZeroSpeech ABX. "
-        "Disabled if negative value.",
+        type=subsample_size,
+        help="With 'across', maximum number of X given (A, B), at least 2. Set to 5 in the original "
+        "ZeroSpeech ABX. Disabled if negative value.",
     )
-    parser.add_argument("--frequency", type=int, default=50, help="Feature frequency (in Hz)")
+    parser.add_argument("--frequency", type=positive_int, default=50, help="Feature frequency (in Hz)")
     parser.add_argument("--speaker", choices=["within", "across"], default="within", help="Speaker mode")
     parser.add_argument("--context", choices=["within", "any"], default="within", help="Context mode")
     parser.add_argument(
@@ -44,6 +71,37 @@ def main() -> None:
         help="Distance",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Device on which to store the features, such as 'cpu' or 'cuda:1'. "
+        "Defaults to CUDA if available, and CPU otherwise.",
+    )
+    parser.add_argument(
+        "--output",
+        choices=["text", "json"],
+        default="text",
+        help="Output format. 'text' prints the ABX error rate, 'json' a single object with the score and "
+        "every argument.",
+    )
+    parser.add_argument(
+        "--write-csv",
+        default=None,
+        metavar="PATH",
+        help="Write the score of every cell to this CSV file",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Hide the progress bars shown while building the dataset and scoring the cells",
+    )
+    return parser
+
+
+def main() -> None:
+    """ZeroSpeech ABX evaluation."""
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.max_x_across is None and args.speaker == "across":
@@ -58,8 +116,12 @@ def main() -> None:
         distance=args.distance,
         frequency=args.frequency,
         seed=args.seed,
+        device=args.device,
+        write_csv=args.write_csv,
+        progress=not args.quiet,
     )
-    print_fastabx_output(score, **vars(args))
+    arguments = dict(vars(args))
+    print_fastabx_output(score, output=arguments.pop("output"), **arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -8,23 +8,63 @@ from collections.abc import Generator, Iterable
 
 import torch
 
-__all__ = []
-
-# Environment variables to control fastabx behavior. Normal usage should not require changing these.
-MIN_CELLS_FOR_TQDM = int(os.getenv("FASTABX_MIN_CELLS_FOR_TQDM", "50"))
-MAX_SCORE_CHUNK_ROWS = int(os.getenv("FASTABX_MAX_SCORE_CHUNK_ROWS", "8192"))
-GATHER_CHUNK_ROWS = int(os.getenv("FASTABX_GATHER_CHUNK_ROWS", "8192"))
-REDUCTION_FLUSH_COLS = int(os.getenv("FASTABX_REDUCTION_FLUSH_COLS", "262144"))
+__all__ = ["InvalidEnvironmentVariableError"]
 
 
-def default_device() -> torch.device:
-    """Return the default device used by fastabx: CUDA if available, otherwise CPU."""
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+class InvalidEnvironmentVariableError(ValueError):
+    """A ``FASTABX_*`` environment variable does not hold the kind of value it expects."""
+
+    def __init__(self, name: str, value: str) -> None:
+        super().__init__(
+            f"The environment variable {name} must be a positive integer, but it is set to {value!r}. "
+            f"Unset it to go back to the default."
+        )
+
+
+def positive_int_from_env(name: str, default: int) -> int:
+    """Read a positive integer from the environment, falling back to ``default`` when it is unset."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise InvalidEnvironmentVariableError(name, value) from None
+    if parsed < 1:
+        raise InvalidEnvironmentVariableError(name, value)
+    return parsed
+
+
+def max_score_chunk_rows() -> int:
+    """Maximum number of rows compared at once when scoring a group of cells."""
+    return positive_int_from_env("FASTABX_MAX_SCORE_CHUNK_ROWS", 8192)
+
+
+def gather_chunk_rows() -> int:
+    """Maximum number of rows gathered and padded in a single batched read from the accessor."""
+    return positive_int_from_env("FASTABX_GATHER_CHUNK_ROWS", 8192)
+
+
+def reduction_flush_cols() -> int:
+    """Accumulated columns after which the per-cell reduction is flushed."""
+    return positive_int_from_env("FASTABX_REDUCTION_FLUSH_COLS", 262144)
+
+
+def resolve_device(device: str | torch.device | None) -> torch.device:
+    """Resolve where the features are stored, from what the user asked for."""
+    if device is None:
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(device)
 
 
 def with_librilight_bug() -> bool:
     """Whether to reproduce the results from LibriLight ABX or not."""
     return os.getenv("FASTABX_WITH_LIBRILIGHT_BUG", "0") == "1"
+
+
+def hide_progress(*, progress: bool) -> bool:
+    """Whether a progress bar must be hidden. ``TQDM_DISABLE`` takes precedence."""
+    return bool(os.getenv("TQDM_DISABLE")) or not progress
 
 
 def display_name(value: object) -> str:
@@ -34,14 +74,14 @@ def display_name(value: object) -> str:
     return getattr(value, "__name__", type(value).__name__)
 
 
-def print_fastabx_output(score: float, **kwargs: str | int) -> None:
+def print_fastabx_output(score: float, output: str = "text", **kwargs: str | int | None) -> None:
     """Help function to format fastabx CLI output."""
-    match os.getenv("FASTABX_OUTPUT"):
-        case "json" | "jsonl":
-            output = json.dumps(kwargs | {"score": score})
+    match output:
+        case "json":
+            formatted = json.dumps(kwargs | {"score": score})
         case _:
-            output = f"ABX error rate: {score:.3%}"
-    print(output)
+            formatted = f"ABX error rate: {score:.3%}"
+    print(formatted)
 
 
 def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Generator[T, None, None]:
@@ -52,7 +92,7 @@ def prefetch[T](iterable: Iterable[T], maxsize: int = 1) -> Generator[T, None, N
     sets ``stop`` and drains the queue until the producer's guaranteed final sentinel, so no thread
     is left parked on a full ``put``.
     """
-    q: queue.Queue = queue.Queue(maxsize=maxsize)
+    q = queue.Queue(maxsize=maxsize)
     sentinel = object()
     stop = threading.Event()
 

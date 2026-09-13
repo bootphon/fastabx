@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,7 +11,16 @@ import polars as pl
 import pytest
 import torch
 
-from fastabx.utils import print_fastabx_output, with_librilight_bug
+from fastabx.__main__ import build_parser
+from fastabx.utils import (
+    InvalidEnvironmentVariableError,
+    display_name,
+    gather_chunk_rows,
+    max_score_chunk_rows,
+    print_fastabx_output,
+    reduction_flush_cols,
+    with_librilight_bug,
+)
 from fastabx.verify import (
     NDIM,
     CellErrorType,
@@ -209,6 +219,32 @@ def test_ndim_constant() -> None:
     assert NDIM == 3
 
 
+@pytest.mark.parametrize(
+    ("reader", "name", "default"),
+    [
+        (max_score_chunk_rows, "FASTABX_MAX_SCORE_CHUNK_ROWS", 8192),
+        (gather_chunk_rows, "FASTABX_GATHER_CHUNK_ROWS", 8192),
+        (reduction_flush_cols, "FASTABX_REDUCTION_FLUSH_COLS", 262144),
+    ],
+)
+def test_chunk_env_vars_are_read_lazily(
+    monkeypatch: pytest.MonkeyPatch, reader: Callable[[], int], name: str, default: int
+) -> None:
+    """Read on every use, not once at import, so setting one after ``import fastabx`` still takes effect."""
+    monkeypatch.delenv(name, raising=False)
+    assert reader() == default
+    monkeypatch.setenv(name, "7")
+    assert reader() == 7
+
+
+@pytest.mark.parametrize("value", ["", "eight", "3.5", "0", "-1"])
+def test_chunk_env_vars_reject_bad_values(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """A bad value fails where it is used, naming the variable, rather than making ``import fastabx`` raise."""
+    monkeypatch.setenv("FASTABX_GATHER_CHUNK_ROWS", value)
+    with pytest.raises(InvalidEnvironmentVariableError, match="FASTABX_GATHER_CHUNK_ROWS"):
+        gather_chunk_rows()
+
+
 def test_with_librilight_bug_default_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FASTABX_WITH_LIBRILIGHT_BUG", raising=False)
     assert with_librilight_bug() is False
@@ -218,20 +254,27 @@ def test_with_librilight_bug_default_false(monkeypatch: pytest.MonkeyPatch) -> N
     assert with_librilight_bug() is False
 
 
-def test_print_fastabx_output_default_format(
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("FASTABX_OUTPUT", raising=False)
+def test_hide_progress_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TQDM_DISABLE wins over the progress argument, in both directions."""
+    from fastabx.utils import hide_progress
+
+    monkeypatch.delenv("TQDM_DISABLE", raising=False)
+    assert hide_progress(progress=True) is False
+    assert hide_progress(progress=False) is True
+    monkeypatch.setenv("TQDM_DISABLE", "1")
+    assert hide_progress(progress=True) is True
+    assert hide_progress(progress=False) is True
+
+
+def test_print_fastabx_output_default_format(capsys: pytest.CaptureFixture[str]) -> None:
     print_fastabx_output(0.1234, item="foo")
     out = capsys.readouterr().out
     assert "ABX error rate" in out
     assert "12.340%" in out
 
 
-def test_print_fastabx_output_json(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FASTABX_OUTPUT", "json")
-    print_fastabx_output(0.5, item="x", count=3)
+def test_print_fastabx_output_json(capsys: pytest.CaptureFixture[str]) -> None:
+    print_fastabx_output(0.5, "json", item="x", count=3)
     payload = json.loads(capsys.readouterr().out)
     assert payload == {"item": "x", "count": 3, "score": 0.5}
 
@@ -292,6 +335,83 @@ def test_cli_requires_max_x_across_for_across_speaker(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "--max-x-across" in result.stderr
+
+
+def test_cli_parser_defaults_and_quiet() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["a.item", "feats", "--max-size-group", "10"])
+    assert args.frequency == 50
+    assert args.quiet is False
+    quiet = parser.parse_args(["a.item", "feats", "--max-size-group", "10", "--quiet"])
+    assert quiet.quiet is True
+
+
+@pytest.mark.parametrize("flag", ["--max-size-group", "--max-x-across"])
+@pytest.mark.parametrize("value", ["0", "1"])
+def test_cli_rejects_too_small_subsample_size(flag: str, value: str) -> None:
+    """A size the ``Subsampler`` would reject is caught by the parser, with the usage rather than a traceback."""
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["a.item", "feats", "--max-size-group", "10", flag, value])
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [("--max-size-group", "many"), ("--frequency", "0"), ("--frequency", "fast")],
+)
+def test_cli_rejects_malformed_numbers(flag: str, value: str) -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["a.item", "feats", "--max-size-group", "10", flag, value])
+
+
+def test_cli_accepts_negative_subsample_size_to_disable() -> None:
+    """A negative size disables the subsampling, and must stay accepted."""
+    parser = build_parser()
+    args = parser.parse_args(["a.item", "feats", "--max-size-group", "-1", "--max-x-across", "-1"])
+    assert args.max_size_group == -1
+    assert args.max_x_across == -1
+
+
+def test_cli_help_has_no_default_on_required_argument() -> None:
+    """``--max-size-group`` is required, so a "(default: None)" next to it would be a lie."""
+    help_text = build_parser().format_help()
+    assert "--max-size-group" in help_text
+    assert "(default: 50)" in help_text  # --frequency still shows its default
+    assert "(default: None)" not in help_text.split("--max-x-across")[0]
+
+
+def test_cli_quiet_hides_progress_bars(tmp_path: Path) -> None:
+    """``--quiet`` must silence both bars; the score still goes to stdout."""
+    item = tmp_path / "data.item"
+    # Phone and speaker must not be correlated, or every cell is empty and there is nothing to score.
+    rows = [
+        "#file onset offset #phone speaker prev-phone next-phone",
+        *(f"f{i} 0.00 0.10 {'ab'[i % 2]} s{(i // 2) % 2} p1 n1" for i in range(8)),
+    ]
+    item.write_text("\n".join(rows) + "\n")
+    for i in range(8):
+        torch.save(torch.randn(6, 4), tmp_path / f"f{i}.pt")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastabx",
+            str(item),
+            str(tmp_path),
+            "--max-size-group",
+            "2",
+            "--context",
+            "any",
+            "--quiet",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "ABX error rate" in result.stdout
+    assert "Building dataset" not in result.stderr
+    assert "Scoring each cell" not in result.stderr
 
 
 def _build_cli_dataset(tmp_path: Path) -> tuple[Path, Path]:
@@ -373,6 +493,65 @@ def test_main_within_speaker(
     assert "ABX error rate" in out
 
 
+def test_main_output_json_device_and_write_csv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--output json, --device and --write-csv all reach their destination."""
+    import json as json_module
+
+    from fastabx.__main__ import main
+
+    item, feats = _build_cli_dataset(tmp_path)
+    csv = tmp_path / "cells.csv"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "fastabx",
+            str(item),
+            str(feats),
+            "--max-size-group",
+            "-1",
+            "--distance",
+            "euclidean",
+            "--context",
+            "any",
+            "--device",
+            "cpu",
+            "--output",
+            "json",
+            "--write-csv",
+            str(csv),
+        ],
+    )
+    monkeypatch.setenv("TQDM_DISABLE", "1")
+    main()
+    payload = json_module.loads(capsys.readouterr().out)
+    assert 0.0 <= payload["score"] <= 1.0
+    assert payload["device"] == "cpu"
+    assert payload["write_csv"] == str(csv)
+    assert "output" not in payload  # consumed by the formatter itself
+    assert csv.exists()
+    assert csv.read_text().splitlines()[0].endswith("score,size")
+
+
+def test_main_defaults_to_text_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Without --output, the CLI prints the human-readable line."""
+    from fastabx.__main__ import main
+
+    item, feats = _build_cli_dataset(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["fastabx", str(item), str(feats), "--max-size-group", "-1", "--context", "any"],
+    )
+    monkeypatch.setenv("TQDM_DISABLE", "1")
+    main()
+    assert "ABX error rate" in capsys.readouterr().out
+
+
 def test_main_across_speaker_with_disabled_x_across(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -404,3 +583,14 @@ def test_main_across_speaker_with_disabled_x_across(
     main()
     out = capsys.readouterr().out
     assert "ABX error rate" in out
+
+
+def test_display_name_of_str_and_callables() -> None:
+    def custom(_a: object, _b: object) -> None: ...
+
+    class Custom:
+        def __call__(self, _a: object, _b: object) -> None: ...
+
+    assert display_name("angular") == "angular"
+    assert display_name(custom) == "custom"
+    assert display_name(Custom()) == "Custom"

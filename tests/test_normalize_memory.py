@@ -56,3 +56,27 @@ def test_normalize_does_not_modify_its_input() -> None:
     out = normalize_with_singularity(data)
     assert out.shape == (64, 9)
     assert torch.equal(data, before)
+
+
+def test_score_does_not_modify_a_caller_owned_tensor() -> None:
+    """A Dataset built around a tensor the caller still holds must not have it rewritten by Score.
+
+    ``InMemoryAccessor`` deliberately does not copy when the data is already on the target device, so
+    before this guarantee the angular distance normalized the caller's own tensor in place.
+    """
+    import polars as pl
+
+    from fastabx import Dataset, Score, Task
+    from fastabx.accessor import InMemoryAccessor
+
+    torch.manual_seed(0)
+    data = torch.randn(12, 5)
+    before = data.clone()
+    dataset = Dataset(
+        labels=pl.DataFrame({"phone": ["a", "b"] * 6, "speaker": ["s0", "s0", "s1", "s1"] * 3}),
+        accessor=InMemoryAccessor({i: (i, i + 1) for i in range(12)}, data, torch.device("cpu")),
+    )
+    Score(Task(dataset, on="phone", by=["speaker"]), "angular", progress=False)
+    assert torch.equal(data, before)
+    # The dataset itself is still normalized in place: its accessor swaps in the wider tensor.
+    assert dataset.accessor.is_normalized

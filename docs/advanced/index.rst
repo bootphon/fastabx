@@ -6,3 +6,4 @@ Advanced
 
 	comparison
 	slicing
+	performance

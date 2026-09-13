@@ -17,6 +17,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_design",
     "sphinx_gallery.gen_gallery",
+    "sphinxarg.ext",
 ]
 
 sphinx_gallery_conf = {

@@ -9,7 +9,6 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from fastabx.utils import default_device
 from fastabx.verify import verify_empty_datapoints
 
 __all__ = ["Accessor", "Batch", "InMemoryAccessor"]
@@ -82,14 +81,12 @@ class InMemoryAccessor:
     """Data accessor where everything is in memory.
 
     :param indices: Mapping from the index of a datapoint to its ``[start, end[`` frontiers in ``data``.
-    :param data: The features of all the datapoints, concatenated along the time dimension. It is never
-        written to: when the data already lives on the default device, no copy is made and the accessor
-        shares the caller's tensor, and :py:meth:`.Accessor.normalize_` replaces ``self.data`` with a new
-        tensor rather than rewriting this one.
+    :param data: The features of all the datapoints, concatenated along the time dimension.
+    :param device: Device on which the data is stored.
     """
 
-    def __init__(self, indices: dict[int, tuple[int, int]], data: torch.Tensor) -> None:
-        self.device = default_device()
+    def __init__(self, indices: dict[int, tuple[int, int]], data: torch.Tensor, device: torch.device) -> None:
+        self.device = device
         self.indices = indices
         verify_empty_datapoints(self.indices)
         self.data = data.to(self.device)

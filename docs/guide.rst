@@ -128,42 +128,10 @@ CLI
 This package also provides a command line interface, a simple wrapper that exposes the :func:`.zerospeech_abx` function.
 
 
-.. code-block:: console
-
-    ❯ fastabx --help
-    usage: fastabx [-h] [-V] --max-size-group MAX_SIZE_GROUP
-                   [--max-x-across MAX_X_ACROSS] [--frequency FREQUENCY]
-                   [--speaker {within,across}] [--context {within,any}]
-                   [--distance {angular,euclidean,kl_symmetric,identical}]
-                   [--seed SEED]
-                   item features
-
-    ZeroSpeech ABX
-
-    positional arguments:
-      item                  Path to the item file
-      features              Path to the features directory
-
-    options:
-      -h, --help            show this help message and exit
-      -V, --version         show program's version number and exit
-      --max-size-group MAX_SIZE_GROUP
-                            Maximum number of A, B, or X in a cell. Set to 10 in
-                            the original ZeroSpeech ABX. Disabled if negative
-                            value. (default: None)
-      --max-x-across MAX_X_ACROSS
-                            With 'across', maximum number of X given (A, B). Set
-                            to 5 in the original ZeroSpeech ABX. Disabled if
-                            negative value. (default: None)
-      --frequency FREQUENCY
-                            Feature frequency (in Hz) (default: 50)
-      --speaker {within,across}
-                            Speaker mode (default: within)
-      --context {within,any}
-                            Context mode (default: within)
-      --distance {angular,euclidean,kl_symmetric,identical}
-                            Distance (default: angular)
-      --seed SEED           Random seed (default: 0)
+.. argparse::
+   :module: fastabx.__main__
+   :func: build_parser
+   :prog: fastabx
 
 Motivation
 ==========
