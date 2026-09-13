@@ -5,6 +5,39 @@ User guide
 | If you are coming from ABXpy or Libri-light / ZeroSpeech 2021 ABX, see :ref:`this page <other libs>`.
 | If you want to reproduce experiments from the paper, see: https://github.com/mxmpl/fastabx-paper.
 
+Quickstart
+==========
+
+Simple example where the representations are points drawn from two Gaussians, and the category
+to discriminate is which Gaussian a point came from:
+
+.. code-block:: python
+
+   import numpy as np
+   from fastabx import Dataset, Score, Task
+
+   rng = np.random.default_rng(0)
+   features = np.concatenate([rng.normal(0, 1, (50, 8)), rng.normal(2, 1, (50, 8))])
+   labels = {"phone": ["a"] * 50 + ["b"] * 50, "speaker": ["s1", "s2"] * 50}
+
+   dataset = Dataset.from_numpy(features, labels)  # What to compare
+   task = Task(dataset, on="phone", by=["speaker"])  # Which triplets to build
+   score = Score(task, "euclidean")  # How to compare them
+
+   print(score.collapse(levels=["speaker"]))
+   # 0.03059999644756317
+
+- :class:`.Dataset` holds the labels and gives access to the representations.
+- :class:`.Task` turns the ON, BY and ACROSS conditions into :class:`.Cell` objects. ``on="phone"`` asks for
+  the discriminability of one phone against another, ``by=["speaker"]`` compares only within a speaker.
+- :class:`.Score` computes the ABX of every cell, and :meth:`.collapse` averages them into a single number.
+
+That number is an **ABX error rate**, not an accuracy: lower is better, chance level is 0.5, and the 3% above
+means the two Gaussians are well separated.
+
+To run this on speech instead, keep the `Task` and `Score` lines and build the dataset from an item file and a
+directory of features.
+
 Python API
 ==========
 
@@ -126,7 +159,6 @@ CLI
 ===
 
 This package also provides a command line interface, a simple wrapper that exposes the :func:`.zerospeech_abx` function.
-
 
 .. argparse::
    :module: fastabx.__main__

@@ -38,13 +38,24 @@ intersphinx_mapping = {
 project = "fastabx"
 author = metadata(project)["Author"]
 copyright = f"{datetime.now(tz=UTC).year}, {author}"
-version = parse(metadata(project)["Version"]).base_version
+parsed_version = parse(metadata(project)["Version"])
+version = parsed_version.base_version
 release = version
+is_released = not (parsed_version.is_devrelease or parsed_version.is_prerelease or parsed_version.local)
+linkcode_ref = version if is_released else "main"
 
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 add_function_parentheses = False
 exclude_patterns = ["build"]
+nitpicky = True
+nitpick_ignore = [
+    ("py:class", "polars.dataframe.frame.DataFrame"),
+    ("py:class", "fastabx.accessor.ArrayLike"),
+    ("py:class", "numpy.int64"),
+    ("py:class", "fastabx.verify.CellErrorType"),
+    ("py:class", "fastabx.verify.LevelsErrorType"),
+]
 html_theme = "furo"
 html_static_path = ["_static"]
 html_css_files = ["sphinx_gallery_overrides.css"]
@@ -87,5 +98,4 @@ def linkcode_resolve(domain: str, info: dict) -> str | None:
     file = str(Path(fn).relative_to(pkg))
     source, start = inspect.getsourcelines(obj)
     end = start + len(source) - 1
-    version = "main"  # To update to find correct version
-    return f"https://github.com/bootphon/fastabx/blob/{version}/src/fastabx/{file}#L{start}-L{end}"
+    return f"https://github.com/bootphon/fastabx/blob/{linkcode_ref}/src/fastabx/{file}#L{start}-L{end}"

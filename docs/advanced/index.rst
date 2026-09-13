@@ -7,3 +7,4 @@ Advanced
 	comparison
 	slicing
 	performance
+	extending

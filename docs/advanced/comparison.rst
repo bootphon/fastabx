@@ -18,7 +18,7 @@ If you have pre-computed features stored in the h5features format, and you want 
 you can convert them to PyTorch tensors using the script located at :code:`scripts/convert_features.py`.
 ABXpy stores features alongside "times" arrays. If you want to use the times array to build your :class:`.Dataset`
 instead of directly computing the slicing indices, use the :meth:`.Dataset.from_item_with_times` class method.
-See :ref:`slicing` for more details on how features are sliced. 
+See :ref:`slicing` for more details on how features are sliced.
 
 ABXpy has some additional features that do no exist in fastabx, such as other subsampling methods, Levenshtein distance, etc.
 Please file an issue if you would like to see some of those features implemented in fastabx.

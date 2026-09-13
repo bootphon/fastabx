@@ -35,7 +35,6 @@ With torchaudio
         "./triphone-dev-clean.item",
         "./dev-clean",
         max_size_group=10,
-        max_x_across=None,
         feature_maker=maker,
         extension=".wav",
     )
@@ -69,9 +68,7 @@ With S3PRL
         "./triphone-dev-clean.item",
         "./dev-clean",
         max_size_group=10,
-        max_x_across=None,
         feature_maker=maker,
         extension=".wav",
     )
     print(abx)
-

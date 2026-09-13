@@ -21,8 +21,9 @@ from fastabx import Dataset, Score, Task
 #
 # We draw two clusters from :math:`\mathcal{N}(\mu_A, \Sigma)` and :math:`\mathcal{N}(\mu_B, \Sigma)`
 # with a shared (correlated) covariance and a fixed diagonal shift between the means. The reported
-# ABX score is the probability that a probe drawn from class :math:`A` ends up closer to another
-# class-:math:`A` sample than to a class-:math:`B` sample.
+# ABX error rate is the probability that a sample drawn from class :math:`A` ends up closer to a
+# class-:math:`B` sample than to another class-:math:`A` sample. Well-separated clouds give a rate
+# near 0.
 
 n = 100
 diagonal_shift = 4
@@ -41,7 +42,7 @@ plt.scatter(*first.T, alpha=0.5)
 plt.scatter(*second.T, alpha=0.5)
 plt.axis("equal")
 plt.grid()
-plt.title(f"ABX: {1 - score.collapse():.3%}")
+plt.title(f"ABX error rate: {score.collapse():.3%}")
 plt.show()
 
 # %%
@@ -49,8 +50,8 @@ plt.show()
 # --------------------------------------
 #
 # Now we keep the same covariance for both classes and sweep the displacement between their means
-# along the diagonal. The score climbs from chance level (fully overlapping clouds) up toward
-# :math:`1` as the clusters separate.
+# along the diagonal. The error rate falls from chance level, 0.5 with fully overlapping clouds,
+# down toward :math:`0` as the clusters separate.
 
 n = 100
 shift = np.ones(1)
@@ -70,7 +71,7 @@ for ax in axes.flatten():
     ax.scatter(*first.T, s=10, alpha=0.5)
     ax.scatter(*second.T, s=10, alpha=0.5)
     ax.grid()
-    ax.set_title(f"ABX: {1 - score.collapse():.3%}")
+    ax.set_title(f"ABX error rate: {score.collapse():.3%}")
     second += shift
 
 plt.show()
@@ -82,16 +83,24 @@ plt.show()
 # In 1D with a shared variance, the ABX score can be written in closed form, which makes it a good
 # sanity check for the implementation. Let :math:`A = \mathcal{N}(\mu_a, \sigma^2)` and
 # :math:`B = \mathcal{N}(\mu_b, \sigma^2)`, and write the normalized separation
-# :math:`t = (\mu_a - \mu_b) / \sigma`. Then
+# :math:`t = (\mu_a - \mu_b) / \sigma`. The probability of a *correct* decision is
 #
 # .. math::
 #
-#     \mathrm{ABX}(A, B) \;=\; \mathbb{P}\bigl(|x-a| < |x-b|\bigr) \;=\; \frac{1}{2}
+#     \mathbb{P}\bigl(|x-a| < |x-b|\bigr) \;=\; \frac{1}{2}
 #     + \frac{1}{2}\,\operatorname{erf}\!\left(\frac{t}{2}\right)\operatorname{erf}\!\left(\frac{t}{2\sqrt{3}}\right),
 #
-# where :math:`a \sim A`, :math:`x \sim A`, :math:`b \sim B` are mutually independent. The result
-# depends only on :math:`t`: it equals :math:`\tfrac{1}{2}` at :math:`t = 0`, tends to :math:`1` as
-# :math:`|t| \to \infty`, and is symmetric under :math:`\mu_a \leftrightarrow \mu_b`.
+# where :math:`a \sim A`, :math:`x \sim A`, :math:`b \sim B` are mutually independent. The ABX error
+# rate that ``fastabx`` reports is its complement,
+#
+# .. math::
+#
+#     \mathrm{ABX}_\text{err}(A, B) \;=\; \frac{1}{2}
+#     - \frac{1}{2}\,\operatorname{erf}\!\left(\frac{t}{2}\right)\operatorname{erf}\!\left(\frac{t}{2\sqrt{3}}\right).
+#
+# The result depends only on :math:`t`: the error rate equals :math:`\tfrac{1}{2}` at :math:`t = 0`,
+# tends to :math:`0` as :math:`|t| \to \infty`, and is symmetric under
+# :math:`\mu_a \leftrightarrow \mu_b`.
 #
 # .. dropdown:: Derivation
 #
@@ -173,24 +182,24 @@ plt.show()
 # ----------------------------------
 #
 # We can now check the formula above against ``fastabx``. The helpers below sample :math:`n = 500`
-# points from each class, compute the empirical ABX with ``Score(Task(...))``, and compare it to
-# ``theoretical_abx``. Each panel overlays the true densities and the sample histograms, with the
-# two scores shown in the title. We then sweep one parameter at a time: :math:`\mu_b` at fixed
-# :math:`\sigma`, then :math:`\sigma` at fixed :math:`\mu_b`.
+# points from each class, compute the empirical ABX error rate with ``Score(Task(...))``, and compare
+# it to ``theoretical_abx_error``. Each panel overlays the true densities and the sample histograms,
+# with the two error rates shown in the title. We then sweep one parameter at a time: :math:`\mu_b`
+# at fixed :math:`\sigma`, then :math:`\sigma` at fixed :math:`\mu_b`.
 
 
-def theoretical_abx(mu_a: float, mu_b: float, sigma: float) -> float:
-    """Closed-form ABX score for two 1D Gaussians with shared variance."""
+def theoretical_abx_error(mu_a: float, mu_b: float, sigma: float) -> float:
+    """Closed-form ABX error rate for two 1D Gaussians with shared variance."""
     t = (mu_a - mu_b) / sigma
-    return 0.5 + 0.5 * math.erf(t / 2) * math.erf(t / (2 * math.sqrt(3)))
+    return 0.5 - 0.5 * math.erf(t / 2) * math.erf(t / (2 * math.sqrt(3)))
 
 
-def empirical_abx(a: np.ndarray, b: np.ndarray) -> float:
-    """Empirical ABX score on two 1D samples computed with ``fastabx``."""
+def empirical_abx_error(a: np.ndarray, b: np.ndarray) -> float:
+    """Empirical ABX error rate on two 1D samples computed with ``fastabx``."""
     features = np.concatenate([a, b]).reshape(-1, 1)
     labels = {"label": [0] * len(a) + [1] * len(b)}
     dataset = Dataset.from_numpy(features, labels)
-    return 1.0 - Score(Task(dataset, on="label"), "euclidean").collapse()
+    return Score(Task(dataset, on="label"), "euclidean").collapse()
 
 
 def gaussian_pdf(x: np.ndarray, mu: float, sigma: float) -> np.ndarray:
@@ -207,7 +216,7 @@ def plot_panel(
     n: int,
     seed: int,
 ) -> None:
-    """Draw one panel comparing the theoretical and empirical ABX scores."""
+    """Draw one panel comparing the theoretical and empirical ABX error rates."""
     rng = np.random.default_rng(seed)
     a = rng.normal(mu_a, sigma, n)
     b = rng.normal(mu_b, sigma, n)
@@ -228,10 +237,12 @@ def plot_panel(
     ax.set_ylim(0, 1.3 * peak)
     ax.grid(alpha=0.3)
 
-    theory = theoretical_abx(mu_a, mu_b, sigma)
-    empirical = empirical_abx(a, b)
+    theory = theoretical_abx_error(mu_a, mu_b, sigma)
+    empirical = empirical_abx_error(a, b)
     ax.set_title(
-        rf"$\mu_b={mu_b:g},\ \sigma={sigma:g}$" + "\n" + f"theory: {theory:.3f}   fastabx: {empirical:.3f}",
+        rf"$\mu_b={mu_b:g},\ \sigma={sigma:g}$"
+        + "\n"
+        + f"error rate — theory: {theory:.3f}   fastabx: {empirical:.3f}",
         fontsize=10,
     )
 

@@ -3,7 +3,8 @@ Examples
 ========
 
 .. toctree::
+   :glob:
 
-    gallery/plot_gaussians
-    external
-    constraints
+   gallery/plot_*
+   external
+   constraints

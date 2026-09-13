@@ -57,6 +57,7 @@ Contents
    api
    examples/index
    advanced/index
+   troubleshooting
 
 Footnotes
 ---------

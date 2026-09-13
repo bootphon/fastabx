@@ -108,6 +108,9 @@ def score_task(
 class Score:
     """Compute the score of a :py:class:`.Task` using a given distance specified by ``distance_name``.
 
+    All the scores reported by this class are ABX error rates (1 - discriminability).
+    Lower is better, and chance level is 0.5.
+
     Additional :py:class:`.Constraints` can be provided to restrict the possible triplets in each cell.
 
     The full scoring runs eagerly in ``__init__``: constructing a ``Score`` is the expensive step,
@@ -154,7 +157,10 @@ class Score:
 
     @property
     def cells(self) -> pl.DataFrame:
-        """Scored cells."""
+        """Scored cells.
+
+        The ``score`` column is the ABX error rate of each cell, and ``size`` its number of triplets.
+        """
         return self._cells
 
     def __repr__(self) -> str:
@@ -173,19 +179,20 @@ class Score:
         (self.cells.select(cs.exclude(nested)) if nested else self.cells).write_csv(file)
 
     def details(self, *, levels: Sequence[tuple[str, ...] | str] | None = None) -> pl.DataFrame:
-        """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs.
+        """Collapse the scored cells and return the final ABX error rates and sizes for each (A, B) pairs.
 
         :param levels: List of levels to collapse. The order matters a lot.
         """
         return score_details(self.cells, levels=levels)
 
     def collapse(self, *, levels: Sequence[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
-        """Collapse the scored cells into the final score.
+        """Collapse the scored cells into the final ABX error rate.
 
         Use either `levels` or `weighted=True` to collapse the scores.
 
         :param levels: List of levels to collapse. The order matters a lot.
         :param weighted: Whether to collapse the scores using a mean weighted by the size of the cells.
+        :returns: The overall ABX error rate, between 0 and 1.
         """
         if weighted:
             if levels is not None:

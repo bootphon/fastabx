@@ -121,6 +121,8 @@ def abx_on_cell(
 ) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``.
 
+    Returns the ABX error rate (1 - discriminability) of the cell, as a scalar tensor.
+
     .. warning::
         Unlike :py:class:`.Score`, this low-level helper does **not** normalize the features.
         For the default ``"angular"`` (and ``"cosine"``) distance the cell's features must already
