@@ -9,9 +9,9 @@ import polars as pl
 import torch
 from torch import Tensor
 
+from fastabx.accessor import Accessor, Batch
 from fastabx.alignment import Alignment
 from fastabx.constraints import Constraints, NoConstraintsError, apply_constraints
-from fastabx.dataset import Batch, InMemoryAccessor
 from fastabx.distance import Distance, distance_matrix
 from fastabx.task import Task
 from fastabx.utils import GATHER_CHUNK_ROWS, MAX_SCORE_CHUNK_ROWS, REDUCTION_FLUSH_COLS
@@ -63,10 +63,10 @@ class GroupSpec:
     mask: np.ndarray | None
 
 
-def gather_chunk(accessor: InMemoryAccessor, chunk: list[GroupSpec]) -> Generator[CellGroup, None, None]:
+def gather_chunk(accessor: Accessor, chunk: list[GroupSpec]) -> Generator[CellGroup, None, None]:
     """Gather a chunk of groups in one ``accessor.batched`` call, then yield each group as a slice of the result.
 
-    :param accessor: The dataset's :py:class:`.InMemoryAccessor`.
+    :param accessor: The dataset's :py:class:`.Accessor`.
     :param chunk: A list of :py:class:`.GroupSpec` objects, each describing a group to gather.
     :returns: A generator of :py:class:`.CellGroup` objects, one per group in ``chunk``.
     """

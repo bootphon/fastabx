@@ -5,12 +5,23 @@ import subprocess
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
 import torch
 
-from fastabx.dataset import dummy_dataset_from_item, find_all_files
+from fastabx.dataset import Dataset, find_all_files, item_frontiers, read_labels
+
+
+def dummy_dataset_from_item(item: str | Path, frequency: int | str | Decimal) -> Dataset:
+    """Dataset with the labels of an item file and a single constant feature."""
+    return Dataset.from_dataframe(
+        read_labels(item, "#file", "onset", "offset")
+        .with_columns(pl.lit(0).alias("dummy"))
+        .with_columns(*item_frontiers(frequency, "onset", "offset")),
+        "dummy",
+    )
 
 
 class NoAudioError(ValueError):
@@ -68,7 +79,7 @@ CONVS_80MS = "10,5-3,2-3,2-3,2-3,2-2,2-2,2-2,2-2,2"
 def invalid_entries_in_item(
     item: Path,
     root: Path,
-    frequency: int = 50,
+    frequency: int | str | Decimal = 50,
     convs_string: str = "CONVS_20MS",
     extension: str = ".wav",
 ) -> pl.DataFrame:
@@ -90,7 +101,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Check item file and features")
     parser.add_argument("item", type=Path, help="Path to item file")
     parser.add_argument("root", type=Path, help="Root to audio directory")
-    parser.add_argument("--frequency", type=float, default=50, help="Feature frequency in Hz. Default: 50")
+    parser.add_argument(
+        "--frequency",
+        type=str,
+        default="50",
+        help="Feature frequency in Hz. Read as an exact decimal, so a non-integer frequency such as "
+        "12.5 is parsed as written. Default: 50",
+    )
     parser.add_argument("--extension", type=str, default=".wav", help="Extension of the audio files. Default: .wav")
     parser.add_argument(
         "--convs",

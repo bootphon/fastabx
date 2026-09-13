@@ -2,8 +2,7 @@
 
 A :py:class:`.Distance` compares individual frames and produces a ``(n1, n2, s1, s2)`` distance lattice.
 An :py:class:`.Alignment` turns that lattice into the ``(n1, n2)`` distance between the sequences themselves.
-DTW and edit distance are both dynamic programs over that same lattice and differ only in their recurrence,
-so they share this interface.
+Dynamic time warping is the only alignment fastabx ships, but other alignments following the protocol can be used.
 """
 
 from typing import Literal, Protocol

@@ -9,6 +9,7 @@ import pytest
 from fastabx import Dataset, Score, Task
 from fastabx.constraints import constraints_all_different
 from fastabx.score import CollapseError, IncompatibleNormalizationError, pl_weighted_mean, score_details
+from tests.conftest import accessor_data
 
 
 @pytest.fixture
@@ -32,13 +33,13 @@ def test_score_cells_setter_is_read_only(small_score: Score) -> None:
 def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
     import torch
 
-    original = tiny_dataset.accessor.data.clone()
+    original = accessor_data(tiny_dataset).clone()
     task = Task(tiny_dataset, on="phone", by=["context"])
     Score(task, "cosine")
     # `normalize_with_singularity_` appends a border column → data width grows by 1.
-    assert tiny_dataset.accessor.data.shape[1] == original.shape[1] + 1
+    assert accessor_data(tiny_dataset).shape[1] == original.shape[1] + 1
     # Each row (excluding the appended border) must now have unit L2 norm.
-    body = tiny_dataset.accessor.data[:, :-1]
+    body = accessor_data(tiny_dataset)[:, :-1]
     torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0)), atol=1e-5, rtol=0)
 
 
@@ -46,10 +47,10 @@ def test_score_cosine_twice_does_not_re_normalize(tiny_dataset: Dataset) -> None
     """Two consecutive cosine Scores must not append the singularity border twice."""
     task = Task(tiny_dataset, on="phone", by=["context"])
     Score(task, "cosine")
-    width_after_first = tiny_dataset.accessor.data.shape[1]
+    width_after_first = accessor_data(tiny_dataset).shape[1]
     assert tiny_dataset.accessor.is_normalized
     Score(task, "cosine")
-    assert tiny_dataset.accessor.data.shape[1] == width_after_first
+    assert accessor_data(tiny_dataset).shape[1] == width_after_first
 
 
 def test_score_euclidean_after_cosine_raises(tiny_dataset: Dataset) -> None:
@@ -63,12 +64,12 @@ def test_score_euclidean_after_cosine_raises(tiny_dataset: Dataset) -> None:
 def test_score_does_not_normalize_for_euclidean(tiny_dataset: Dataset) -> None:
     import torch
 
-    original = tiny_dataset.accessor.data.clone()
+    original = accessor_data(tiny_dataset).clone()
     task = Task(tiny_dataset, on="phone", by=["context"])
     Score(task, "euclidean")
     # Shape AND values unchanged.
-    assert tiny_dataset.accessor.data.shape == original.shape
-    torch.testing.assert_close(tiny_dataset.accessor.data, original)
+    assert accessor_data(tiny_dataset).shape == original.shape
+    torch.testing.assert_close(accessor_data(tiny_dataset), original)
 
 
 def test_collapse_weighted_with_levels_raises(small_score: Score) -> None:

@@ -1,25 +1,21 @@
 """Data utilities."""
 
-import math
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Self
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 import polars.selectors as cs
 import torch
 from tqdm import tqdm
 
+from fastabx.accessor import Accessor, ArrayLike, InMemoryAccessor
 from fastabx.utils import default_device, with_librilight_bug
-from fastabx.verify import verify_empty_datapoints
 
-__all__ = ["Batch", "Dataset", "InMemoryAccessor"]
-
-type ArrayLike = npt.ArrayLike  # Better rendering in docs
+__all__ = ["Dataset"]
 
 
 def _is_pandas_dataframe(obj: object) -> bool:
@@ -28,89 +24,10 @@ def _is_pandas_dataframe(obj: object) -> bool:
     return cls.__name__ == "DataFrame" and cls.__module__.split(".", 1)[0] == "pandas"
 
 
-@dataclass(frozen=True)
-class Batch:
-    """Batch of padded data."""
-
-    data: torch.Tensor
-    sizes: torch.Tensor
-
-    def __repr__(self) -> str:
-        return f"Batch(data=Tensor(shape={self.data.shape}, dtype={self.data.dtype}), sizes={self.sizes})"
-
-
-class InMemoryAccessor:
-    """Data accessor where everything is in memory."""
-
-    def __init__(self, indices: dict[int, tuple[int, int]], data: torch.Tensor) -> None:
-        self.device = default_device()
-        self.indices = indices
-        verify_empty_datapoints(self.indices)
-        self.data = data.to(self.device)
-        self.is_normalized = False
-        size = max(self.indices) + 1
-        starts, lengths = np.zeros(size, dtype=np.int64), np.zeros(size, dtype=np.int64)
-        for i, (start, end) in self.indices.items():
-            starts[i], lengths[i] = start, end - start
-        self._lengths_np = lengths
-        self._starts = torch.from_numpy(starts).to(self.device)
-        self._lengths = torch.from_numpy(lengths).to(dtype=torch.int32, device=self.device)
-
-    def __repr__(self) -> str:
-        return f"InMemoryAccessor(data of shape {tuple(self.data.shape)}, with {len(self)} items)"
-
-    def __getitem__(self, i: int) -> torch.Tensor:
-        if i not in self.indices:
-            msg = f"No item at index {i} (the accessor has {len(self.indices)} items)"
-            raise IndexError(msg)
-        start, end = self.indices[i]
-        return self.data[start:end]
-
-    def __len__(self) -> int:
-        return len(self.indices)
-
-    def __iter__(self) -> Iterator[torch.Tensor]:
-        for i in self.indices:
-            yield self[i]
-
-    def lengths(self, indices: list[int]) -> npt.NDArray[np.int64]:
-        """Get the lengths of the data from a list of indices."""
-        return self._lengths_np[indices]
-
-    def batched(self, indices: ArrayLike) -> Batch:
-        """Get the padded data and the original sizes of the data from a list of indices."""
-        idx_np = np.asarray(indices, dtype=np.int64)
-        smax = int(self._lengths_np[idx_np].max())
-        idx = torch.from_numpy(idx_np).to(self.device)
-        sizes = self._lengths.index_select(0, idx)
-        starts = self._starts.index_select(0, idx)
-        arange = torch.arange(smax, device=self.device)
-        mask = arange < sizes.unsqueeze(1)
-        src = torch.where(mask, starts.unsqueeze(1) + arange, 0)
-        gathered = self.data.index_select(0, src.view(-1)).view(idx.size(0), smax, -1)
-        gathered.mul_(mask.unsqueeze(-1))
-        return Batch(gathered, sizes)
-
-
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
     """Recursively find all files with the given `extension` in `root`."""
     root = Path(root)
     return dict(sorted((str(p.relative_to(root)).removesuffix(extension), p) for p in root.rglob(f"*{extension}")))
-
-
-def normalize_with_singularity_(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    """Normalize the given vector across the third dimension, in-place.
-
-    Extend all vectors by eps to put the null vector at the maximal
-    angular distance from any non-null vector.
-    """
-    norm = x.norm(dim=1, keepdim=True)
-    zero_mask = norm.squeeze(1) == 0
-    x[~zero_mask] /= norm[~zero_mask]
-    x[zero_mask] = 1.0 / math.sqrt(x.size(1))
-    border = x.new_full((x.size(0), 1), eps)
-    border[zero_mask] = -2 * eps
-    return torch.cat([x, border], dim=1)
 
 
 class InvalidItemFileError(Exception):
@@ -313,21 +230,18 @@ class Dataset:
     """Simple interface to a dataset.
 
     :param labels: ``pl.DataFrame`` containing the labels of the datapoints.
-    :param accessor: ``InMemoryAccessor`` to access the data.
+    :param accessor: :py:class:`.Accessor` to the data, usually an :py:class:`.InMemoryAccessor`.
     """
 
     labels: pl.DataFrame
-    accessor: InMemoryAccessor
+    accessor: Accessor
 
     def __repr__(self) -> str:
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}"
 
     def normalize_(self) -> Self:
         """L2 normalization of the data. Idempotent: a second call is a no-op."""
-        if self.accessor.is_normalized:
-            return self
-        self.accessor.data = normalize_with_singularity_(self.accessor.data)
-        self.accessor.is_normalized = True
+        self.accessor.normalize_()
         return self
 
     @classmethod
@@ -514,11 +428,3 @@ class Dataset:
             )
             raise ValueError(msg)
         return cls.from_dataframe(pl.concat((features_df, labels_df), how="horizontal"), features_df.columns)
-
-
-def dummy_dataset_from_item(item: str | Path, frequency: int | str | Decimal | None) -> Dataset:
-    """To debug."""
-    labels = read_labels(item, "#file", "onset", "offset").with_columns(pl.lit(0).alias("dummy"))
-    if frequency is not None:
-        labels = labels.with_columns(*item_frontiers(frequency, "onset", "offset"))
-    return Dataset.from_dataframe(labels, "dummy")

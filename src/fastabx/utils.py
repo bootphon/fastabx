@@ -27,6 +27,13 @@ def with_librilight_bug() -> bool:
     return os.getenv("FASTABX_WITH_LIBRILIGHT_BUG", "0") == "1"
 
 
+def display_name(value: object) -> str:
+    """Short readable name of a distance or an alignment, for ``repr`` and error messages."""
+    if isinstance(value, str):
+        return value
+    return getattr(value, "__name__", type(value).__name__)
+
+
 def print_fastabx_output(score: float, **kwargs: str | int) -> None:
     """Help function to format fastabx CLI output."""
     match os.getenv("FASTABX_OUTPUT"):

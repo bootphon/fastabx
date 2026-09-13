@@ -17,6 +17,7 @@ Dataset
 
 .. autoclass:: fastabx.Batch
 
+
 Task
 ----
 
@@ -64,6 +65,13 @@ Cell
 .. autoclass:: fastabx.Cell
    :members: num_triplets, needs_alignment
 
+Accessor
+--------
+
+.. autoclass:: fastabx.Accessor()
+   :members: lengths, batched, normalize_, __len__, __getitem__, __iter__
+
+
 Distance
 --------
 
@@ -82,6 +90,10 @@ Distance
    of representations and returning their pairwise **frame-level** distances, as a ``(n1, n2, s1, s2)``
    cost lattice. Reducing that lattice to one distance per pair of sequences is the job of an
    :ref:`alignment <alignment>`.
+
+   Anywhere a ``DistanceName`` is accepted (:class:`.Score` and :func:`.abx_on_cell`) a callable of this
+   shape is accepted in its place. Only the built-in ``"angular"`` and ``"cosine"`` names normalize the
+   dataset, so a custom distance is handed the features exactly as they are.
 
 .. _alignment:
 

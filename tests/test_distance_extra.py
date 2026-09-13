@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from torch.testing import assert_close, make_tensor
 from torchdtw import dtw_batch
 
+from fastabx import Dataset, Score, Task, abx_on_cell
 from fastabx.distance import (
     DistanceName,
     angular_distance,
@@ -20,6 +21,7 @@ from fastabx.distance import (
     identical_distance,
     kl_symmetric_distance,
 )
+from fastabx.score import IncompatibleNormalizationError
 
 NAMES: list[DistanceName] = list(get_args(DistanceName.__value__))
 KL_FLOAT32_TOL = 1e-5  # observed slack of mean-centered KL in float32 is well under this
@@ -191,3 +193,47 @@ def test_distance_matrix_symmetric_flag_passed_through() -> None:
     for i in range(3):
         assert_close(sym[i, i].item(), 0.0, atol=1e-5, rtol=0)
         assert_close(asym[i, i].item(), 0.0, atol=1e-5, rtol=0)
+
+
+def manhattan_distance(a1: torch.Tensor, a2: torch.Tensor) -> torch.Tensor:
+    """Frame-level L1 distance, as the ``(n1, n2, s1, s2)`` lattice a ``Distance`` must return."""
+    n1, s1, d = a1.size()
+    n2, s2, _ = a2.size()
+    lattice = torch.cdist(a1.view(n1 * s1, d), a2.view(n2 * s2, d), p=1)
+    return lattice.view(n1, s1, n2, s2).transpose(1, 2)
+
+
+def test_distance_function_passes_custom_callable_through() -> None:
+    assert distance_function(manhattan_distance) is manhattan_distance
+
+
+def test_score_with_custom_distance_matches_an_equivalent_builtin(tiny_dataset: Dataset) -> None:
+    """A custom Distance goes through Score exactly like a named one."""
+
+    def euclidean(a1: torch.Tensor, a2: torch.Tensor) -> torch.Tensor:
+        return euclidean_distance(a1, a2)
+
+    task = Task(tiny_dataset, on="phone", by=["speaker"])
+    custom = Score(task, euclidean).collapse(levels=["speaker"])
+    builtin = Score(Task(tiny_dataset, on="phone", by=["speaker"]), "euclidean").collapse(levels=["speaker"])
+    assert custom == pytest.approx(builtin)
+
+
+def test_score_repr_names_a_custom_distance(tiny_dataset: Dataset) -> None:
+    score = Score(Task(tiny_dataset, on="phone", by=["speaker"]), manhattan_distance)
+    assert "manhattan_distance distance" in repr(score)
+
+
+def test_custom_distance_does_not_normalize_and_is_refused_after_cosine(tiny_dataset: Dataset) -> None:
+    """Only the built-in angular names normalize; a custom distance hits the same guard afterwards."""
+    Score(Task(tiny_dataset, on="phone", by=["speaker"]), manhattan_distance)
+    assert not tiny_dataset.accessor.is_normalized
+    Score(Task(tiny_dataset, on="phone", by=["speaker"]), "angular")
+    with pytest.raises(IncompatibleNormalizationError, match="manhattan_distance"):
+        Score(Task(tiny_dataset, on="phone", by=["speaker"]), manhattan_distance)
+
+
+def test_abx_on_cell_accepts_a_custom_distance(tiny_dataset: Dataset) -> None:
+    cell = Task(tiny_dataset, on="phone", by=["speaker"])[0]
+    assert_close(abx_on_cell(cell, manhattan_distance), abx_on_cell(cell, manhattan_distance))
+    assert 0.0 <= float(abx_on_cell(cell, manhattan_distance)) <= 1.0

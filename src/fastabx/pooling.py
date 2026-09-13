@@ -7,7 +7,8 @@ from typing import Literal
 
 import torch
 
-from fastabx.dataset import Dataset, InMemoryAccessor
+from fastabx.accessor import InMemoryAccessor
+from fastabx.dataset import Dataset
 
 __all__ = ["PooledDataset", "PoolingName", "pool_dataset"]
 

@@ -7,7 +7,7 @@ import torch
 from hypothesis import settings
 
 from fastabx import Dataset
-from fastabx.dataset import InMemoryAccessor
+from fastabx.accessor import InMemoryAccessor
 
 # Run more examples than hypothesis's default (100) so adversarial cases (e.g. the cosine
 # antipodal boundary in test_distances.py) get explored harder by default. Individual tests
@@ -20,6 +20,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     """CLI arguments."""
     parser.addoption("--item", action="store", default=None, help="Path to the item file")
     parser.addoption("--features", action="store", default=None, help="Path to the features directory")
+
+
+def accessor_data(dataset: Dataset) -> torch.Tensor:
+    """Concrete feature tensor of a dataset, for the tests that check the in-memory layout.
+
+    ``Dataset.accessor`` is typed as the ``Accessor`` protocol, which has no ``data``: this narrows it back
+    to the implementation the constructors actually build.
+    """
+    assert isinstance(dataset.accessor, InMemoryAccessor)
+    return dataset.accessor.data
 
 
 @pytest.fixture

@@ -13,7 +13,7 @@ from fastabx.constraints import Constraints
 from fastabx.distance import Distance, DistanceName, distance_function
 from fastabx.group import GroupReducer, group_cells
 from fastabx.task import Task
-from fastabx.utils import MIN_CELLS_FOR_TQDM, prefetch
+from fastabx.utils import MIN_CELLS_FOR_TQDM, display_name, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
 
 __all__ = ["Score"]
@@ -104,8 +104,8 @@ class Score:
         If you need the original features back, keep a separate, un-normalized ``Dataset``.
 
     :param task: The :py:class:`.Task` to score.
-    :param distance_name: Name of the distance, "angular" (same as "cosine"), "euclidean", "kl_symmetric"
-        or "identical". Defaults to "angular".
+    :param distance_name: The distance to use, either the name of a built-in one ("euclidean", "cosine",
+        "angular", "kl_symmetric", "identical") or a custom :py:class:`.Distance` callable.
     :param alignment: How to reduce the frame-level cost lattice to one distance per pair of sequences,
         either the name of a built-in alignment ("dtw") or a custom :py:class:`.Alignment`.
         Defaults to "dtw". Bypassed entirely when the dataset is pooled, since there is nothing to align.
@@ -115,7 +115,7 @@ class Score:
     def __init__(
         self,
         task: Task,
-        distance_name: DistanceName,
+        distance_name: DistanceName | Distance,
         *,
         alignment: AlignmentName | Alignment = "dtw",
         constraints: Constraints | None = None,
@@ -127,7 +127,7 @@ class Score:
         if distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
-            raise IncompatibleNormalizationError(distance_name)
+            raise IncompatibleNormalizationError(display_name(distance_name))
         scores, sizes = score_task(task, distance, alignment=align, constraints=constraints)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
             score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
@@ -139,9 +139,8 @@ class Score:
         return self._cells
 
     def __repr__(self) -> str:
-        align = self.alignment
-        name = align if isinstance(align, str) else getattr(align, "__name__", type(align).__name__)
-        return f"Score({len(self.cells)} cells, {self.distance_name} distance, {name} alignment)"
+        distance, align = display_name(self.distance_name), display_name(self.alignment)
+        return f"Score({len(self.cells)} cells, {distance} distance, {align} alignment)"
 
     def write_csv(self, file: str | Path) -> None:
         """Write the results of all the cells to a CSV file.

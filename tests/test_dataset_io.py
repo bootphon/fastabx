@@ -10,12 +10,11 @@ import pytest
 import torch
 
 from fastabx import Dataset
+from fastabx.accessor import Batch, InMemoryAccessor, normalize_with_singularity
 from fastabx.dataset import (
-    Batch,
     EmptyFeaturesError,
     FeaturesSizeError,
     FrequencyTypeError,
-    InMemoryAccessor,
     InvalidItemFileError,
     NonFiniteError,
     TimesArrayDimensionError,
@@ -25,9 +24,9 @@ from fastabx.dataset import (
     item_frontiers,
     load_data_from_item,
     load_data_from_item_with_times,
-    normalize_with_singularity_,
     read_labels,
 )
+from tests.conftest import accessor_data
 
 
 def test_batch_repr() -> None:
@@ -43,7 +42,7 @@ def test_from_dataframe_mapping_basic() -> None:
         feature_columns=["x0", "x1"],
     )
     assert ds.labels.columns == ["phone"]
-    assert ds.accessor.data.shape == (3, 2)
+    assert accessor_data(ds).shape == (3, 2)
     assert len(ds.accessor) == 3
 
 
@@ -83,13 +82,13 @@ def test_from_dataframe_preserves_integer_units() -> None:
         {"unit": [2**24 + 1, 2**24], "phone": ["a", "b"]},
         feature_columns="unit",
     )
-    assert not ds.accessor.data.dtype.is_floating_point
-    assert ds.accessor.data[0].item() != ds.accessor.data[1].item()
+    assert not accessor_data(ds).dtype.is_floating_point
+    assert accessor_data(ds)[0].item() != accessor_data(ds)[1].item()
 
 
 def test_from_dataframe_casts_float_features() -> None:
     ds = Dataset.from_dataframe({"x0": [1.0, 2.0], "phone": ["a", "b"]}, feature_columns="x0")
-    assert ds.accessor.data.dtype is torch.float32
+    assert accessor_data(ds).dtype is torch.float32
 
 
 def test_from_numpy_polars_labels() -> None:
@@ -163,16 +162,16 @@ def test_dataset_normalize_is_idempotent() -> None:
     assert not dataset.accessor.is_normalized
     dataset.normalize_()
     assert dataset.accessor.is_normalized
-    width_after_first = dataset.accessor.data.shape[1]
-    data_after_first = dataset.accessor.data.clone()
+    width_after_first = accessor_data(dataset).shape[1]
+    data_after_first = accessor_data(dataset).clone()
     dataset.normalize_()
-    assert dataset.accessor.data.shape[1] == width_after_first
-    torch.testing.assert_close(dataset.accessor.data, data_after_first)
+    assert accessor_data(dataset).shape[1] == width_after_first
+    torch.testing.assert_close(accessor_data(dataset), data_after_first)
 
 
 def test_normalize_with_singularity_basic_case() -> None:
     x = torch.tensor([[3.0, 4.0], [0.0, 0.0]])
-    out = normalize_with_singularity_(x.clone())
+    out = normalize_with_singularity(x.clone())
     # Width grows by 1; first row normalised to unit; second row is the singularity.
     assert out.shape == (2, 3)
     torch.testing.assert_close(out[0, 0].item(), 0.6)
@@ -379,7 +378,7 @@ def test_from_item_with_times_end_to_end(tmp_path: Path) -> None:
     torch.save(torch.linspace(0.0, 1.0, 10), times_dir / "f1.pt")
     ds = Dataset.from_item_with_times(item, feats_dir, times_dir)
     assert ds.labels.height == 2
-    assert ds.accessor.data.shape[1] == 3
+    assert accessor_data(ds).shape[1] == 3
 
 
 def test_load_data_from_item_with_times_missing_file_raises() -> None:
@@ -473,7 +472,7 @@ def test_from_item_end_to_end(tmp_path: Path) -> None:
     torch.save(torch.arange(60, 90, dtype=torch.float32).view(10, 3), feats_dir / "f2.pt")
     ds = Dataset.from_item(item, feats_dir, frequency=50)
     assert ds.labels.height == 3
-    assert ds.accessor.data.shape[1] == 3
+    assert accessor_data(ds).shape[1] == 3
 
 
 def test_dataset_repr_contains_labels_and_accessor() -> None:
@@ -484,18 +483,6 @@ def test_dataset_repr_contains_labels_and_accessor() -> None:
     assert "InMemoryAccessor" in rep
 
 
-def test_dummy_dataset_from_item_with_and_without_frequency(tmp_path: Path) -> None:
-    from fastabx.dataset import dummy_dataset_from_item
-
-    item = tmp_path / "data.item"
-    item.write_text("#file onset offset phone\nf1 0.0 0.1 a\nf1 0.1 0.2 b\n")
-    ds_no_freq = dummy_dataset_from_item(item, frequency=None)
-    assert "#file" in ds_no_freq.labels.columns
-    ds_with_freq = dummy_dataset_from_item(item, frequency=50)
-    assert "start" in ds_with_freq.labels.columns
-    assert "end" in ds_with_freq.labels.columns
-
-
 def test_from_item_and_units(tmp_path: Path) -> None:
     item = tmp_path / "data.item"
     item.write_text("#file onset offset phone\nf1 0.00 0.10 a\nf1 0.10 0.20 b\n")
@@ -504,4 +491,4 @@ def test_from_item_and_units(tmp_path: Path) -> None:
     ds = Dataset.from_item_and_units(item, units_path, frequency=50)
     assert ds.labels.height == 2
     # The unit tensor is unsqueezed to add a feature dim of 1.
-    assert ds.accessor.data.shape[1] == 1
+    assert accessor_data(ds).shape[1] == 1

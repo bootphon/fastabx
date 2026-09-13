@@ -1,4 +1,4 @@
-"""Compare peak CPU memory between old and new normalize_with_singularity_ implementations."""
+"""Compare peak CPU memory between old and new normalize_with_singularity implementations."""
 
 import math
 from collections.abc import Callable
@@ -7,7 +7,7 @@ import torch
 from torch.profiler import ProfilerActivity, profile
 from torch.testing import assert_close
 
-from fastabx.dataset import normalize_with_singularity_
+from fastabx.accessor import normalize_with_singularity
 
 
 def normalize_with_singularity_old(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
@@ -39,9 +39,20 @@ def test_normalize_memory_cpu() -> None:
     data = torch.randn(n, d)
     data[::10] = 0  # inject some zero vectors
     result_old, peak_old = peak_cpu_memory_bytes(normalize_with_singularity_old, data.clone())
-    result_new, peak_new = peak_cpu_memory_bytes(normalize_with_singularity_, data.clone())
+    result_new, peak_new = peak_cpu_memory_bytes(normalize_with_singularity, data.clone())
     assert_close(result_old, result_new)
     print(f"\nPeak memory old: {peak_old / 1e6:.1f} MB")
     print(f"Peak memory new: {peak_new / 1e6:.1f} MB")
     print(f"Reduction:       {(1 - peak_new / peak_old) * 100:.1f}%")
     assert peak_new < peak_old
+
+
+def test_normalize_does_not_modify_its_input() -> None:
+    """The border forces a new tensor anyway, so the input is left alone rather than normalized in place."""
+    torch.manual_seed(0)
+    data = torch.randn(64, 8)
+    data[::7] = 0  # zero vectors take the singularity branch
+    before = data.clone()
+    out = normalize_with_singularity(data)
+    assert out.shape == (64, 9)
+    assert torch.equal(data, before)

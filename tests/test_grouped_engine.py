@@ -209,8 +209,8 @@ def test_group_cells_empty_task_yields_nothing() -> None:
 
 def test_group_reducer_constrained_without_mask_raises() -> None:
     """A constrained reducer receiving a group with no mask must raise NoConstraintsError."""
+    from fastabx.accessor import Batch
     from fastabx.constraints import NoConstraintsError
-    from fastabx.dataset import Batch
     from fastabx.group import CellGroup
 
     reducer = GroupReducer(num_cells=1, constrained=True)

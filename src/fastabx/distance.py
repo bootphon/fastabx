@@ -17,9 +17,15 @@ type Distance = Callable[[Tensor, Tensor], Tensor]
 type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]
 
 
-def distance_function(name: DistanceName) -> Distance:
-    """Return the corresponding distance function."""
-    match name:
+def distance_function(distance: DistanceName | Distance) -> Distance:
+    """Return the corresponding distance function, or pass a custom one through unchanged.
+
+    :param distance: Either the name of a built-in distance, or any callable satisfying
+        the :py:class:`.Distance` type alias.
+    """
+    if not isinstance(distance, str):
+        return distance
+    match distance:
         case "euclidean":
             return euclidean_distance
         case "cosine" | "angular":
@@ -29,7 +35,7 @@ def distance_function(name: DistanceName) -> Distance:
         case "identical":
             return identical_distance
         case _:
-            raise ValueError(name)
+            raise ValueError(distance)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
@@ -96,7 +102,7 @@ def distance_matrix(
 
 def abx_on_cell(
     cell: Cell,
-    distance_name: DistanceName = "angular",
+    distance_name: DistanceName | Distance = "angular",
     *,
     alignment: Alignment = dtw_batch,
 ) -> torch.Tensor:
@@ -110,8 +116,9 @@ def abx_on_cell(
         expects the features to be probability distributions.
 
     :param cell: The cell to compute the ABX on.
-    :param distance_name: The name of the distance to use. Defaults to "angular".
-        Must be one of "euclidean", "cosine", "angular", "kl_symmetric", "identical".
+    :param distance_name: The distance to use, either the name of a built-in one ("euclidean", "cosine",
+        "angular", "kl_symmetric", "identical") or a custom :py:class:`.Distance` callable.
+        Defaults to "angular".
     :param alignment: How to align sequences that span several frames, as an :py:class:`.Alignment` callable.
         Defaults to ``torchdtw.dtw_batch``. Never called on the distance matrices whose lattice is ``1x1``.
     """

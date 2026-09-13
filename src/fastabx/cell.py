@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import polars as pl
 import polars.selectors as cs
 
-from fastabx.dataset import Batch
+from fastabx.accessor import Batch
 from fastabx.verify import verify_cell
 
 __all__ = ["Cell"]

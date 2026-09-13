@@ -7,8 +7,8 @@ from torch.testing import assert_close
 from torchdtw import dtw_batch
 
 from fastabx import Dataset
+from fastabx.accessor import Batch
 from fastabx.cell import MIN_A_LEN, Cell
-from fastabx.dataset import Batch
 from fastabx.distance import DistanceName, abx_on_cell
 from fastabx.verify import CellErrorType, InvalidCellError
 from tests.reference import reference_abx_pooled
