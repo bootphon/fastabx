@@ -36,8 +36,8 @@ def _is_pandas_dataframe(obj: object) -> bool:
 
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
     """Recursively find all files with the given `extension` in `root`."""
-    root = Path(root)
-    return dict(sorted((str(p.relative_to(root)).removesuffix(extension), p) for p in root.rglob(f"*{extension}")))
+    r = Path(root)
+    return dict(sorted((p.relative_to(r).as_posix().removesuffix(extension), p) for p in r.rglob(f"*{extension}")))
 
 
 class InvalidItemFileError(Exception):
