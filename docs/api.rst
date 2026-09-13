@@ -18,6 +18,15 @@ Dataset
 .. autoclass:: fastabx.Batch
 
 
+.. _reserved-labels:
+
+.. note::
+   **Reserved label names.** Any column of ``Dataset.labels`` can be used as an ON, BY or ACROSS condition,
+   with one restriction: it cannot be named ``index``, ``score``, ``size``, ``is_valid``, ``__cell``,
+   ``__group``, ``__lookup``, ``__pos`` or ``__triplet``, and it cannot end with ``_a``, ``_b`` or ``_x``.
+   Those names are used internally when building and scoring the cells. Passing such a column to a
+   :class:`.Task` raises a ``ValueError``: rename it beforehand. Columns not used as conditions are unaffected.
+
 Task
 ----
 
@@ -167,3 +176,54 @@ have memory to spare and the cells are small.
 - :code:`FASTABX_REDUCTION_FLUSH_COLS` (default 262144): Number of accumulated columns after which the
   per-cell reduction is flushed. Larger values amortise the reduction over more cells, at the cost of
   keeping more intermediate counts around.
+
+Exceptions
+==========
+
+Building a Dataset
+------------------
+
+.. autoexception:: fastabx.InvalidItemFileError
+.. autoexception:: fastabx.FrequencyTypeError
+.. autoexception:: fastabx.FeaturesSizeError
+.. autoexception:: fastabx.EmptyFeaturesError
+.. autoexception:: fastabx.EmptyDataPointsError
+.. autoexception:: fastabx.EmptyDatasetError
+.. autoexception:: fastabx.NonContiguousIndicesError
+.. autoexception:: fastabx.NonFiniteError
+.. autoexception:: fastabx.TimesArrayDimensionError
+.. autoexception:: fastabx.TimesArrayFrontiersError
+
+Building a Task
+---------------
+
+.. autoexception:: fastabx.DuplicateConditionsError
+.. autoexception:: fastabx.EmptyTaskError
+.. autoexception:: fastabx.InputTypeError
+.. autoexception:: fastabx.LabelReservedNameError
+.. autoexception:: fastabx.LabelSuffixError
+.. autoexception:: fastabx.UnknownConditionError
+.. autoexception:: fastabx.PrecomputedCellsError
+.. autoexception:: fastabx.InvalidCellError
+
+Scoring
+-------
+
+.. autoexception:: fastabx.CollapseError
+.. autoexception:: fastabx.EmptyScoreError
+.. autoexception:: fastabx.IdenticalDistanceDimensionError
+.. autoexception:: fastabx.IncompatibleNormalizationError
+.. autoexception:: fastabx.InvalidLevelsError
+.. autoexception:: fastabx.NoConstraintsError
+.. autoexception:: fastabx.PoolingNormalizedError
+
+ZeroSpeech ABX
+--------------
+
+.. autoexception:: fastabx.InvalidSpeakerOrContextError
+.. autoexception:: fastabx.MissingMaxXAcrossError
+
+Configuration
+-------------
+
+.. autoexception:: fastabx.InvalidEnvironmentVariableError

@@ -4,9 +4,15 @@ import numpy as np
 import pytest
 import torch
 
-from fastabx import Dataset
+from fastabx import Dataset, Score, Task
 from fastabx.accessor import InMemoryAccessor
-from fastabx.pooling import PooledDataset, hamming_pooling, pool_dataset, pooling_function
+from fastabx.pooling import (
+    PooledDataset,
+    PoolingNormalizedError,
+    hamming_pooling,
+    pool_dataset,
+    pooling_function,
+)
 from tests.conftest import DEVICE
 
 
@@ -92,3 +98,11 @@ def test_pooling_mean_of_constant_sequence() -> None:
     pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:
         torch.testing.assert_close(item.squeeze(0), torch.ones(d))
+
+
+def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
+    """Pooling after an angular Score is refused: the new accessor would lose ``is_normalized``."""
+    Score(Task(tiny_dataset, on="phone", by=["speaker"]), "angular")
+    assert tiny_dataset.accessor.is_normalized
+    with pytest.raises(PoolingNormalizedError):
+        pool_dataset(tiny_dataset, "mean")

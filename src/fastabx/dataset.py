@@ -15,7 +15,17 @@ from tqdm import tqdm
 from fastabx.accessor import Accessor, ArrayLike, InMemoryAccessor
 from fastabx.utils import hide_progress, resolve_device, with_librilight_bug
 
-__all__ = ["Dataset", "InMemoryAccessor"]
+__all__ = [
+    "Dataset",
+    "EmptyFeaturesError",
+    "FeaturesSizeError",
+    "FrequencyTypeError",
+    "InMemoryAccessor",
+    "InvalidItemFileError",
+    "NonFiniteError",
+    "TimesArrayDimensionError",
+    "TimesArrayFrontiersError",
+]
 
 
 def _is_pandas_dataframe(obj: object) -> bool:

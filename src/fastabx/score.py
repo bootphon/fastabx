@@ -16,7 +16,7 @@ from fastabx.task import Task
 from fastabx.utils import display_name, hide_progress, prefetch
 from fastabx.verify import format_score_levels, verify_score_levels
 
-__all__ = ["Score"]
+__all__ = ["CollapseError", "EmptyScoreError", "IncompatibleNormalizationError", "Score"]
 
 
 def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
@@ -32,12 +32,28 @@ def pl_weighted_mean(value_col: str, weight_col: str) -> pl.Expr:
 class CollapseError(Exception):
     """Something wrong happened when collapsing the ``Score``."""
 
-    def __init__(self, *, are_set: bool) -> None:
+    def __init__(self, *, are_set: bool, conditions: Sequence[str] = ()) -> None:
         if are_set:
             msg = "Cannot set `weighted=True` and `levels` at the same time."
         else:
-            msg = "Either set `levels` or `weighted=True`."
+            msg = (
+                f"Either set `levels` or `weighted=True`. Collapsing without `levels` only works when the cells "
+                f"have exactly two condition columns left (the ON condition of A and of B), but these have "
+                f"{len(conditions)}: {list(conditions)}. Use `levels` to choose in which order to average those "
+                f"conditions, or `weighted=True` to average every cell weighted by its size."
+            )
         super().__init__(msg)
+
+
+class EmptyScoreError(Exception):
+    """Every cell has a null score, so there is nothing left to average."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Every cell has a null score, so collapsing them would average nothing. This only happens with "
+            "`constraints`: not a single cell kept a valid triplet. Loosen the constraints, or check that "
+            "they name the labels you meant (with the `_a`, `_b` and `_x` suffixes)."
+        )
 
 
 class IncompatibleNormalizationError(Exception):
@@ -54,8 +70,9 @@ class IncompatibleNormalizationError(Exception):
 def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str] | None) -> pl.DataFrame:
     """Collapse the scored cells and return the final scores and sizes for each (A, B) pairs."""
     if levels is None:
-        if len(set(cells.columns) - {"index_a", "index_b", "index_x", "score", "size"}) != 2:
-            raise CollapseError(are_set=False)
+        conditions = [c for c in cells.columns if c not in {"index_a", "index_b", "index_x", "score", "size"}]
+        if len(conditions) != 2:
+            raise CollapseError(are_set=False, conditions=conditions)
         levels = []
     cells = cells.select(~(INDEX_COLUMNS | cs.ends_with("_x")))
     levels_in_tuples = format_score_levels(levels)
@@ -173,5 +190,9 @@ class Score:
         if weighted:
             if levels is not None:
                 raise CollapseError(are_set=True)
-            return self.cells.select(pl_weighted_mean("score", "size")).item()
-        return self.details(levels=levels)["score"].mean()  # ty:ignore[invalid-return-type]
+            collapsed = self.cells.select(pl_weighted_mean("score", "size")).item()
+        else:
+            collapsed = self.details(levels=levels)["score"].mean()
+        if collapsed is None:
+            raise EmptyScoreError
+        return float(collapsed)  # ty: ignore[invalid-argument-type]

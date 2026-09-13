@@ -10,9 +10,22 @@ import torch
 from fastabx.accessor import InMemoryAccessor
 from fastabx.dataset import Dataset
 
-__all__ = ["PooledDataset", "PoolingName", "pool_dataset"]
+__all__ = ["PooledDataset", "PoolingName", "PoolingNormalizedError", "pool_dataset"]
 
 type PoolingName = Literal["mean", "hamming"]
+
+
+class PoolingNormalizedError(ValueError):
+    """The dataset has already been L2-normalized and cannot be pooled."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The dataset has been L2-normalized (with a singularity border) by a previous cosine/angular "
+            "Score, so its features are no longer in their original space and carry an extra column. "
+            "Pooling them would average that border in and silently produce a different measure, and the "
+            "pooled dataset would no longer be flagged as normalized. Pool a fresh Dataset instead, and "
+            "score it afterwards."
+        )
 
 
 def hamming_pooling(x: torch.Tensor) -> torch.Tensor:
@@ -51,6 +64,8 @@ def pool_dataset(dataset: Dataset, pooling_name: PoolingName) -> PooledDataset:
     :param dataset: The dataset to pool.
     :param pooling_name: The pooling method, either "mean" or "hamming".
     """
+    if dataset.accessor.is_normalized:
+        raise PoolingNormalizedError
     labels = dataset.labels
     indices = {i: (i, i + 1) for i in range(len(labels))}
     pooling_fn = pooling_function(pooling_name)

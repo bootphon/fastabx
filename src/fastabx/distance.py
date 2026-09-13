@@ -11,7 +11,7 @@ from torchdtw import dtw_batch
 from fastabx.alignment import Alignment
 from fastabx.cell import Cell
 
-__all__ = ["Distance", "DistanceName", "abx_on_cell"]
+__all__ = ["Distance", "DistanceName", "IdenticalDistanceDimensionError", "abx_on_cell"]
 
 type Distance = Callable[[Tensor, Tensor], Tensor]
 type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]
@@ -73,10 +73,23 @@ def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:
     return dist.view(n1, s1, n2, s2).transpose(1, 2)
 
 
+class IdenticalDistanceDimensionError(ValueError):
+    """The "identical" distance got features with more than one dimension."""
+
+    def __init__(self, dim: int) -> None:
+        super().__init__(
+            f"The 'identical' distance compares discrete units, so the features must have a single "
+            f"dimension of shape (length, 1), but they have {dim}. Either encode each unit as one "
+            f"integer, or use a distance defined on vectors ('euclidean', 'angular', 'kl_symmetric')."
+        )
+
+
 def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
     """0/1 distance. Useful for computing the ABX on discrete speech units."""
-    n1, s1, _ = a1.size()
+    n1, s1, d = a1.size()
     n2, s2, _ = a2.size()
+    if d != 1:
+        raise IdenticalDistanceDimensionError(d)
     return (a1.view(n1, 1, s1, 1) != a2.view(1, n2, 1, s2)).float()
 
 

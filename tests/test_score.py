@@ -8,7 +8,13 @@ import pytest
 
 from fastabx import Dataset, Score, Task
 from fastabx.constraints import constraints_all_different
-from fastabx.score import CollapseError, IncompatibleNormalizationError, pl_weighted_mean, score_details
+from fastabx.score import (
+    CollapseError,
+    EmptyScoreError,
+    IncompatibleNormalizationError,
+    pl_weighted_mean,
+    score_details,
+)
 from tests.conftest import accessor_data
 
 
@@ -36,7 +42,7 @@ def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
     original = accessor_data(tiny_dataset).clone()
     task = Task(tiny_dataset, on="phone", by=["context"])
     Score(task, "cosine")
-    # `normalize_with_singularity_` appends a border column → data width grows by 1.
+    # `normalize_with_singularity` appends a border column → data width grows by 1.
     assert accessor_data(tiny_dataset).shape[1] == original.shape[1] + 1
     # Each row (excluding the appended border) must now have unit L2 norm.
     body = accessor_data(tiny_dataset)[:, :-1]
@@ -167,6 +173,11 @@ def test_score_constrained_propagates_none() -> None:
     task = Task(dataset, on="phone")
     score = Score(task, "euclidean", constraints=constraints_all_different("context"))
     assert score.cells["score"].null_count() == len(score.cells)
+    # Nothing left to average: collapsing raises rather than handing back a None typed as a float.
+    with pytest.raises(EmptyScoreError, match="null score"):
+        score.collapse(weighted=True)
+    with pytest.raises(EmptyScoreError, match="null score"):
+        score.collapse(levels=[])
 
 
 def test_score_details_collapse_order_matters_with_unequal_subgroups() -> None:

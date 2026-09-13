@@ -14,6 +14,7 @@ from torchdtw import dtw_batch
 from fastabx import Dataset, Score, Task, abx_on_cell
 from fastabx.distance import (
     DistanceName,
+    IdenticalDistanceDimensionError,
     angular_distance,
     distance_function,
     distance_matrix,
@@ -62,6 +63,14 @@ def test_angular_known_values() -> None:
     assert_close(out[0, 0, 0, 0].item(), 0.5, atol=1e-6, rtol=0)  # orthogonal -> 0.5
     assert_close(out[1, 1, 0, 0].item(), 0.0, atol=1e-6, rtol=0)  # identical -> 0
     assert_close(out[2, 2, 0, 0].item(), 1.0, atol=1e-6, rtol=0)  # opposite -> 1
+
+
+def test_identical_rejects_multidimensional_features() -> None:
+    """Named error rather than a raw torch reshape failure."""
+    a = torch.randn(2, 1, 3)
+    b = torch.randn(2, 1, 3)
+    with pytest.raises(IdenticalDistanceDimensionError, match="single"):
+        identical_distance(a, b)
 
 
 def test_identical_known_values() -> None:

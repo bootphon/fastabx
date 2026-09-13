@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
+import polars as pl
 import pytest
 import torch
 from torch.testing import assert_close
@@ -196,13 +197,28 @@ def test_constrained_score_sizes_equal_mask_sums() -> None:
 
 
 def test_group_cells_empty_task_yields_nothing() -> None:
-    """A task whose cells DataFrame is empty must produce no groups (hits the empty-loop branch)."""
+    """A task whose cells DataFrame is empty must produce no groups (hits the empty-loop branch).
+
+    ``Task`` now rejects an empty cells DataFrame up front (``EmptyTaskError``), so this branch is
+    defensive and no longer reachable through the public constructors. The task is therefore assembled
+    the same way ``Task.from_cells`` does, bypassing that check, to keep the branch covered.
+    """
     rng = np.random.default_rng(0)
     features = rng.standard_normal((3, 4)).astype(np.float32)
-    # Each phone occurs only once → none meet MIN_A_LEN → cells DataFrame is empty.
-    labels = {"phone": ["a", "b", "c"]}
-    dataset = Dataset.from_numpy(features, labels)
-    task = Task(dataset, on="phone")
+    dataset = Dataset.from_numpy(features, {"phone": ["a", "b", "c"]})
+    cells = pl.DataFrame(
+        schema={
+            "phone": pl.String,
+            "phone_b": pl.String,
+            "index_a": pl.List(pl.Int64),
+            "index_b": pl.List(pl.Int64),
+            "index_x": pl.List(pl.Int64),
+        }
+    )
+    task = Task.__new__(Task)
+    task._set_parts(  # ruff: ignore[private-member-access]
+        dataset, cells, on="phone", by=[], across=[], is_symmetric=True, subsampler_description=""
+    )
     assert len(task) == 0
     assert list(group_cells(task)) == []
 

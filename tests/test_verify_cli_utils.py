@@ -12,6 +12,7 @@ import pytest
 import torch
 
 from fastabx.__main__ import build_parser
+from fastabx.accessor import InMemoryAccessor
 from fastabx.utils import (
     InvalidEnvironmentVariableError,
     display_name,
@@ -26,15 +27,19 @@ from fastabx.verify import (
     CellErrorType,
     DuplicateConditionsError,
     EmptyDataPointsError,
+    EmptyDatasetError,
     InputTypeError,
     InvalidCellError,
     InvalidLevelsError,
     LabelReservedNameError,
     LabelSuffixError,
     LevelsErrorType,
+    NonContiguousIndicesError,
     PrecomputedCellsError,
+    UnknownConditionError,
     format_score_levels,
     verify_cell,
+    verify_conditions_exist,
     verify_dataset_labels,
     verify_empty_datapoints,
     verify_precomputed_cells,
@@ -78,6 +83,31 @@ def test_verify_empty_datapoints_truncates_long_list() -> None:
     indices = dict.fromkeys(range(20), (0, 0))
     with pytest.raises(EmptyDataPointsError, match=r"\.\.\."):
         verify_empty_datapoints(indices)
+
+
+def test_verify_empty_datapoints_rejects_empty_mapping() -> None:
+    """An accessor with no datapoint at all is rejected here, rather than crashing on ``max(())`` below."""
+    with pytest.raises(EmptyDatasetError, match="empty"):
+        verify_empty_datapoints({})
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        {0: (0, 1), 2: (1, 2)},  # gap at 1
+        {1: (0, 1), 2: (1, 2)},  # does not start at 0
+        {0: (0, 1), 5: (1, 2)},  # highest beyond len - 1
+    ],
+)
+def test_verify_empty_datapoints_rejects_non_contiguous(indices: dict[int, tuple[int, int]]) -> None:
+    with pytest.raises(NonContiguousIndicesError):
+        verify_empty_datapoints(indices)
+
+
+def test_non_contiguous_indices_rejected_by_accessor() -> None:
+    """A gap must raise rather than silently make the missing rows read as empty."""
+    with pytest.raises(NonContiguousIndicesError):
+        InMemoryAccessor({0: (0, 1), 2: (1, 2)}, torch.zeros(2, 3), torch.device("cpu"))
 
 
 def test_format_score_levels_normalises_strings() -> None:
@@ -161,6 +191,23 @@ def test_verify_precomputed_cells_symmetric_requires_a_equals_x() -> None:
         verify_precomputed_cells(bad, num_items=3, is_symmetric=True)
     # The very same cells are fine for an asymmetric task.
     verify_precomputed_cells(bad, num_items=3, is_symmetric=False)
+
+
+def test_verify_precomputed_cells_symmetric_requires_two_a() -> None:
+    """A symmetric cell with a single A has no triplet left once the diagonal is dropped."""
+    bad = pl.DataFrame(
+        {
+            "header": ["h"],
+            "description": ["d"],
+            "index_a": [[0]],
+            "index_b": [[1, 2]],
+            "index_x": [[0]],
+        }
+    )
+    with pytest.raises(PrecomputedCellsError, match="at least 2 rows in 'index_a'"):
+        verify_precomputed_cells(bad, num_items=3, is_symmetric=True)
+    # A single A is perfectly fine when A and X are different sets.
+    verify_precomputed_cells(bad.with_columns(index_x=pl.lit([1], dtype=pl.List(pl.Int64))), 3, is_symmetric=False)
 
 
 def test_verify_score_levels_columns_missing() -> None:
@@ -583,6 +630,62 @@ def test_main_across_speaker_with_disabled_x_across(
     main()
     out = capsys.readouterr().out
     assert "ABX error rate" in out
+
+
+# ``NoAcrossError`` guards ``cells_on_by_across`` against an empty ``across``, which ``Task`` never does:
+# it is unreachable through the public API, so it stays out of the top-level namespace.
+INTERNAL_EXCEPTIONS = {"NoAcrossError"}
+
+
+def test_every_exception_is_exported() -> None:
+    """Adding a user-facing exception without exporting it must fail here."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import fastabx
+
+    defined = set()
+    for module_info in pkgutil.iter_modules(fastabx.__path__):
+        module = importlib.import_module(f"fastabx.{module_info.name}")
+        for name, obj in vars(module).items():
+            if inspect.isclass(obj) and issubclass(obj, Exception) and obj.__module__.startswith("fastabx"):
+                defined.add(name)
+    assert defined, "no exception class found in fastabx"
+    missing = sorted(defined - set(fastabx.__all__) - INTERNAL_EXCEPTIONS)
+    assert not missing, f"exceptions raised by the public API but not exported: {missing}"
+
+
+def test_exported_exceptions_keep_standard_bases() -> None:
+    """The exported exceptions are catchable as plain ValueError / TypeError, with no fastabx base class."""
+    import fastabx
+
+    exported = [getattr(fastabx, name) for name in fastabx.__all__ if name.endswith("Error")]
+    assert len(exported) == 28
+    assert all(issubclass(exc, Exception) for exc in exported)
+    assert issubclass(fastabx.FeaturesSizeError, ValueError)
+    assert issubclass(fastabx.FrequencyTypeError, TypeError)
+
+
+def test_verify_task_conditions_checks_types_before_duplicates() -> None:
+    """An unhashable condition raises InputTypeError, not the TypeError of building the set."""
+    with pytest.raises(InputTypeError):
+        verify_task_conditions([["a"], "b"])  # ty: ignore[invalid-argument-type]
+
+
+def test_verify_conditions_exist_accepts_known_columns() -> None:
+    verify_conditions_exist(["phone", "speaker"], ["phone", "speaker"])
+
+
+def test_verify_conditions_exist_unknown_raises() -> None:
+    # 'phoneme' is spelled correctly and is simply the wrong name: the column is 'phone'.
+    with pytest.raises(UnknownConditionError, match="phoneme"):
+        verify_conditions_exist(["phone", "speaker"], ["phoneme"])
+
+
+def test_unknown_condition_error_lists_available_columns() -> None:
+    with pytest.raises(UnknownConditionError, match="speaker"):
+        verify_conditions_exist(["phone", "speaker"], ["phone", "spk"])
 
 
 def test_display_name_of_str_and_callables() -> None:

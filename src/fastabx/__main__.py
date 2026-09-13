@@ -4,8 +4,8 @@ import argparse
 import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
-from fastabx.cell import MIN_A_LEN
 from fastabx.utils import print_fastabx_output
+from fastabx.verify import MIN_A_LEN
 from fastabx.zerospeech import zerospeech_abx
 
 

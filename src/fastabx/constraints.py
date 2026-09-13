@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 import polars as pl
 
-__all__ = ["Constraints", "constraints_all_different"]
+__all__ = ["Constraints", "NoConstraintsError", "constraints_all_different"]
 
 type Constraints = Iterable[pl.Expr]
 

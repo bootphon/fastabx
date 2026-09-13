@@ -7,7 +7,13 @@ import polars as pl
 from fastabx.cell import Cell, cell_description, cell_header, cells_on_by, cells_on_by_across
 from fastabx.dataset import Dataset
 from fastabx.subsample import Subsampler
-from fastabx.verify import verify_dataset_labels, verify_precomputed_cells, verify_task_conditions
+from fastabx.verify import (
+    verify_conditions_exist,
+    verify_dataset_labels,
+    verify_precomputed_cells,
+    verify_task_conditions,
+    verify_task_is_not_empty,
+)
 
 __all__ = ["Task"]
 
@@ -41,6 +47,8 @@ class Task:
     To bypass the standard construction with a precomputed cells DataFrame, use
     :py:meth:`Task.from_cells` instead.
 
+    Every condition must be a column of ``dataset.labels``.
+
     :param dataset: The dataset containing the features and the labels.
     :param on: The ``on`` condition.
     :param by: The list of ``by`` conditions.
@@ -57,15 +65,41 @@ class Task:
         across: list[str] | None = None,
         subsampler: Subsampler | None = None,
     ) -> None:
+        by, across = by or [], across or []
+        conditions = [on, *by, *across]
+        verify_task_conditions(conditions)
+        verify_conditions_exist(dataset.labels.columns, conditions)
+        verify_dataset_labels(dataset.labels.select(conditions))
+        cells = task_cells(dataset, on, by, across, subsampler)
+        verify_task_is_not_empty(len(cells), on, by, across)
+        self._set_parts(
+            dataset,
+            cells,
+            on=on,
+            by=by,
+            across=across,
+            is_symmetric=not bool(across),
+            subsampler_description=subsampler.description(with_across=bool(across)) if subsampler else "",
+        )
+
+    def _set_parts(
+        self,
+        dataset: Dataset,
+        cells: pl.DataFrame,
+        *,
+        on: str,
+        by: list[str],
+        across: list[str],
+        is_symmetric: bool,
+        subsampler_description: str,
+    ) -> None:
         self.dataset = dataset
         self.on = on
-        self.by = by or []
-        self.across = across or []
-        self.is_symmetric = not bool(self.across)
-        verify_task_conditions([self.on, *self.by, *self.across])
-        verify_dataset_labels(self.dataset.labels.select([self.on, *self.by, *self.across]))
-        self._subsampler_description = subsampler.description(with_across=bool(self.across)) if subsampler else ""
-        self._cells = task_cells(self.dataset, self.on, self.by, self.across, subsampler)
+        self.by = by
+        self.across = across
+        self.is_symmetric = is_symmetric
+        self._subsampler_description = subsampler_description
+        self._cells = cells
 
     @classmethod
     def from_cells(cls, dataset: Dataset, cells: pl.DataFrame, *, is_symmetric: bool) -> "Task":
@@ -73,8 +107,7 @@ class Task:
 
         Use this when you have hardcoded your own triplets and want to skip the
         standard ``on``/``by``/``across`` construction. The DataFrame must carry the
-        columns expected by :py:meth:`Task.__iter__`: ``header``, ``description``,
-        ``index_a``, ``index_b``, ``index_x``.
+        following columns: ``header``, ``description``, ``index_a``, ``index_b``, ``index_x``.
 
         :param dataset: The dataset containing the features and the labels.
         :param cells: The precomputed cells DataFrame.
@@ -82,13 +115,7 @@ class Task:
         """
         verify_precomputed_cells(cells, num_items=len(dataset.accessor), is_symmetric=is_symmetric)
         task = cls.__new__(cls)
-        task.dataset = dataset
-        task.on = ""
-        task.by = []
-        task.across = []
-        task.is_symmetric = is_symmetric
-        task._subsampler_description = ""  # ruff: ignore[private-member-access]
-        task._cells = cells  # ruff: ignore[private-member-access]
+        task._set_parts(dataset, cells, on="", by=[], across=[], is_symmetric=is_symmetric, subsampler_description="")  # ruff: ignore[private-member-access]
         return task
 
     @property
@@ -124,5 +151,6 @@ class Task:
             f"Task(\n\tON({self.on})"
             + (f"\n\tBY({', '.join(self.by)})" if self.by else "")
             + (f"\n\tACROSS({', '.join(self.across)})" if self.across else "")
-            + f"\n\t{self._subsampler_description}\n)"
+            + (f"\n\t{self._subsampler_description}" if self._subsampler_description else "")
+            + "\n)"
         )

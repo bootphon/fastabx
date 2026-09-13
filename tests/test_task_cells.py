@@ -1,9 +1,17 @@
 """Tests for ``fastabx.task`` and the cell-construction helpers in ``fastabx.cell``."""
 
+import numpy as np
 import polars as pl
 import pytest
 
-from fastabx import Dataset, Task
+from fastabx import (
+    Dataset,
+    EmptyTaskError,
+    InputTypeError,
+    PrecomputedCellsError,
+    Task,
+    UnknownConditionError,
+)
 from fastabx.cell import (
     MIN_A_LEN,
     Cell,
@@ -194,3 +202,65 @@ def test_task_cells_setter_is_read_only(tiny_dataset: Dataset) -> None:
 
 def test_min_a_len_module_constant() -> None:
     assert MIN_A_LEN == 2
+
+
+def test_task_with_no_cells_raises() -> None:
+    """ON perfectly correlated with BY: every group holds a single phone, so no (A, B) pair exists."""
+    features = np.zeros((8, 3), dtype=np.float32)
+    labels = {"phone": ["a", "b"] * 4, "speaker": ["s0", "s1"] * 4}
+    dataset = Dataset.from_numpy(features, labels)
+    with pytest.raises(EmptyTaskError, match="no cell"):
+        Task(dataset, on="phone", by=["speaker"])
+
+
+def test_task_with_no_cells_raises_without_by() -> None:
+    """Each phone occurs once, so no group reaches the two instances a cell needs for A."""
+    features = np.zeros((3, 3), dtype=np.float32)
+    dataset = Dataset.from_numpy(features, {"phone": ["a", "b", "c"]})
+    with pytest.raises(EmptyTaskError) as exc:
+        Task(dataset, on="phone")
+    msg = str(exc.value)
+    assert "ON(phone)" in msg
+    assert "BY(" not in msg
+    assert "ACROSS(" not in msg
+
+
+def test_empty_task_error_message_lists_conditions() -> None:
+    features = np.zeros((8, 3), dtype=np.float32)
+    labels = {"phone": ["a", "b"] * 4, "speaker": ["s0", "s1"] * 4, "ctx": ["c0"] * 8}
+    dataset = Dataset.from_numpy(features, labels)
+    with pytest.raises(EmptyTaskError) as exc:
+        Task(dataset, on="phone", by=["speaker"], across=["ctx"])
+    msg = str(exc.value)
+    assert "ON(phone)" in msg
+    assert "BY(speaker)" in msg
+    assert "ACROSS(ctx)" in msg
+
+
+def test_task_from_cells_rejects_empty_frame(tiny_dataset: Dataset) -> None:
+    cells = pl.DataFrame(
+        schema={
+            "header": pl.String,
+            "description": pl.String,
+            "index_a": pl.List(pl.Int64),
+            "index_b": pl.List(pl.Int64),
+            "index_x": pl.List(pl.Int64),
+        }
+    )
+    with pytest.raises(PrecomputedCellsError, match="empty"):
+        Task.from_cells(tiny_dataset, cells, is_symmetric=True)
+
+
+def test_task_rejects_unknown_condition(tiny_dataset: Dataset) -> None:
+    """A wrong condition name raises the fastabx error, not the polars one."""
+    with pytest.raises(UnknownConditionError, match="phoneme"):
+        Task(tiny_dataset, on="phoneme")  # the column is 'phone'
+    with pytest.raises(UnknownConditionError, match="spkr"):
+        Task(tiny_dataset, on="phone", by=["spkr"])
+    with pytest.raises(UnknownConditionError, match="spkr"):
+        Task(tiny_dataset, on="phone", by=["context"], across=["spkr"])
+
+
+def test_task_rejects_non_string_condition(tiny_dataset: Dataset) -> None:
+    with pytest.raises(InputTypeError):
+        Task(tiny_dataset, on=["phone"])  # ty: ignore[invalid-argument-type]
