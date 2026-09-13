@@ -3,6 +3,7 @@
 import polars as pl
 import polars.selectors as cs
 
+from fastabx.cell import INDEX_COLUMNS
 from fastabx.verify import verify_subsampler_params
 
 __all__ = ["Subsampler"]
@@ -22,8 +23,8 @@ def subsample_each_cell(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
     on per-cell independence of the retained items.
     """
     return (
-        df.with_columns(pl.concat_str(~cs.starts_with("index"), separator="-").alias("__group"))
-        .with_columns(cs.starts_with("index").explode().shuffle(seed=seed).implode().over("__group").list.head(size))
+        df.with_columns(pl.concat_str(~INDEX_COLUMNS, separator="-").alias("__group"))
+        .with_columns(INDEX_COLUMNS.explode().shuffle(seed=seed).implode().over("__group").list.head(size))
         .select(cs.exclude("__group"))
     )
 
@@ -31,11 +32,11 @@ def subsample_each_cell(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
 def subsample_across_group(df: pl.LazyFrame, size: int, seed: int) -> pl.LazyFrame:
     """Subsample each group of 'across' condition by taking ``size`` possible values for X in each group."""
     x_cols = [c for c in df.collect_schema() if c.endswith("_x") and c != "index_x"]
-    to_ignore = cs.starts_with("index") | cs.ends_with("_x")
+    to_ignore = INDEX_COLUMNS | cs.ends_with("_x")
     df = df.with_columns(pl.concat_str(~to_ignore, separator="-").alias("__group"))
     return (
         df.group_by("__group", maintain_order=True)
-        .agg((cs.ends_with("_x") & (~cs.starts_with("index"))).unique(maintain_order=True).shuffle(seed).head(size))
+        .agg((cs.ends_with("_x") & (~INDEX_COLUMNS)).unique(maintain_order=True).shuffle(seed).head(size))
         .explode(x_cols)
         .join(df, on=["__group", *x_cols], how="left")
         .select(cs.exclude("__group"))
@@ -48,6 +49,13 @@ class Subsampler:
     Each cell is limited to ``max_size_group`` items for A, B and X independently.
     When using "across" conditions, each group of (A, B) is limited to ``max_x_across`` possible values for X.
     Subsampling for one or more conditions can be disabled by setting the corresponding argument to ``None``.
+
+    .. note::
+        The subsampling is reproducible given ``seed``, but it is not an i.i.d. sample. A single fixed seed
+        shuffles every cell, and the same permutation is applied to all the groups of the same length. This is
+        what keeps A and X in step in symmetric cells (where they are the same set, and where scoring relies on
+        it to drop the diagonal), and the flip side is that the items retained in cells of equal size are
+        correlated rather than drawn independently.
 
     :param max_size_group: Maximum number of instances of A, B, or X in each :py:class:`.Cell`.
         Set to 10 in the original ZeroSpeech ABX code. Disabled if set to ``None``.

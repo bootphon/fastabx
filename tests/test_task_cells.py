@@ -98,7 +98,14 @@ def test_task_len_and_getitem(tiny_dataset: Dataset) -> None:
     with pytest.raises(IndexError):
         _ = task[len(task)]
     with pytest.raises(IndexError):
-        _ = task[-1]
+        _ = task[-len(task) - 1]
+
+
+def test_task_getitem_negative_indices(tiny_dataset: Dataset) -> None:
+    """Negative indices count from the end, as for any sequence."""
+    task = Task(tiny_dataset, on="phone", by=["context"])
+    assert task[-1].header == task[len(task) - 1].header
+    assert task[-len(task)].header == task[0].header
 
 
 def test_task_iter_matches_indexing(tiny_dataset: Dataset) -> None:

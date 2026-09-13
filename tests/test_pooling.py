@@ -28,9 +28,34 @@ def test_pooling_function_unknown_raises() -> None:
 
 def test_hamming_window_matches_manual() -> None:
     x = torch.arange(8, dtype=torch.float32).view(4, 2)
-    window = torch.hamming_window(x.size(0))
+    window = torch.hamming_window(x.size(0), periodic=False)
     expected = (window @ x) / window.sum()
     torch.testing.assert_close(hamming_pooling(x), expected)
+
+
+def test_hamming_pooling_is_symmetric() -> None:
+    """The window must weight the first and the last frame equally.
+
+    The periodic window (the default of ``torch.hamming_window``) does not: it attenuates the leading
+    boundary but leaves the trailing one nearly untouched, which would make the pooled vector depend on
+    the direction of the sequence.
+    """
+    for length in (2, 3, 4, 5, 8):
+        x = torch.zeros(length, 1)
+        x[0, 0] = 1.0
+        torch.testing.assert_close(hamming_pooling(x), hamming_pooling(x.flip(0)))
+
+
+def test_hamming_pooling_downweights_both_boundaries() -> None:
+    """A frame at either end must count for less than one in the middle."""
+    length = 5
+    pooled = []
+    for position in range(length):
+        x = torch.zeros(length, 1)
+        x[position, 0] = 1.0
+        pooled.append(hamming_pooling(x).item())
+    assert pooled[0] < pooled[1] < pooled[2]
+    assert pooled[-1] < pooled[-2] < pooled[2]
 
 
 def test_pooling_returns_pooled_dataset() -> None:

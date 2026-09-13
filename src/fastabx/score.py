@@ -9,6 +9,7 @@ import polars.selectors as cs
 from tqdm import tqdm
 
 from fastabx.alignment import Alignment, AlignmentName, alignment_function
+from fastabx.cell import INDEX_COLUMNS
 from fastabx.constraints import Constraints
 from fastabx.distance import Distance, DistanceName, distance_function
 from fastabx.group import GroupReducer, group_cells
@@ -57,7 +58,7 @@ def score_details(cells: pl.DataFrame, *, levels: Sequence[tuple[str, ...] | str
         if len(set(cells.columns) - {"index_a", "index_b", "index_x", "score", "size"}) != 2:
             raise CollapseError(are_set=False)
         levels = []
-    cells = cells.select(~(cs.starts_with("index") | cs.ends_with("_x")))
+    cells = cells.select(~(INDEX_COLUMNS | cs.ends_with("_x")))
     levels_in_tuples = format_score_levels(levels)
     verify_score_levels(cells.columns, levels_in_tuples)
     for level in levels_in_tuples:

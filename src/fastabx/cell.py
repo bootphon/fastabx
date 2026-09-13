@@ -11,6 +11,7 @@ from fastabx.verify import verify_cell
 __all__ = ["Cell"]
 
 MIN_A_LEN = 2  # Minimum length of A in the ABX task.
+INDEX_COLUMNS = cs.by_name("index_a", "index_b", "index_x", require_all=False)
 
 
 @dataclass(frozen=True)

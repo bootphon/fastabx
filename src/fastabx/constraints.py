@@ -5,7 +5,6 @@ import operator
 from collections.abc import Iterable
 
 import polars as pl
-import polars.selectors as cs
 
 __all__ = ["Constraints", "constraints_all_different"]
 
@@ -42,14 +41,24 @@ def apply_constraints(
     """Apply constraints to the cells DataFrame.
 
     .. note::
-        The per-cell ``is_valid`` lists are rebuilt by exploding to triplets and then regrouping on
-        the non-index (condition) columns, in first-appearance order, before being concatenated back
-        onto ``cells``. This assumes those condition columns **uniquely identify each row of**
-        ``cells`` which holds for a standard :py:class:`.Task` (one row per ``on``/``by``/``across``
-        combination). A :py:class:`.Task` built via :py:meth:`.Task.from_cells` with duplicate or
-        arbitrary non-index columns can collapse distinct cells into one group and silently misalign
-        the ``is_valid`` column; constraints are not supported for such hand-built tasks.
+        The per-cell ``is_valid`` lists are rebuilt by exploding to one row per triplet, evaluating the
+        constraints there, and regrouping. Two things keep that affordable on a large task. Only the three
+        index columns are exploded, each carrying a synthetic ``__cell`` row number, so the condition
+        columns are not replicated once per triplet; and the query runs on the streaming engine, which
+        chunks the group-by instead of materialising every triplet at once.
+
+        Regrouping on ``__cell`` rather than on the condition columns also means the ``is_valid`` lists
+        line up with ``cells`` by construction, whatever those columns contain. Constraints therefore work
+        with a :py:class:`.Task` built by :py:meth:`.Task.from_cells` too.
+
+        The explode order is ``index_x``, then ``index_a``, then ``index_b``, so that each cell's flat list
+        reshapes to the ``(nx, na, nb)`` mask that :py:func:`fastabx.group.group_cells` expects. That order
+        has to be pinned explicitly: the joins and the group-by do **not** preserve row order on the
+        streaming engine, and an unordered mask is silently wrong rather than an error. ``__triplet`` is
+        stamped right after the explodes and the aggregation sorts by it, which restores the order the
+        reshape depends on.
     """
+    constraints = list(constraints)
     columns_to_retrieve = {
         name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
         for constraint in constraints
@@ -60,18 +69,22 @@ def apply_constraints(
     if is_symmetric:
         constraints = [*constraints, pl.col("index_a") != pl.col("index_x")]
     labels_lazy = labels.lazy().select(*columns_to_retrieve).with_row_index()
-    cells_lazy = cells.lazy()
     is_valid = (
-        cells_lazy.explode("index_x")
+        cells.lazy()
+        .select("index_a", "index_b", "index_x")
+        .with_row_index("__cell")
+        .explode("index_x")
         .explode("index_a")
         .explode("index_b")
+        .with_row_index("__triplet")
         .join(labels_lazy.rename({c: f"{c}_x" for c in (columns_to_retrieve | {"index"})}), on="index_x")
         .join(labels_lazy.rename({c: f"{c}_a" for c in (columns_to_retrieve | {"index"})}), on="index_a")
         .join(labels_lazy.rename({c: f"{c}_b" for c in (columns_to_retrieve | {"index"})}), on="index_b")
-        .with_columns(is_valid=functools.reduce(operator.and_, constraints))
-        .select(cs.exclude([f"{c}_{s}" for c in columns_to_retrieve for s in ("a", "b", "x")]))
-        .group_by(cs.exclude(cs.starts_with("index_") | pl.col("is_valid")), maintain_order=True)
-        .agg("is_valid")
+        .select("__cell", "__triplet", is_valid=functools.reduce(operator.and_, constraints))
+        .group_by("__cell", maintain_order=True)
+        .agg(pl.col("is_valid").sort_by("__triplet"))
+        .sort("__cell")
         .select("is_valid")
+        .collect(engine="streaming")
     )
-    return pl.concat((cells_lazy, is_valid), how="horizontal").collect()
+    return pl.concat((cells, is_valid), how="horizontal")

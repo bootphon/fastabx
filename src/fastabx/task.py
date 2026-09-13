@@ -100,13 +100,15 @@ class Task:
         return len(self.cells)
 
     def __getitem__(self, i: int) -> Cell:
-        if i < 0 or i >= len(self):
-            msg = f"Cell index {i} out of range for a task with {len(self)} cells"
+        num_cells = len(self)
+        index = i + num_cells if i < 0 else i
+        if index < 0 or index >= num_cells:
+            msg = f"Cell index {i} out of range for a task with {num_cells} cells"
             raise IndexError(msg)
-        a = self.dataset.accessor.batched(self.cells[i, "index_a"])
-        b = self.dataset.accessor.batched(self.cells[i, "index_b"])
-        x = self.dataset.accessor.batched(self.cells[i, "index_x"])
-        header, description = self.cells[i, "header"], self.cells[i, "description"]
+        a = self.dataset.accessor.batched(self.cells[index, "index_a"])
+        b = self.dataset.accessor.batched(self.cells[index, "index_b"])
+        x = self.dataset.accessor.batched(self.cells[index, "index_x"])
+        header, description = self.cells[index, "header"], self.cells[index, "description"]
         return Cell(a=a, b=b, x=x, header=header, description=description, is_symmetric=self.is_symmetric)
 
     def __iter__(self) -> Generator[Cell, None, None]:

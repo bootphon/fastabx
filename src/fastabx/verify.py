@@ -11,7 +11,7 @@ __all__ = []
 
 NDIM = 3
 INVALID_COLUMN_SUFFIX = ("_a", "_b", "_x")
-INVALID_COLUMN_NAMES = {"index", "score", "size", "is_valid", "__group", "__lookup", "__pos"}
+INVALID_COLUMN_NAMES = {"index", "score", "size", "is_valid", "__cell", "__group", "__lookup", "__pos", "__triplet"}
 
 
 class LabelReservedNameError(ValueError):

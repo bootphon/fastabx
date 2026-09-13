@@ -5,7 +5,11 @@ import polars as pl
 import pytest
 
 from fastabx import Dataset, Task
-from fastabx.constraints import NoConstraintsError, apply_constraints, constraints_all_different
+from fastabx.constraints import (
+    NoConstraintsError,
+    apply_constraints,
+    constraints_all_different,
+)
 from fastabx.subsample import Subsampler, subsample_across_group, subsample_each_cell
 from fastabx.verify import InputTypeError
 
@@ -124,6 +128,41 @@ def test_apply_constraints_no_matching_columns_raises() -> None:
         apply_constraints(task.cells, dataset.labels, constraints_all_different("not_a_column"), is_symmetric=False)
 
 
+def test_apply_constraints_handles_cells_with_identical_conditions() -> None:
+    """Two distinct cells sharing the same condition columns must each get their own mask.
+
+    Regrouping used to happen on the condition columns, which collapsed these two cells into one and
+    raised rather than misaligning. They are now matched back by row number, so this works and each
+    cell keeps the mask of its own triplets.
+    """
+    rng = np.random.default_rng(0)
+    features = rng.standard_normal((6, 3)).astype(np.float32)
+    labels = pl.DataFrame({"phone": ["a", "b"] * 3, "context": ["c1", "c2", "c3"] * 2})
+    dataset = Dataset.from_numpy(features, labels)
+    cells = pl.DataFrame(
+        {
+            "phone": ["a", "a"],
+            "phone_b": ["b", "b"],
+            "index_a": [[0, 2], [0, 4]],
+            "index_b": [[1, 3], [1, 5]],
+            "index_x": [[0, 2], [0, 4]],
+        }
+    )
+    out = apply_constraints(cells, dataset.labels, constraints_all_different("context"), is_symmetric=False)
+    assert len(out) == 2
+    contexts = labels["context"].to_list()
+    for row, (index_a, index_b, index_x) in enumerate(
+        zip(cells["index_a"], cells["index_b"], cells["index_x"], strict=True)
+    ):
+        expected = [
+            contexts[a] != contexts[x] and contexts[a] != contexts[b] and contexts[x] != contexts[b]
+            for x in index_x
+            for a in index_a
+            for b in index_b
+        ]
+        assert out["is_valid"].to_list()[row] == expected
+
+
 def test_apply_constraints_symmetric_adds_index_inequality() -> None:
     rng = np.random.default_rng(0)
     features = rng.standard_normal((9, 3)).astype(np.float32)
@@ -155,3 +194,70 @@ def test_subsample_across_group_caps_x_values() -> None:
     out = subsample_across_group(df, size=2, seed=0).collect()
     distinct_x_speakers = set(out["speaker_x"].to_list())
     assert len(distinct_x_speakers) == 2
+
+
+@pytest.mark.parametrize("is_symmetric", [True, False])
+def test_apply_constraints_mask_order_matches_brute_force(*, is_symmetric: bool) -> None:
+    """The flat mask must be in x-major, then a, then b order, element for element.
+
+    ``group_cells`` reshapes each cell's ``is_valid`` list to ``(nx, na, nb)``, so any permutation
+    inside a cell silently scrambles which triplets are kept instead of raising. The joins and the
+    group-by do not preserve row order on the streaming engine, so this pins the order against an
+    independent brute-force oracle rather than against a checksum, which a permutation would pass.
+    """
+    rng = np.random.default_rng(3)
+    n = 240
+    dataset = Dataset.from_numpy(
+        rng.standard_normal((n, 3)).astype(np.float32),
+        {
+            "phone": [f"p{i % 5}" for i in range(n)],
+            "ctx": [f"c{(i // 5) % 3}" for i in range(n)],
+            "speaker": [f"s{(i // 2) % 4}" for i in range(n)],
+        },
+    )
+    across = None if is_symmetric else ["speaker"]
+    task = Task(dataset, on="phone", by=["ctx"], across=across)
+    assert task.is_symmetric is is_symmetric
+    out = apply_constraints(
+        task.cells, dataset.labels, constraints_all_different("speaker"), is_symmetric=is_symmetric
+    )
+    speakers = dataset.labels["speaker"].to_list()
+    got = out["is_valid"].to_list()
+    assert len(got) == len(task)
+    for flat, (index_a, index_b, index_x) in zip(
+        got, task.cells[["index_a", "index_b", "index_x"]].iter_rows(), strict=True
+    ):
+        expected = [
+            speakers[a] != speakers[x]
+            and speakers[a] != speakers[b]
+            and speakers[x] != speakers[b]
+            and (a != x or not is_symmetric)
+            for x in index_x
+            for a in index_a
+            for b in index_b
+        ]
+        assert list(flat) == expected
+
+
+def _dataset_with_index_prefixed_label() -> Dataset:
+    """Build a dataset whose BY condition is named ``indexer``: legal, but it starts with "index"."""
+    rng = np.random.default_rng(0)
+    features = rng.standard_normal((12, 4)).astype(np.float32)
+    labels = {"phone": list("aabbcc") * 2, "indexer": ["g1"] * 6 + ["g2"] * 6}
+    return Dataset.from_numpy(features, labels)
+
+
+def test_condition_named_like_an_index_column_is_not_treated_as_one() -> None:
+    """Only ``index_a``/``index_b``/``index_x`` are index columns, not everything starting with "index".
+
+    A condition the user happened to name ``indexer`` used to be swept up by the ``starts_with("index")``
+    selectors: the subsampler tried to explode it, and the collapse dropped it before averaging.
+    """
+    from fastabx import Score
+
+    dataset = _dataset_with_index_prefixed_label()
+    task = Task(dataset, on="phone", by=["indexer"], subsampler=Subsampler(2, None))
+    assert "indexer" in task.cells.columns
+    score = Score(task, "euclidean")
+    assert "indexer" in score.details(levels=[]).columns
+    assert 0 <= score.collapse(levels=["indexer"]) <= 1
