@@ -92,6 +92,9 @@ def zerospeech_abx(
     On triphone or phoneme, described by an item file.
     Within or across speaker, and within context or ignoring context.
 
+    The item file must have the ZeroSpeech columns: ``#phone``, ``prev-phone``, ``next-phone`` and ``speaker``.
+    See :doc:`/items`, and :ref:`item-downloads` to get the ZeroSpeech item files.
+
     Returns the **ABX error rate** (1 - discriminability), between 0 and 1: lower is better, and chance level is 0.5.
 
     :param item: Path to the item file.

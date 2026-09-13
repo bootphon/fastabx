@@ -13,6 +13,9 @@ it is a generic framework that can be applied to other domains of representation
 
 This package provides a simple interface that can be adapted to any ABX conditions, and to any input modality.
 
+On speech, what to compare is described by an :doc:`item file <items>`. Some item can be
+:ref:`downloaded directly <item-downloads>`.
+
 Install
 =======
 
@@ -54,6 +57,7 @@ Contents
 
    abx
    guide
+   items
    api
    examples/index
    advanced/index

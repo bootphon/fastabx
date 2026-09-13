@@ -5,7 +5,7 @@ Slicing features
 ================
 
 To compute phoneme or triphone based ABX, we need phone-level alignments.
-Those are described in item files, like the following
+Those are described in :doc:`item files </items>`, like the following
 
 .. code-block:: text
 

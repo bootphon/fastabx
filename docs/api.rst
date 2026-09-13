@@ -10,6 +10,8 @@ Standard classes and functions
 Dataset
 -------
 
+The ``from_item*`` constructors below all take an item file, as described in :doc:`items`.
+
 .. autoclass:: fastabx.Dataset
    :members: labels, accessor, normalize_, from_dataframe, from_item, from_item_with_times, from_item_and_units, from_numpy
 

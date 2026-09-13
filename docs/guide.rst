@@ -36,7 +36,8 @@ That number is an **ABX error rate**, not an accuracy: lower is better, chance l
 means the two Gaussians are well separated.
 
 To run this on speech instead, keep the `Task` and `Score` lines and build the dataset from an item file and a
-directory of features.
+directory of features. :doc:`items` describes that file, and lists the :ref:`ready-made ones <item-downloads>`
+of the ZeroSpeech challenges.
 
 Python API
 ==========
@@ -75,6 +76,10 @@ an item file and a function to extract representations.
 
    item, features, frequency = "./triphone-dev-clean.item", "./hubert-l11-dev-clean", 50
    dataset = Dataset.from_item(item, features, frequency)
+
+The item file lists the tokens to compare and their labels, and the ``#file`` column of each token must be the
+path of its feature file relative to the root directory, without the extension. :doc:`items` covers the format,
+the required columns, :ref:`how the features are matched <matching-features>` and the ``frequency`` argument.
 
 When the labels and the features both live in a single table (a CSV file, or a polars or pandas DataFrame),
 use :meth:`.Dataset.from_dataframe` and point ``feature_columns`` at the columns holding the features.

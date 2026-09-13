@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Releases up to and including 0.8.0 predate this file and are documented at
 <https://github.com/bootphon/fastabx/releases>.
 
-## Unreleased
+## 0.9.0
 
 ### Added
 

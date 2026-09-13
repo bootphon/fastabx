@@ -287,6 +287,8 @@ class Dataset:
     ) -> "Dataset":
         """Create a dataset from an item file.
 
+        See :doc:`/items` for the format of the item file, and how ``#file`` is matched to the feature files.
+
         If you want to keep the Libri-Light bug to reproduce previous results,
         set the environment variable FASTABX_WITH_LIBRILIGHT_BUG=1.
 
@@ -338,6 +340,7 @@ class Dataset:
         """Create a dataset from an item file.
 
         Use arrays containing the times associated to the features instead of a given frequency.
+        See :doc:`/items` for the format of the item file.
 
         :param item: Path to the item file.
         :param root_features: Path to the root directory containing either the features or the audio files.
@@ -387,6 +390,8 @@ class Dataset:
         progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file with the units all described in a single JSONL file.
+
+        See :doc:`/items` for the format of the item file.
 
         :param item: Path to the item file.
         :param units: Path to the JSONL file containing the units.

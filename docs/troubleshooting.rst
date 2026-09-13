@@ -9,7 +9,8 @@ Every error below is raised by fastabx itself. They are grouped by the moment th
 Building a Dataset
 ==================
 
-Most problems appear here, when the item file and the features meet for the first time.
+Most problems appear here, when the item file and the features meet for the first time. :doc:`items` describes
+what fastabx expects from that file.
 
 :exc:`.InvalidItemFileError` — *"File extension ... is not supported"*
    The item file must be a ``.item``, ``.csv``, ``.jsonl`` or ``.ndjson`` file, and its extension decides how
@@ -19,7 +20,7 @@ Most problems appear here, when the item file and the features meet for the firs
    None, or not all, of the files named in the ``#file`` column were found under ``root``. Two usual causes:
    the ``extension`` argument does not match your files (``.pt`` by default), or the ``#file`` values are not
    the paths of the feature files relative to ``root``, without their extension. A bare ``utt1`` will not match
-   ``root/spk1/utt1.pt``; the value has to be ``spk1/utt1``.
+   ``root/spk1/utt1.pt``; the value has to be ``spk1/utt1``. See :ref:`matching-features`.
 
 :exc:`.FeaturesSizeError` — *"Input features length is not correct for file ..."*
    The slice asked for by a row of the item file goes past the end of the features of that file. Usually one of:

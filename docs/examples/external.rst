@@ -6,7 +6,11 @@ within speaker of the 11th layer of HuBERT base, on the dev-clean subset of Libr
 This will show how to use fastabx with various libraries.
 The only thing to adapt is the feature extraction part, everything else is handled by ``zerospeech_abx``.
 
-In the following examples, the wav files are in the ``dev-clean`` directory and the item file is ``triphone-dev-clean.item``.
+In the following examples, the wav files are in the ``dev-clean`` directory and the item file is
+``triphone-dev-clean.item``, one of the ZeroSpeech 2021 triphone item file that can be
+:ref:`downloaded directly <item-downloads>`. Here ``feature_maker`` computes the representations on the fly
+from the audio, instead of loading pre-computed features; see :doc:`/items` for the other arguments of
+:meth:`.Dataset.from_item`.
 
 
 With torchaudio

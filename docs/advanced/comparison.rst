@@ -9,6 +9,7 @@ ABXpy
 
 `ABXpy <https://github.com/bootphon/ABXpy>`_ is the first implementation of ABX.
 It has been used for the ZeroSpeech 2015, 2017 and 2019 challenges.
+Its item files are read as is by fastabx, see :doc:`/items` and the :ref:`files to download <item-downloads>`.
 It uses numpy to compute distances and HDF5 format to store features and cells.
 The part of the code involving HDF5 (using the tables, h5py, and h5features libraries) is very slow
 and only works with some very specific version of tables and h5py.
