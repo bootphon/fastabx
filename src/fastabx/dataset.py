@@ -136,8 +136,9 @@ def missing_files_error(found: set[str], to_find: set[str]) -> FileNotFoundError
 class NonFiniteError(ValueError):
     """To raise if non-finite features have been found."""
 
-    def __init__(self, fileid: str) -> None:
-        super().__init__(f"Non-finite values detected in features for file '{fileid}'")
+    def __init__(self, fileid: str | None = None) -> None:
+        source = "tabular input" if fileid is None else f"file '{fileid}'"
+        super().__init__(f"Non-finite values detected in features for {source}")
 
 
 def load_data_from_item[T](
@@ -474,6 +475,8 @@ class Dataset:
         if any(dtype.is_float() for dtype in features.dtypes):
             features = features.cast(pl.Float32)
         data = features.to_torch()
+        if not torch.isfinite(data).all():
+            raise NonFiniteError
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolve_device(device)))
 
     @classmethod

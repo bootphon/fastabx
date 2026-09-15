@@ -540,3 +540,15 @@ def test_from_item_progress_flag_silences_the_bar(
     monkeypatch.setenv("TQDM_DISABLE", "1")
     Dataset.from_item(item, features, 50, progress=True)
     assert "Building dataset" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), 1e100])
+@pytest.mark.parametrize("constructor", ["numpy", "dataframe"])
+def test_tabular_non_finite_features_rejected(value: float, constructor: str) -> None:
+    """Reject non-finite values, including overflow during conversion to float32."""
+    if constructor == "numpy":
+        with pytest.raises(NonFiniteError, match="tabular input"):
+            Dataset.from_numpy([[0.0], [value]], {"phone": ["a", "b"]})
+    else:
+        with pytest.raises(NonFiniteError, match="tabular input"):
+            Dataset.from_dataframe({"feature": [0.0, value], "phone": ["a", "b"]}, "feature")

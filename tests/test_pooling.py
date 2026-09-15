@@ -1,5 +1,7 @@
 """Tests for ``fastabx.pooling``."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 import torch
@@ -8,6 +10,7 @@ from fastabx import Dataset, Score, Task
 from fastabx.accessor import InMemoryAccessor
 from fastabx.pooling import (
     PooledDataset,
+    PoolingName,
     PoolingNormalizedError,
     hamming_pooling,
     pool_dataset,
@@ -106,3 +109,26 @@ def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
     assert tiny_dataset.accessor.is_normalized
     with pytest.raises(PoolingNormalizedError):
         pool_dataset(tiny_dataset, "mean")
+
+
+@pytest.mark.parametrize("files", [("a", "a", "z"), ("z", "z", "a"), ("z", "a", "z")])
+@pytest.mark.parametrize("pooling", ["mean", "hamming"])
+def test_timestamp_loading_pooling_preserves_label_order(
+    tmp_path: Path, files: tuple[str, ...], pooling: PoolingName
+) -> None:
+    """File sorting during loading must not change which features belong to a label row."""
+    item = tmp_path / "data.item"
+    item.write_text("#file onset offset phone\n" + "".join(f"{file} 0.0 1.0 p{i}\n" for i, file in enumerate(files)))
+    features, times = tmp_path / "features", tmp_path / "times"
+    features.mkdir()
+    times.mkdir()
+    for file, value in (("a", 1.0), ("z", 9.0)):
+        torch.save(torch.full((2, 1), value), features / f"{file}.pt")
+        torch.save(torch.tensor([0.0, 1.0]), times / f"{file}.pt")
+    dataset = Dataset.from_item_with_times(item, features, times, device=DEVICE, progress=False)
+    pooled = pool_dataset(dataset, pooling)
+    assert pooled.labels.equals(dataset.labels)
+    for i, file in enumerate(files):
+        expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=DEVICE)
+        torch.testing.assert_close(pooled.accessor[i], expected)
+        torch.testing.assert_close(list(dataset.accessor)[i], dataset.accessor[i])

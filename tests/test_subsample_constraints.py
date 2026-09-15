@@ -261,3 +261,56 @@ def test_condition_named_like_an_index_column_is_not_treated_as_one() -> None:
     score = Score(task, "euclidean", progress=False)
     assert "indexer" in score.details(levels=[]).columns
     assert 0 <= score.collapse(levels=["indexer"]) <= 1
+
+
+@pytest.mark.parametrize("conditions", [("a-b", "c", "a", "b-c"), ("a", "b", "a", "b")])
+def test_subsampling_keeps_each_cells_own_indices(conditions: tuple[str, str, str, str]) -> None:
+    """Neither colliding text keys nor identical metadata may merge distinct cells."""
+    p1, q1, p2, q2 = conditions
+    original = _cells_frame().collect().with_columns(pl.Series("p", [p1, p2]), pl.Series("q", [q1, q2]))
+    sampled = subsample_each_cell(original.lazy(), size=5, seed=0).collect()
+    for before, after in zip(original.iter_rows(named=True), sampled.iter_rows(named=True), strict=True):
+        for column in ("index_a", "index_b", "index_x"):
+            assert len(after[column]) == 5
+            assert set(after[column]).issubset(before[column])
+        assert after["index_a"] == after["index_x"]
+
+
+@pytest.mark.parametrize("size", [2, 5])
+def test_subsample_across_preserves_observed_tuples_and_groups(size: int) -> None:
+    """Sample tuples with unequal cardinalities, preserving even colliding A/B group labels."""
+    original = pl.DataFrame(
+        {
+            "phone": ["a-b"] * 3 + ["a"] * 3,
+            "phone_b": ["c"] * 3 + ["b-c"] * 3,
+            "speaker_x": ["Alice", "Alice", "Bob"] * 2,
+            "microphone_x": ["USB", "Studio", "Headset"] * 2,
+            "index_a": [[0]] * 3 + [[1]] * 3,
+            "index_b": [[2]] * 3 + [[3]] * 3,
+            "index_x": [[i] for i in range(4, 10)],
+        }
+    )
+    sampled = subsample_across_group(original.lazy(), size, seed=7).collect()
+    assert sampled.equals(subsample_across_group(original.lazy(), size, seed=7).collect())
+    assert sampled.height == 2 * min(size, 3)
+    for group in sampled.partition_by("phone"):
+        assert group.height == min(size, 3)
+    for row in sampled.iter_rows(named=True):
+        assert row in original.to_dicts()
+
+
+def test_subsample_across_caps_colliding_groups_independently() -> None:
+    original = pl.DataFrame(
+        {
+            "phone": ["a-b"] * 3 + ["a"] * 3,
+            "phone_b": ["c"] * 3 + ["b-c"] * 3,
+            "speaker_x": [f"s{i}" for i in range(6)],
+            "index_a": [[0]] * 3 + [[1]] * 3,
+            "index_b": [[2]] * 3 + [[3]] * 3,
+            "index_x": [[i] for i in range(4, 10)],
+        }
+    )
+    sampled = subsample_across_group(original.lazy(), size=2, seed=0).collect()
+    assert sampled.group_by("phone").len()["len"].to_list() == [2, 2]
+    for row in sampled.iter_rows(named=True):
+        assert row in original.to_dicts()

@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Releases up to and including 0.8.0 predate this file and are documented at
 <https://github.com/bootphon/fastabx/releases>.
 
+## Unreleased
+
+### Fixed
+
+- Pooling preserves feature-to-label alignment after timestamp-based loading, including unsorted item files.
+- Per-cell subsampling keeps distinct cells separate even when their labels contain hyphens or are identical.
+- ACROSS subsampling uses collision-free grouping keys and samples complete observed X condition combinations.
+- NumPy and dataframe constructors reject non-finite features, including overflow during float32 conversion.
+
 ## 0.9.0
 
 ### Added

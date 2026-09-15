@@ -113,7 +113,7 @@ class InMemoryAccessor:
         return len(self.indices)
 
     def __iter__(self) -> Iterator[torch.Tensor]:
-        for i in self.indices:
+        for i in range(len(self)):
             yield self[i]
 
     def lengths(self, indices: list[int]) -> np.ndarray[tuple[int], np.dtype[np.int64]]:

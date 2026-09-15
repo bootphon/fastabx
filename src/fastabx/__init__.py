@@ -14,7 +14,12 @@ from fastabx.dataset import (
     TimesArrayDimensionError,
     TimesArrayFrontiersError,
 )
-from fastabx.distance import Distance, DistanceName, IdenticalDistanceDimensionError, abx_on_cell
+from fastabx.distance import (
+    Distance,
+    DistanceName,
+    IdenticalDistanceDimensionError,
+    abx_on_cell,
+)
 from fastabx.pooling import PooledDataset, PoolingName, PoolingNormalizedError, pool_dataset
 from fastabx.score import CollapseError, EmptyScoreError, IncompatibleNormalizationError, Score
 from fastabx.subsample import Subsampler
