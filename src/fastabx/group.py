@@ -278,7 +278,7 @@ class GroupReducer:
             denom = torch.tensor([self.sizes[p] for p in positions], device=device, dtype=counts.dtype)
 
         cell_scores = 1 - counts / denom
-        self.scores[torch.tensor(positions)] = cell_scores.cpu()
+        self.scores[torch.tensor(positions)] = cell_scores.to(device="cpu", dtype=self.scores.dtype)
         self._per_b, self._per_b_valid, self._positions, self._nb, self._cols = [], [], [], [], 0
 
     def finalize(self) -> tuple[list[float | None], list[int | None]]:

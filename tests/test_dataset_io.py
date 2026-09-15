@@ -87,9 +87,9 @@ def test_from_dataframe_preserves_integer_units() -> None:
     assert accessor_data(ds)[0].item() != accessor_data(ds)[1].item()
 
 
-def test_from_dataframe_casts_float_features() -> None:
+def test_from_dataframe_preserves_float_features() -> None:
     ds = Dataset.from_dataframe({"x0": [1.0, 2.0], "phone": ["a", "b"]}, feature_columns="x0")
-    assert accessor_data(ds).dtype is torch.float32
+    assert accessor_data(ds).dtype is torch.float64
 
 
 def test_from_numpy_polars_labels() -> None:
@@ -453,7 +453,7 @@ def test_load_data_from_item_with_times_non_finite_raises() -> None:
 def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
-    torch.save(torch.zeros(10, 3), features_path)
+    torch.save(torch.zeros(3, 3), features_path)
     torch.save(torch.tensor([0.5, 0.6, 0.7]), times_path)  # no times in [0, 0.1]
     labels = pl.DataFrame(
         {
@@ -548,7 +548,7 @@ def test_tabular_non_finite_features_rejected(value: float, constructor: str) ->
     """Reject non-finite values, including overflow during conversion to float32."""
     if constructor == "numpy":
         with pytest.raises(NonFiniteError, match="tabular input"):
-            Dataset.from_numpy([[0.0], [value]], {"phone": ["a", "b"]})
+            Dataset.from_numpy([[0.0], [value]], {"phone": ["a", "b"]}, dtype=torch.float32)
     else:
         with pytest.raises(NonFiniteError, match="tabular input"):
-            Dataset.from_dataframe({"feature": [0.0, value], "phone": ["a", "b"]}, "feature")
+            Dataset.from_dataframe({"feature": [0.0, value], "phone": ["a", "b"]}, "feature", dtype=torch.float32)

@@ -47,9 +47,13 @@ def alignment_function(alignment: AlignmentName | Alignment) -> Alignment:
         the :py:class:`.Alignment` protocol.
     """
     if not isinstance(alignment, str):
+        if not callable(alignment):
+            msg = "alignment must be a built-in name or a callable"
+            raise TypeError(msg)
         return alignment
     match alignment:
         case "dtw":
             return dtw_batch
         case _:
-            raise ValueError(alignment)
+            msg = f"Unknown alignment: {alignment!r}. Choose dtw, or pass a callable."
+            raise ValueError(msg)

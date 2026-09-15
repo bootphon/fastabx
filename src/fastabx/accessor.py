@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from fastabx.verify import verify_empty_datapoints
+from fastabx.verify import InvalidFeaturesError, verify_continuous_dtype, verify_empty_datapoints, verify_feature_shape
 
 __all__ = ["Accessor", "Batch", "InMemoryAccessor"]
 
@@ -89,6 +89,10 @@ class InMemoryAccessor:
         self.device = device
         self.indices = indices
         verify_empty_datapoints(self.indices)
+        verify_feature_shape(data)
+        if any(start < 0 or end > data.size(0) for start, end in indices.values()):
+            msg = "Accessor slices must lie within the feature tensor's frame dimension."
+            raise InvalidFeaturesError(msg)
         self.data = data.to(self.device)
         self.is_normalized = False
         size = max(self.indices) + 1
@@ -147,6 +151,7 @@ def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Ten
 
     Extend all vectors by eps to put the null vector at the maximal angular distance from any non-null vector.
     """
+    verify_continuous_dtype(x)
     dim = x.size(1)
     norm = x.norm(dim=1, keepdim=True)
     zero_mask = norm.squeeze(1) == 0

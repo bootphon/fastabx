@@ -192,6 +192,10 @@ Building a Dataset
 .. autoexception:: fastabx.EmptyDataPointsError
 .. autoexception:: fastabx.EmptyDatasetError
 .. autoexception:: fastabx.NonContiguousIndicesError
+.. autoexception:: fastabx.InvalidDatasetError
+.. autoexception:: fastabx.InvalidFeaturesError
+.. autoexception:: fastabx.InvalidFeatureDtypeError
+.. autoexception:: fastabx.InvalidTimesError
 .. autoexception:: fastabx.NonFiniteError
 .. autoexception:: fastabx.TimesArrayDimensionError
 .. autoexception:: fastabx.TimesArrayFrontiersError

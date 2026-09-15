@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Self
 
@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from fastabx.accessor import Accessor, ArrayLike, InMemoryAccessor
 from fastabx.utils import hide_progress, resolve_device, with_librilight_bug
+from fastabx.verify import EmptyDatasetError, InvalidDatasetError, verify_feature_shape
 
 __all__ = [
     "Dataset",
@@ -22,6 +23,7 @@ __all__ = [
     "FrequencyTypeError",
     "InMemoryAccessor",
     "InvalidItemFileError",
+    "InvalidTimesError",
     "NonFiniteError",
     "TimesArrayDimensionError",
     "TimesArrayFrontiersError",
@@ -57,6 +59,11 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
         case _:
             msg = f"File extension {ext} is not supported. Supported extensions are .item, .csv, .jsonl, .ndjson."
             raise InvalidItemFileError(msg)
+    if df.is_empty():
+        raise EmptyDatasetError
+    if missing := {file_col, onset_col, offset_col} - set(df.columns):
+        msg = f"Item metadata is missing required columns: {sorted(missing)}"
+        raise InvalidItemFileError(msg)
     return df.with_columns(
         df[onset_col].str.to_decimal(inference_length=len(df)),
         df[offset_col].str.to_decimal(inference_length=len(df)),
@@ -76,7 +83,15 @@ class FrequencyTypeError(TypeError):
 def decimal_frequency(frequency: int | str | Decimal) -> Decimal:
     """Convert frequency to a Decimal."""
     if isinstance(frequency, (int, str, Decimal)) and not isinstance(frequency, bool):
-        return Decimal(str(frequency))
+        try:
+            value = Decimal(str(frequency))
+        except InvalidOperation:
+            msg = "frequency must be a positive finite decimal"
+            raise ValueError(msg) from None
+        if not value.is_finite() or value <= 0:
+            msg = "frequency must be positive and finite"
+            raise ValueError(msg)
+        return value
     raise FrequencyTypeError
 
 
@@ -141,6 +156,45 @@ class NonFiniteError(ValueError):
         super().__init__(f"Non-finite values detected in features for {source}")
 
 
+def verify_intervals(labels: pl.DataFrame, onset_col: str, offset_col: str) -> None:
+    """Reject empty metadata and invalid intervals; both boundaries are inclusive."""
+    if labels.is_empty():
+        raise EmptyDatasetError
+    onset, offset = pl.col(onset_col), pl.col(offset_col)
+    invalid = (
+        onset.is_null()
+        | offset.is_null()
+        | ~onset.cast(pl.Float64).is_finite()
+        | ~offset.cast(pl.Float64).is_finite()
+        | (onset < 0)
+        | (offset < onset)
+    )
+    if labels.select(invalid.any()).item():
+        msg = "Item intervals must have finite non-null times with 0 <= onset <= offset."
+        raise InvalidItemFileError(msg)
+
+
+def prepare_features(
+    features: torch.Tensor,
+    device: torch.device,
+    dtype: torch.dtype | None,
+    fileid: str | None = None,
+    dimension: int | None = None,
+) -> torch.Tensor:
+    """Validate features before and after an explicit dtype conversion."""
+    verify_feature_shape(features, dimension)
+    if not torch.isfinite(features).all():
+        raise NonFiniteError(fileid)
+    converted = features.detach().to(device=device, dtype=dtype)
+    if converted.dtype != features.dtype and not torch.isfinite(converted).all():
+        raise NonFiniteError(fileid)
+    return converted
+
+
+class InvalidTimesError(ValueError):
+    """Timestamps must be finite and match the feature frame count."""
+
+
 def load_data_from_item[T](
     mapping: Mapping[str, T],
     labels: pl.DataFrame,
@@ -151,9 +205,11 @@ def load_data_from_item[T](
     offset_col: str,
     device: torch.device,
     *,
+    dtype: torch.dtype | None = None,
     progress: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory on ``device``. Return a dictionary of indices and a tensor of data."""
+    verify_intervals(labels, onset_col, offset_col)
     metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     frontiers = item_frontiers(frequency, onset_col, offset_col)
     lazy = metadata.lazy().sort(file_col, maintain_order=True).with_columns(*frontiers)
@@ -169,9 +225,8 @@ def load_data_from_item[T](
         disable=hide_progress(progress=progress),
     ):
         try:
-            features = feature_maker(mapping[fileid]).detach().to(device)
-            if not torch.isfinite(features).all():
-                raise NonFiniteError(fileid)
+            dim = data[0].size(1) if data else None
+            features = prepare_features(feature_maker(mapping[fileid]), device, dtype, fileid, dim)
         except KeyError as error:
             raise missing_files_error(set(mapping), set(by_file[file_col].unique())) from error
         for start, end in zip(start_indices, end_indices, strict=True):
@@ -213,9 +268,11 @@ def load_data_from_item_with_times[T](
     offset_col: str,
     device: torch.device,
     *,
+    dtype: torch.dtype | None = None,
     progress: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
     """Load all data in memory on ``device``, using features and times array."""
+    verify_intervals(labels, onset_col, offset_col)
     metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     by_file = (
         metadata.sort(file_col, maintain_order=True)
@@ -223,7 +280,12 @@ def load_data_from_item_with_times[T](
         .agg("index", onset_col, offset_col)
     )
     data, all_indices, right = [], {}, 0
-    decimals = by_file["onset"].dtype.inner.scale  # ty: ignore[unresolved-attribute]
+    scales = [
+        column_dtype.scale
+        for column_dtype in (labels.schema[onset_col], labels.schema[offset_col])
+        if isinstance(column_dtype, pl.Decimal)
+    ]
+    decimals = max(scales) if len(scales) == 2 else None
     for fileid, indices, onsets, offsets in tqdm(
         by_file.iter_rows(),
         desc="Building dataset",
@@ -231,16 +293,20 @@ def load_data_from_item_with_times[T](
         disable=hide_progress(progress=progress),
     ):
         try:
-            features = feature_maker(paths_features[fileid]).detach().to(device)
-            if not torch.isfinite(features).all():
-                raise NonFiniteError(fileid)
-            times = time_maker(paths_times[fileid]).detach().to(device).round(decimals=decimals)
+            dim = data[0].size(1) if data else None
+            features = prepare_features(feature_maker(paths_features[fileid]), device, dtype, fileid, dim)
+            times = time_maker(paths_times[fileid]).detach().to(device=device, dtype=torch.float64)
         except KeyError as error:
             raise missing_files_error(
                 set(paths_features) & set(paths_times), set(by_file[file_col].unique())
             ) from error
-        if times.ndim > 1:
+        if times.ndim != 1:
             raise TimesArrayDimensionError
+        if times.numel() != features.size(0) or not torch.isfinite(times).all():
+            msg = f"Timestamps for {fileid!r} must be finite and have one entry per feature frame."
+            raise InvalidTimesError(msg)
+        if decimals is not None:
+            times = times.round(decimals=decimals)
         for index, onset, offset in zip(indices, onsets, offsets, strict=True):
             mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]
             if mask.numel() == 0:
@@ -263,6 +329,11 @@ class Dataset:
     labels: pl.DataFrame
     accessor: Accessor
 
+    def __post_init__(self) -> None:
+        if len(self.labels) != len(self.accessor):
+            msg = f"Labels and accessor must have the same length, got {len(self.labels)} and {len(self.accessor)}."
+            raise InvalidDatasetError(msg)
+
     def __repr__(self) -> str:
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}"
 
@@ -284,6 +355,7 @@ class Dataset:
         onset_col: str = "onset",
         offset_col: str = "offset",
         device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
         progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file.
@@ -302,6 +374,7 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
         :param device: Device on which to store the features, such as "cpu" or "cuda:1".
             Defaults to CUDA if available, and CPU otherwise.
         :param progress: Whether to display a progress bar while building the dataset.
@@ -318,6 +391,7 @@ class Dataset:
             onset_col,
             offset_col,
             resolved,
+            dtype=dtype,
             progress=progress,
         )
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
@@ -336,6 +410,7 @@ class Dataset:
         onset_col: str = "onset",
         offset_col: str = "offset",
         device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
         progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file.
@@ -353,6 +428,7 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
         :param device: Device on which to store the features, such as "cpu" or "cuda:1".
             Defaults to CUDA if available, and CPU otherwise.
         :param progress: Whether to display a progress bar while building the dataset.
@@ -371,6 +447,7 @@ class Dataset:
             onset_col,
             offset_col,
             resolved,
+            dtype=dtype,
             progress=progress,
         )
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
@@ -388,6 +465,7 @@ class Dataset:
         onset_col: str = "onset",
         offset_col: str = "offset",
         device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
         progress: bool = True,
     ) -> "Dataset":
         """Create a dataset from an item file with the units all described in a single JSONL file.
@@ -403,6 +481,7 @@ class Dataset:
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
+        :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
         :param device: Device on which to store the features, such as "cpu" or "cuda:1".
             Defaults to CUDA if available, and CPU otherwise.
         :param progress: Whether to display a progress bar while building the dataset.
@@ -413,6 +492,10 @@ class Dataset:
             .with_columns(pl.col(audio_key).str.split("/").list.last().str.replace(r"\.[^.]+$", ""))
             .collect()
         )
+
+        if units_df[audio_key].is_duplicated().any():
+            msg = "Units contain duplicate audio identifiers after removing directories and extensions."
+            raise InvalidItemFileError(msg)
 
         def feature_maker(idx: int) -> torch.Tensor:
             return torch.tensor(units_df[idx, units_key]).unsqueeze(1)
@@ -428,6 +511,7 @@ class Dataset:
             onset_col,
             offset_col,
             resolved,
+            dtype=dtype,
             progress=progress,
         )
         return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
@@ -440,6 +524,7 @@ class Dataset:
         *,
         separator: str = ",",
         device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> "Dataset":
         """Create a dataset from any tabular source containing both the labels and the features.
 
@@ -453,6 +538,7 @@ class Dataset:
         :param source: The tabular source. See above for accepted types.
         :param feature_columns: Column name or list of column names containing the features.
         :param separator: Separator used in the CSV file. Only relevant when ``source`` is a path.
+        :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
         :param device: Device on which to store the features, such as "cpu" or "cuda:1".
             Defaults to CUDA if available, and CPU otherwise.
         """
@@ -472,12 +558,9 @@ class Dataset:
         labels = df.select(cs.exclude(feature_columns))
         indices = {i: (i, i + 1) for i in range(len(labels))}
         features = df.select(feature_columns)
-        if any(dtype.is_float() for dtype in features.dtypes):
-            features = features.cast(pl.Float32)
-        data = features.to_torch()
-        if not torch.isfinite(data).all():
-            raise NonFiniteError
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolve_device(device)))
+        resolved = resolve_device(device)
+        data = prepare_features(features.to_torch(), resolved, dtype)
+        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_numpy(
@@ -486,6 +569,7 @@ class Dataset:
         labels: pl.DataFrame | Mapping[str, Sequence[object]],
         *,
         device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> "Dataset":
         """Create a dataset from the features and the labels.
 
@@ -495,10 +579,15 @@ class Dataset:
 
         :param features: 2D array-like containing the features.
         :param labels: Dictionary of sequences, or polars/pandas DataFrame containing the labels.
+        :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
         :param device: Device on which to store the features, such as "cpu" or "cuda:1".
             Defaults to CUDA if available, and CPU otherwise.
         """
-        features_df = pl.from_numpy(np.asarray(features))
+        array = np.asarray(features)
+        if array.ndim != 2:
+            msg = "features must be a two-dimensional array (rows, dimension)"
+            raise ValueError(msg)
+        features_df = pl.from_numpy(array)
         if isinstance(labels, pl.DataFrame):
             labels_df = labels
         elif _is_pandas_dataframe(labels):
@@ -516,4 +605,4 @@ class Dataset:
             )
             raise ValueError(msg)
         data = pl.concat((features_df, labels_df), how="horizontal")
-        return cls.from_dataframe(data, features_df.columns, device=device)
+        return cls.from_dataframe(data, features_df.columns, device=device, dtype=dtype)

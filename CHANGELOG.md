@@ -8,7 +8,25 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ## Unreleased
 
+### Added
+
+- All `Dataset.from_*` constructors accept `dtype=None` to preserve input precision or an explicit torch dtype.
+- Dataset/accessor validation reports inconsistent row counts, invalid feature shapes and slice boundaries.
+- Timestamp loading validates shape, finiteness and frame count; item intervals and frequencies are validated.
+
+### Changed
+
+- Tabular constructors preserve floating input precision by default. Pass `dtype=torch.float32` for the previous
+  conversion behavior. Normalization and pooling require floating-point features; distance kernels defer dtype compatibility to PyTorch.
+- Precomputed index lists reject nulls; duplicate and overlapping indices retain positional counting semantics.
+
+
 ### Fixed
+
+- Timestamp loading honors custom column names and both boundary precisions.
+- Callable distance objects need not be hashable; invalid distance/alignment arguments have actionable errors.
+- Hamming pooling supports float64, and the score reducer handles float64 distance calculations.
+- Duplicate normalized audio identifiers in units files are rejected instead of silently overwritten.
 
 - Pooling preserves feature-to-label alignment after timestamp-based loading, including unsorted item files.
 - Per-cell subsampling keeps distinct cells separate even when their labels contain hyphens or are identical.

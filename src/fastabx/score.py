@@ -146,7 +146,7 @@ class Score:
         self.alignment = alignment
         distance = distance_function(distance_name)
         align = alignment_function(alignment)
-        if distance_name in {"cosine", "angular"}:
+        if isinstance(distance_name, str) and distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(display_name(distance_name))

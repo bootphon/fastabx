@@ -3,8 +3,10 @@
 import enum
 from collections.abc import Sequence
 from itertools import chain
+from numbers import Integral
 
 import polars as pl
+import torch
 from torch import Tensor
 
 __all__ = [
@@ -14,6 +16,9 @@ __all__ = [
     "EmptyTaskError",
     "InputTypeError",
     "InvalidCellError",
+    "InvalidDatasetError",
+    "InvalidFeatureDtypeError",
+    "InvalidFeaturesError",
     "InvalidLevelsError",
     "LabelReservedNameError",
     "LabelSuffixError",
@@ -21,6 +26,40 @@ __all__ = [
     "PrecomputedCellsError",
     "UnknownConditionError",
 ]
+
+
+class InvalidDatasetError(ValueError):
+    """Dataset labels and accessor rows do not agree."""
+
+
+class InvalidFeaturesError(ValueError):
+    """Feature dimensions or accessor slice boundaries are invalid."""
+
+
+class InvalidFeatureDtypeError(TypeError):
+    """A continuous operation received an unsupported feature dtype."""
+
+    def __init__(self, dtype: torch.dtype) -> None:
+        super().__init__(
+            f"Normalization and pooling require floating-point features, got {dtype}. "
+            "Pass dtype=torch.float32 or dtype=torch.float64 to the Dataset constructor. "
+            "Use 'identical' to compare discrete integer units."
+        )
+
+
+def verify_feature_shape(data: Tensor, dimension: int | None = None) -> None:
+    """Features must be a matrix with a positive, consistent feature dimension."""
+    if data.ndim != 2 or data.size(1) == 0 or (dimension is not None and data.size(1) != dimension):
+        msg = f"Features must have shape (frames, dimension) with a positive consistent dimension, got {data.shape}."
+        raise InvalidFeaturesError(msg)
+
+
+def verify_continuous_dtype(*data: Tensor) -> None:
+    """Require floating-point inputs for normalization and pooling; backend support may vary."""
+    for tensor in data:
+        if not tensor.is_floating_point():
+            raise InvalidFeatureDtypeError(tensor.dtype)
+
 
 NDIM = 3
 MIN_A_LEN = 2  # Minimum length of A in the ABX task.
@@ -88,11 +127,17 @@ def verify_empty_datapoints(indices: dict[int, tuple[int, int]]) -> None:
     """Check that there is at least one datapoint, that the indices cover every row exactly once, and none is empty."""
     if not indices:
         raise EmptyDatasetError
+    if any(not isinstance(index, Integral) or isinstance(index, bool) for index in indices):
+        msg = "Accessor indices must be integer row numbers."
+        raise InvalidDatasetError(msg)
     lowest, highest = min(indices), max(indices)
     if lowest != 0 or highest != len(indices) - 1:
         raise NonContiguousIndicesError(len(indices), lowest, highest)
     empty = []
     for key, (start, end) in indices.items():
+        if any(not isinstance(bound, Integral) or isinstance(bound, bool) for bound in (start, end)):
+            msg = "Accessor slice boundaries must be integers."
+            raise InvalidFeaturesError(msg)
         if end <= start:
             empty.append(str(key))
     if empty:
@@ -186,6 +231,11 @@ def verify_precomputed_cells(cells: pl.DataFrame, num_items: int, *, is_symmetri
         dtype = cells.schema[col]
         if not (isinstance(dtype, pl.List) and dtype.inner.is_integer()):
             msg = f"Column {col!r} must be a list of integers, got {dtype}"
+            raise PrecomputedCellsError(msg)
+        if cells.select(
+            (pl.col(col).is_null() | pl.col(col).list.eval(pl.element().is_null()).list.any()).any()
+        ).item():
+            msg = f"Column {col!r} must not contain null lists or null indices"
             raise PrecomputedCellsError(msg)
     empty = cells.select(
         (pl.col("index_a").list.len() == 0).any().alias("a"),

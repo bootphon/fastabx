@@ -661,7 +661,7 @@ def test_exported_exceptions_keep_standard_bases() -> None:
     import fastabx
 
     exported = [getattr(fastabx, name) for name in fastabx.__all__ if name.endswith("Error")]
-    assert len(exported) == 28
+    assert len(exported) == 32
     assert all(issubclass(exc, Exception) for exc in exported)
     assert issubclass(fastabx.FeaturesSizeError, ValueError)
     assert issubclass(fastabx.FrequencyTypeError, TypeError)

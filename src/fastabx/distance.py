@@ -24,6 +24,9 @@ def distance_function(distance: DistanceName | Distance) -> Distance:
         the :py:class:`.Distance` type alias.
     """
     if not isinstance(distance, str):
+        if not callable(distance):
+            msg = "distance must be a built-in name or a callable"
+            raise TypeError(msg)
         return distance
     match distance:
         case "euclidean":
