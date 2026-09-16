@@ -18,6 +18,8 @@ from fastabx.utils import gather_chunk_rows, max_score_chunk_rows, reduction_flu
 
 __all__ = []
 
+MAX_FLOAT32_SIZE = 2**23
+
 
 @dataclass(frozen=True, slots=True)
 class CellGroup:
@@ -191,9 +193,10 @@ def grouped_contributions(dxa: Tensor, dxb_all: Tensor, mask: Tensor | None = No
     """
     nx, na = dxa.size()
     diff = dxa.unsqueeze(2) - dxb_all.unsqueeze(1)
+    dtype = torch.float64 if nx * na > MAX_FLOAT32_SIZE or diff.dtype == torch.float64 else torch.float32
     if mask is not None:
-        return (0.5 * (1 - torch.sign(diff)) * mask).sum(dim=(0, 1))
-    return 0.5 * (nx * na - torch.sign(diff).sum(dim=(0, 1)))
+        return (0.5 * (1 - torch.sign(diff)) * mask).sum(dim=(0, 1), dtype=dtype)
+    return 0.5 * (nx * na - torch.sign(diff).sum(dim=(0, 1), dtype=dtype))
 
 
 class GroupReducer:
@@ -262,7 +265,7 @@ class GroupReducer:
         """Reduce all buffered groups in one pass: one ``index_add_`` over the concatenated per-B counts."""
         if not self._per_b:
             return
-        per_b_all = torch.cat(self._per_b)
+        per_b_all = torch.cat(self._per_b).to(torch.float64)
         device = per_b_all.device
         positions = self._positions
         n_cells = len(positions)
@@ -270,12 +273,12 @@ class GroupReducer:
         counts = per_b_all.new_zeros(n_cells).index_add_(0, cell_ids, per_b_all)
 
         if self.constrained:
-            valid_all = torch.cat(self._per_b_valid).to(counts.dtype)
-            denom = counts.new_zeros(n_cells).index_add_(0, cell_ids, valid_all)
+            valid_all = torch.cat(self._per_b_valid)
+            denom = valid_all.new_zeros(n_cells).index_add_(0, cell_ids, valid_all)
             for size, position in zip(denom.tolist(), positions, strict=True):
                 self.sizes[position] = int(size) if size > 0 else None
         else:
-            denom = torch.tensor([self.sizes[p] for p in positions], device=device, dtype=counts.dtype)
+            denom = torch.tensor([self.sizes[p] for p in positions], device=device, dtype=torch.int64)
 
         cell_scores = 1 - counts / denom
         self.scores[torch.tensor(positions)] = cell_scores.to(device="cpu", dtype=self.scores.dtype)

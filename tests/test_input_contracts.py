@@ -277,7 +277,7 @@ def test_custom_timestamp_columns_end_to_end(tmp_path: Path) -> None:
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
 def test_integer_pooling_rejected(pooling: PoolingName) -> None:
     dataset = Dataset.from_numpy([[1], [2]], {"phone": ["a", "b"]})
-    with pytest.raises(InvalidFeatureDtypeError):
+    with pytest.raises(RuntimeError, match="floating point"):
         pool_dataset(dataset, pooling)
 
 

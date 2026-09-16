@@ -150,4 +150,4 @@ def abx_on_cell(
     nx, na = dxa.size()
     nx, nb = dxb.size()
     sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))
-    return 1 - sc.sum() / len(cell)
+    return (1 - sc.sum(dtype=torch.float64) / len(cell)).to(sc.dtype)

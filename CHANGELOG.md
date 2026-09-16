@@ -16,6 +16,10 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Changed
 
+- Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
+- Count reductions preserve half-integer contributions beyond float32 precision; final score storage stays float32.
+  Small-group contributions stay float32 until a single promotion per flush.
+
 - Tabular constructors preserve floating input precision by default. Pass `dtype=torch.float32` for the previous
   conversion behavior. Normalization and pooling require floating-point features; distance kernels defer dtype compatibility to PyTorch.
 - Precomputed index lists reject nulls; duplicate and overlapping indices retain positional counting semantics.

@@ -152,7 +152,7 @@ class Score:
             raise IncompatibleNormalizationError(display_name(distance_name))
         scores, sizes = score_task(task, distance, alignment=align, constraints=constraints, progress=progress)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
-            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
+            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int64)
         )
 
     @property
