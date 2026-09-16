@@ -21,6 +21,11 @@ __all__ = []
 MAX_FLOAT32_SIZE = 2**23
 
 
+def contribution_dtype(size: int, input_dtype: torch.dtype) -> torch.dtype:
+    """Choose an accumulator that represents every possible half-integer contribution exactly."""
+    return torch.float64 if size > MAX_FLOAT32_SIZE or input_dtype == torch.float64 else torch.float32
+
+
 @dataclass(frozen=True, slots=True)
 class CellGroup:
     """A group of cells that share the same X and A sample sets, with all targets built in one gather.
@@ -193,7 +198,7 @@ def grouped_contributions(dxa: Tensor, dxb_all: Tensor, mask: Tensor | None = No
     """
     nx, na = dxa.size()
     diff = dxa.unsqueeze(2) - dxb_all.unsqueeze(1)
-    dtype = torch.float64 if nx * na > MAX_FLOAT32_SIZE or diff.dtype == torch.float64 else torch.float32
+    dtype = contribution_dtype(nx * na, diff.dtype)
     if mask is not None:
         return (0.5 * (1 - torch.sign(diff)) * mask).sum(dim=(0, 1), dtype=dtype)
     return 0.5 * (nx * na - torch.sign(diff).sum(dim=(0, 1), dtype=dtype))

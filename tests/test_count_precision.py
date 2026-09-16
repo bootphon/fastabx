@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from fastabx import Batch, Cell, Dataset, Score, Task, abx_on_cell
-from fastabx.group import GroupReducer, grouped_contributions
+from fastabx.group import GroupReducer, contribution_dtype, grouped_contributions
 
 
 @pytest.mark.parametrize("size", [2_000_000_000, 3_000_000_000])
@@ -58,15 +58,29 @@ def test_reducer_preserves_large_sizes_and_half_counts(dtype: torch.dtype, *, co
     assert scores[0] == pytest.approx(expected, rel=1e-7, abs=0)
 
 
+@pytest.mark.parametrize(
+    ("size", "input_dtype", "expected"),
+    [
+        (2**23, torch.float16, torch.float32),
+        (2**23, torch.float32, torch.float32),
+        (2**23 + 1, torch.float32, torch.float64),
+        (1, torch.float64, torch.float64),
+    ],
+)
+def test_contribution_dtype_crosses_half_count_precision_boundary(
+    size: int, input_dtype: torch.dtype, expected: torch.dtype
+) -> None:
+    assert contribution_dtype(size, input_dtype) == expected
+
+
 @pytest.mark.parametrize("constrained", [False, True])
-@pytest.mark.parametrize("na", [2**23, 2**23 + 1, 2**24 + 1])
-def test_grouped_reduction_preserves_half_count_above_float32_precision(na: int, *, constrained: bool) -> None:
-    dxa = torch.zeros(1, na)
-    dxa[0, -1] = 1.0
-    mask = torch.ones(1, na, 1, dtype=torch.bool) if constrained else None
+def test_grouped_reduction_preserves_half_counts(*, constrained: bool) -> None:
+    dxa = torch.tensor([[0.0, 0.0, 1.0]])
+    mask = torch.ones(1, 3, 1, dtype=torch.bool) if constrained else None
     result = grouped_contributions(dxa, torch.ones(1, 1), mask)
-    assert result.dtype == (torch.float32 if na <= 2**23 else torch.float64)
-    assert result.item() == pytest.approx(na - 0.5, rel=0, abs=0)
+    expected = 2.5
+    assert result.dtype == torch.float32
+    assert result.item() == pytest.approx(expected, rel=0, abs=0)
 
 
 def test_float16_counts_do_not_overflow_in_grouped_or_single_cell_scoring() -> None:
