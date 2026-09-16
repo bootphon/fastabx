@@ -20,7 +20,7 @@ from torchdtw import dtw_batch
 from fastabx import Dataset, Task
 from fastabx.constraints import constraints_all_different
 from fastabx.distance import DistanceName, abx_on_cell, distance_function
-from fastabx.group import GroupReducer, group_cells, grouped_contributions
+from fastabx.group import GroupReducer, group_cells, grouped_contributions, grouped_distances
 from fastabx.score import score_task
 from fastabx.utils import prefetch
 
@@ -107,6 +107,40 @@ def test_grouped_contributions_partial_mask_matches_hand_computed() -> None:
                     sign = 0.0 if diff == 0 else (1.0 if diff > 0 else -1.0)
                     expected[ib] += 0.5 * (1 - sign)
     torch.testing.assert_close(got, expected)
+
+
+@pytest.mark.parametrize("with_mask", [False, True])
+def test_grouped_contributions_chunking_matches_single_block(
+    monkeypatch: pytest.MonkeyPatch, *, with_mask: bool
+) -> None:
+    """Triplet chunking bounds the broadcast without changing its reduction."""
+    rng = torch.Generator().manual_seed(12)
+    dxa = torch.randn(3, 4, generator=rng)
+    dxb = torch.randn(3, 7, generator=rng)
+    keep_threshold = 0.3
+    mask = torch.rand(3, 4, 7, generator=rng) > keep_threshold if with_mask else None
+    expected = grouped_contributions(dxa, dxb, mask)
+    monkeypatch.setattr("fastabx.group.MAX_TRIPLET_CHUNK_ELEMENTS", 24)
+    actual = grouped_contributions(dxa, dxb, None if mask is None else mask.numpy())
+    assert_close(actual, expected)
+
+
+def test_grouped_distances_chunks_integer_input() -> None:
+    """The legacy distance-matrix helper also covers its chunked integer-output path."""
+    x = torch.tensor([[[0]], [[1]]])
+    targets = torch.tensor([[[0]], [[1]], [[2]]])
+    sizes = torch.ones(2, dtype=torch.int32)
+    target_sizes = torch.ones(3, dtype=torch.int32)
+    actual = grouped_distances(
+        x,
+        sizes,
+        targets,
+        target_sizes,
+        distance_function("identical"),
+        alignment=dtw_batch,
+        max_rows=1,
+    )
+    assert_close(actual, torch.tensor([[0.0, 1.0, 1.0], [1.0, 0.0, 1.0]]))
 
 
 def test_max_score_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -236,6 +270,27 @@ def test_group_reducer_constrained_without_mask_raises() -> None:
     group = CellGroup(x=x, targets=targets, rows=[2, 1], positions=[0], mask=None)
     with pytest.raises(NoConstraintsError):
         reducer.add(group, distance_function("euclidean"), alignment=dtw_batch, is_symmetric=False)
+
+
+def test_group_reducer_chunked_symmetric_tensor_mask(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Oversized symmetric groups and device-style tensor masks use the incremental path."""
+    from fastabx.accessor import Batch
+    from fastabx.group import CellGroup
+
+    monkeypatch.setenv("FASTABX_MAX_SCORE_CHUNK_ROWS", "2")
+    x = Batch(torch.tensor([[[0.0]], [[1.0]], [[2.0]]]), torch.ones(3, dtype=torch.int32))
+    targets = Batch(torch.tensor([[[0.0]], [[1.0]], [[2.0]], [[3.0]]]), torch.ones(4, dtype=torch.int32))
+    mask = torch.ones(3, 3, 1, dtype=torch.bool)
+    reducer = GroupReducer(1, constrained=True)
+    reducer.add(
+        CellGroup(x=x, targets=targets, rows=[3, 1], positions=[0], mask=mask),
+        distance_function("euclidean"),
+        alignment=dtw_batch,
+        is_symmetric=True,
+    )
+    scores, sizes = reducer.finalize()
+    assert scores == [0.5]
+    assert sizes == [9]
 
 
 def test_prefetch_yields_same_items_as_generator() -> None:

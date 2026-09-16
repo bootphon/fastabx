@@ -179,6 +179,9 @@ have memory to spare and the cells are small.
   per-cell reduction is flushed. Larger values amortise the reduction over more cells, at the cost of
   keeping more intermediate counts around.
 
+These low-level controls are retained for unusual workloads and diagnostics. The scoring engine also splits
+oversized triplet comparisons and constraint masks internally; there is no public memory-budget setting.
+
 Exceptions
 ==========
 

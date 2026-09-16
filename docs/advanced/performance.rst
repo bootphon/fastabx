@@ -38,12 +38,17 @@ the cost of a comparison is a frame-level lattice: comparing ``n`` sequences of 
 against ``m`` sequences of at most ``t`` frames allocates ``n × m × s × t`` floats, which an
 :ref:`alignment <alignment>` then reduces to one distance per pair.
 
-That product is may lead to running out of memory. It is bounded by two environment variables described in
+That product may lead to running out of memory. It is bounded by two environment variables described in
 :ref:`perf-env`:
 
 - :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` caps how many sequences are compared against the group's X at once.
   Lower it first on an out-of-memory error.
 - :code:`FASTABX_GATHER_CHUNK_ROWS` caps how many rows are gathered and padded in one read.
+
+Oversized groups are split into B fragments, and their sequence distances and ``X × A × B`` contribution
+tensors are consumed incrementally. Constraint masks are likewise evaluated per bounded gather chunk and stay
+on the host until the corresponding contribution slice is reduced. Ordinary groups continue to use the
+single-launch vectorized path.
 
 What dominates the runtime
 ==========================

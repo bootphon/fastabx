@@ -100,7 +100,7 @@ def score_task(
     pbar = tqdm(total=len(task), desc="Scoring each cell", disable=hide_progress(progress=progress))
     for group in prefetch(group_cells(task, constraints=constraints)):
         reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
-        pbar.update(len(group.positions))
+        pbar.update(len(group.positions) if group.completed is None else group.completed)
     pbar.close()
     return reducer.finalize()
 
