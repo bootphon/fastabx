@@ -140,7 +140,8 @@ class InMemoryAccessor:
         starts = self._starts.index_select(0, idx)
         arange = torch.arange(smax, device=self.device)
         mask = arange < sizes.unsqueeze(1)
-        src = torch.where(mask, starts.unsqueeze(1) + arange, 0)
+        src = starts.unsqueeze(1) + arange
+        src.mul_(mask)
         gathered = self.data.index_select(0, src.view(-1)).view(idx.size(0), smax, -1)
         gathered.mul_(mask.unsqueeze(-1))
         return Batch(gathered, sizes)

@@ -65,7 +65,7 @@ def angular_distance(a1: Tensor, a2: Tensor) -> Tensor:
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
     dot_prods = torch.mm(a1.view(n1 * s1, d), a2.view(n2 * s2, d).T).view(n1, s1, n2, s2).transpose(1, 2)
-    return torch.clamp(dot_prods, -1, 1).acos() / math.pi
+    return dot_prods.clamp_(-1, 1).acos_().div_(math.pi)
 
 
 def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:
