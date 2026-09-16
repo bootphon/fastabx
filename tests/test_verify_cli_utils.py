@@ -11,7 +11,7 @@ import polars as pl
 import pytest
 import torch
 
-from fastabx.__main__ import build_parser
+from fastabx.__main__ import build_parser, main
 from fastabx.accessor import InMemoryAccessor
 from fastabx.utils import (
     InvalidEnvironmentVariableError,
@@ -387,10 +387,16 @@ def test_cli_requires_max_x_across_for_across_speaker(tmp_path: Path) -> None:
 def test_cli_parser_defaults_and_quiet() -> None:
     parser = build_parser()
     args = parser.parse_args(["a.item", "feats", "--max-size-group", "10"])
-    assert args.frequency == 50
+    assert args.frequency == Decimal(50)
     assert args.quiet is False
     quiet = parser.parse_args(["a.item", "feats", "--max-size-group", "10", "--quiet"])
     assert quiet.quiet is True
+
+
+def test_cli_accepts_exact_fractional_frequency() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["a.item", "feats", "--max-size-group", "10", "--frequency", "49.95"])
+    assert args.frequency == Decimal("49.95")
 
 
 @pytest.mark.parametrize("flag", ["--max-size-group", "--max-x-across"])
@@ -489,8 +495,6 @@ def _build_cli_dataset(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_main_missing_max_x_across_for_across_speaker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """In-process variant of the CLI error path, so it counts toward coverage."""
-    from fastabx.__main__ import main
-
     item, feats = _build_cli_dataset(tmp_path)
     monkeypatch.setattr(
         sys,
@@ -512,7 +516,6 @@ def test_main_missing_max_x_across_for_across_speaker(tmp_path: Path, monkeypatc
 def test_main_within_speaker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fastabx.__main__ import main
 
     item, feats = _build_cli_dataset(tmp_path)
     monkeypatch.setattr(
@@ -545,8 +548,6 @@ def test_main_output_json_device_and_write_csv(
 ) -> None:
     """--output json, --device and --write-csv all reach their destination."""
     import json as json_module
-
-    from fastabx.__main__ import main
 
     item, feats = _build_cli_dataset(tmp_path)
     csv = tmp_path / "cells.csv"
@@ -586,8 +587,6 @@ def test_main_defaults_to_text_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Without --output, the CLI prints the human-readable line."""
-    from fastabx.__main__ import main
-
     item, feats = _build_cli_dataset(tmp_path)
     monkeypatch.setattr(
         sys,
@@ -602,7 +601,6 @@ def test_main_defaults_to_text_output(
 def test_main_across_speaker_with_disabled_x_across(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fastabx.__main__ import main
 
     item, feats = _build_cli_dataset(tmp_path)
     monkeypatch.setattr(

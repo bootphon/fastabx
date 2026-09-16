@@ -95,7 +95,49 @@ are closer than the representations of :math:`b` and :math:`x`. Formally, the AB
 .. math::
     \mathcal{D}_\mathcal{C} = \frac{1}{|\mathcal{C}|} \sum_{(a, b, x) \in \mathcal{C}} (\mathbf{1}_{d(a, x) < d(b, x)} + \frac{1}{2} \mathbf{1}_{d(a, x) = d(b, x)}).
 
-The overall ABX discriminability :math:`\mathcal{D}` is a weighted average across all cells.
-The weighting function is a way to balance the effects of the asymmetries between cells and the differences in cell size.
-What was done in the phoneme ABX task was to average first over contexts, then over the speaker identities,
-and finally over phonemes. The library returns results in terms of ABX error rate :math:`1 − \mathcal{D}`.
+The overall result can be aggregated in two different ways. ``Score.collapse(weighted=True)`` weights every
+cell by its number of valid triplets. ``Score.collapse(levels=...)`` instead takes an unweighted mean at each
+requested level. The latter balances conditions hierarchically and is what the phoneme ABX task uses: average
+first over contexts, then speaker identities, and finally phones. The library reports the **ABX error rate**
+:math:`1 - \mathcal{D}`; lower is better and chance level is 0.5.
+
+Hierarchical and triplet-weighted averaging
+===========================================
+
+The distinction is visible in a small numerical example. Suppose the cell error rates and triplet counts are:
+
+.. list-table:: Three example cells.
+   :header-rows: 1
+
+   * - Speaker
+     - Context
+     - Error rate
+     - Triplets
+   * - s1
+     - c1
+     - 0
+     - 100
+   * - s1
+     - c2
+     - 1
+     - 1
+   * - s2
+     - c1
+     - 1
+     - 1
+
+Hierarchical averaging over context and then speaker gives
+
+.. math::
+
+   \frac{(0 + 1) / 2 + 1}{2} = 0.75.
+
+The triplet-weighted result is instead
+
+.. math::
+
+   \frac{0 \times 100 + 1 \times 1 + 1 \times 1}{100 + 1 + 1}
+   = \frac{2}{102} \simeq 0.0196.
+
+Neither is universally preferable: hierarchical averaging gives each represented condition equal influence,
+while triplet weighting gives each triplet equal influence. State the aggregation rule alongside a reported score.

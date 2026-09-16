@@ -167,7 +167,9 @@ Behaviour
 Performance tuning
 ------------------
 
-The variables below bound the size of the intermediate tensors in the scoring engine.
+The variables below bound the size of intermediate chunks in the scoring engine (gathers, padded batches,
+distance results, triplet comparisons, constraints and reductions). They do not bound the resident dataset or
+extra allocations inside custom callables.
 Normal usage should not require changing them: lower them if the scoring runs out of memory, raise them if you
 have memory to spare and the cells are small.
 

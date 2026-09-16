@@ -28,7 +28,11 @@ The following are what CI runs; they should all pass before a pull request is me
 uv run pytest                 # Tests, with coverage (must stay above 99%)
 uv run prek run --all-files   # ruff check, ruff format, ty, typos, tombi, zizmor, uv lock/audit
 make docs                     # Build the documentation into docs/build
+uv build                      # Build both release distributions
 ```
+
+CI additionally installs the wheel and source distribution into separate clean environments, then runs an import,
+a minimal end-to-end evaluation, and the installed ``fastabx --version`` command outside the checkout.
 
 ## Pull requests
 
@@ -43,7 +47,10 @@ User-visible changes go in `CHANGELOG.md`, under `## Unreleased`, in the pull re
 
 Releases are automated: the version comes from the git tag (`hatch-vcs`), and pushing a tag triggers the
 release workflow, which runs the checks, builds the wheel and the sdist, publishes to PyPI with trusted
-publishing, and creates the GitHub release.
+publishing, smoke-tests both artifacts in clean environments outside the checkout, and creates the GitHub release.
+
+The hosted matrix is CPU-only. GPU behavior must be validated explicitly on a provisioned CUDA runner before a
+release whose changes affect device-specific kernels; device-selection tests are not a substitute for that run.
 
 Before tagging, rename the `## Unreleased` heading of `CHANGELOG.md` to the version being released and
 commit it.

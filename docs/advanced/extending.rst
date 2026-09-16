@@ -167,5 +167,8 @@ name of a built-in distance is accepted, to :class:`.Score` and to :func:`.abx_o
 The two batches are ``(n, s, d)`` tensors, padded to a common length ``s``; the alignment that consumes the
 lattice is the one that knows the real lengths and reads only the valid sub-block of each pair. Only the
 built-in ``"angular"`` and ``"cosine"`` names L2-normalize the dataset, so a custom distance receives the
-features exactly as they are. If a custom distance requires normalization, perform it inside the callable.
-Currently ``Score`` rejects custom distances on a dataset already normalized with :meth:`.Dataset.normalize_`.
+features exactly as they are. If a custom distance requires normalization, perform it inside the callable, without
+mutating its inputs. Functions, callable objects and callable dataclass instances are accepted.
+``Score`` rejects custom distances on a dataset already normalized with :meth:`.Dataset.normalize_`,
+because that normalization also appended a singularity-border feature and the original representation is gone.
+Build a fresh ``Dataset``/``Task`` for the custom metric.

@@ -81,6 +81,28 @@ fail_under = 99
 [tool.hatch.version]
 source = "vcs"
 
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "CHANGELOG.md",
+  "CITATION.cff",
+  "CONTRIBUTING.md",
+  "LICENSE",
+  "README.md",
+  "docs",
+  "examples",
+  "pyproject.toml",
+  "src",
+  "tests",
+  "uv.lock",
+]
+exclude = [
+  "/docs/build",
+  "/docs/examples/gallery",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fastabx"]
+
 [tool.pytest]
 addopts = ["--cov=fastabx"]
 filterwarnings = [

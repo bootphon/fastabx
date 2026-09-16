@@ -10,12 +10,18 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Added
 
+- CI and releases smoke-test clean installations of both the wheel and source distribution outside the checkout.
+- Distribution builds use an explicit source manifest so local corpora and unrelated untracked files cannot leak
+  into release artifacts.
+- Documentation covers dtype and count precision, timestamp contracts, normalization mutation and operation order,
+  multi-ACROSS subsampling, bounded scoring intermediates, and hierarchical versus triplet-weighted averaging.
 - All `Dataset.from_*` constructors accept `dtype=None` to preserve input precision or an explicit torch dtype.
 - Dataset/accessor validation reports inconsistent row counts, invalid feature shapes and slice boundaries.
 - Timestamp loading validates shape, finiteness and frame count; item intervals and frequencies are validated.
 
 ### Changed
 
+- The CLI accepts exact fractional feature frequencies and represents them as decimal strings in JSON output.
 - Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
 - Count reductions preserve half-integer contributions beyond float32 precision; final score storage stays float32.
   Small-group contributions stay float32 until a single promotion per flush.

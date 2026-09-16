@@ -4,11 +4,14 @@ import json
 import os
 import queue
 import threading
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 
 import torch
 
 __all__ = ["InvalidEnvironmentVariableError"]
+
+type JSONScalar = str | int | float | bool | None
+type JSONValue = JSONScalar | list[JSONValue] | Mapping[str, JSONValue]
 
 
 class InvalidEnvironmentVariableError(ValueError):
@@ -74,7 +77,7 @@ def display_name(value: object) -> str:
     return getattr(value, "__name__", type(value).__name__)
 
 
-def print_fastabx_output(score: float, output: str = "text", **kwargs: str | int | None) -> None:
+def print_fastabx_output(score: float, output: str = "text", **kwargs: JSONValue) -> None:
     """Help function to format fastabx CLI output."""
     match output:
         case "json":

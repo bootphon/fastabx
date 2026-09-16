@@ -4,8 +4,8 @@
 Performance and memory
 ======================
 
-fastabx keeps everything in memory, on a single device. This page describes what is allocated, when, and
-which knob to turn when it does not fit.
+fastabx keeps the dataset in memory on a single device. Scoring intermediates are chunked. This page describes
+what is allocated, when, and which knob to turn when it does not fit.
 
 Where the data lives
 ====================
@@ -22,9 +22,10 @@ visible, CPU otherwise. Every constructor takes a ``device`` argument to choose 
    dataset = Dataset.from_item(item, features, 50, device="cuda:1")  # second GPU
 
 The tensor holds every token, concatenated along time: its size is
-``total number of frames × dimension × 4 bytes`` in float32. A corpus of a few hundred
+``total number of frames × dimension × element size`` (4 bytes in float32, 8 in float64). Constructors preserve
+the source dtype unless ``dtype=...`` requests a conversion. A corpus of a few hundred
 thousand triphones, at 50 Hz and 768 dimensions, corresponds to a few gigabytes.
-Ten times that is too probably too large for your GPU, and the fix is either ``device="cpu"``, or pooling (see below).
+Ten times that is probably too large for your GPU: the fix is either ``device="cpu"``, or pooling (see below).
 
 One thing to add: the ``"angular"`` and ``"cosine"`` distances L2-normalize the dataset **in place** and append a
 singularity column, so the tensor is rewritten one dimension wider.
@@ -38,12 +39,21 @@ the cost of a comparison is a frame-level lattice: comparing ``n`` sequences of 
 against ``m`` sequences of at most ``t`` frames allocates ``n × m × s × t`` floats, which an
 :ref:`alignment <alignment>` then reduces to one distance per pair.
 
-That product is may lead to running out of memory. It is bounded by two environment variables described in
+That product may lead to running out of memory. It is bounded by two environment variables described in
 :ref:`perf-env`:
 
 - :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` caps how many sequences are compared against the group's X at once.
   Lower it first on an out-of-memory error.
 - :code:`FASTABX_GATHER_CHUNK_ROWS` caps how many rows are gathered and padded in one read.
+- :code:`FASTABX_REDUCTION_FLUSH_COLS` caps how many reduced contribution columns are retained before a flush.
+
+Counts and numerical precision
+==============================
+
+Cell sizes and constrained denominators use Int64. Small win/tie reductions stay in float32 for speed; a group is
+promoted to float64 before float32 can no longer represent every half-count exactly. Scores exported in the
+``Score.cells`` DataFrame remain float32. This keeps large counts valid, but it does not make the final displayed
+error rate an arbitrary-precision number.
 
 What dominates the runtime
 ==========================

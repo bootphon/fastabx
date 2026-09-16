@@ -58,6 +58,12 @@ the last included index was :math:`i_\text{end} - 1 = \left\lfloor \frac{\offset
 Timestamp validation
 ====================
 
+For fixed-rate slicing, ``frequency`` must be a positive finite ``int``, decimal string, or
+:class:`decimal.Decimal`. Use a string such as ``"49.95"`` for a fractional rate. Item onsets and offsets must be
+finite, non-null, and satisfy ``0 <= onset <= offset``.
+
 With ``Dataset.from_item_with_times``, each feature frame must have exactly one finite timestamp in a
 one-dimensional array. Both interval boundaries are inclusive: frames with ``onset <= timestamp <= offset``
-are selected.
+are selected. Timestamp count must equal feature-frame count. Timestamp values are rounded to the greater decimal
+precision of the item onset and offset columns before comparison, so both metadata boundaries contribute to the
+comparison precision.

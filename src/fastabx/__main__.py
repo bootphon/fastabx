@@ -4,6 +4,7 @@ import argparse
 import importlib.metadata
 from argparse import ArgumentDefaultsHelpFormatter
 
+from fastabx.dataset import decimal_frequency
 from fastabx.utils import print_fastabx_output
 from fastabx.verify import MIN_A_LEN
 from fastabx.zerospeech import zerospeech_abx
@@ -20,19 +21,6 @@ def subsample_size(value: str) -> int:
         msg = f"must be at least {MIN_A_LEN}, or negative to disable the subsampling, not {size}"
         raise argparse.ArgumentTypeError(msg)
     return size
-
-
-def positive_int(value: str) -> int:
-    """Parse a strictly positive integer."""
-    try:
-        parsed = int(value)
-    except ValueError:
-        msg = f"invalid integer value: {value!r}"
-        raise argparse.ArgumentTypeError(msg) from None
-    if parsed < 1:
-        msg = f"must be strictly positive, not {parsed}"
-        raise argparse.ArgumentTypeError(msg)
-    return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,7 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="With 'across', maximum number of X given (A, B), at least 2. Set to 5 in the original "
         "ZeroSpeech ABX. Disabled if negative value.",
     )
-    parser.add_argument("--frequency", type=positive_int, default=50, help="Feature frequency (in Hz)")
+    parser.add_argument(
+        "--frequency",
+        type=decimal_frequency,
+        default=decimal_frequency(50),
+        help="Feature frequency (in Hz)",
+    )
     parser.add_argument("--speaker", choices=["within", "across"], default="within", help="Speaker mode")
     parser.add_argument("--context", choices=["within", "any"], default="within", help="Context mode")
     parser.add_argument(
@@ -121,6 +114,7 @@ def main() -> None:
         progress=not args.quiet,
     )
     arguments = dict(vars(args))
+    arguments["frequency"] = str(arguments["frequency"])
     print_fastabx_output(score, output=arguments.pop("output"), **arguments)
 
 

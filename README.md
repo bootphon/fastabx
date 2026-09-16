@@ -84,6 +84,8 @@ fastabx ./triphone-dev-clean.item ./hubert-l11-dev-clean --max-size-group 10
 # ABX error rate: 3.378%
 ```
 
+Scores are ABX error rates: lower is better and chance is 0.5.
+
 See the [user guide](https://docs.cognitive-ml.fr/fastabx/guide.html) for the full pipeline, the
 [API reference](https://docs.cognitive-ml.fr/fastabx/api.html) for every option, and the
 [examples](https://docs.cognitive-ml.fr/fastabx/examples/index.html) for subsampling, pooling and constraints.
