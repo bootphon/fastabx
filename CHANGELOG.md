@@ -21,6 +21,7 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Changed
 
+- Grouped scoring trims excess chunk padding before computing each group's frame distances.
 - The CLI accepts exact fractional feature frequencies and represents them as decimal strings in JSON output.
 - Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
 - Count reductions preserve half-integer contributions beyond float32 precision; final score storage stays float32.

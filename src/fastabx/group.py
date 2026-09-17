@@ -86,6 +86,8 @@ def gather_chunk(accessor: Accessor, chunk: list[GroupSpec]) -> Generator[CellGr
         n = len(spec.indices)
         data, sizes = batch.data[offset : offset + n], batch.sizes[offset : offset + n]
         offset += n
+        if spec.smax < data.size(1):
+            data = data[:, : spec.smax].contiguous()
         if spec.is_symmetric:
             na = spec.rows[0]
             x, targets = Batch(data[:na], sizes[:na]), Batch(data, sizes)
