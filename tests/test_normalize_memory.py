@@ -40,7 +40,9 @@ def test_normalize_memory_cpu() -> None:
     data[::10] = 0  # inject some zero vectors
     result_old, peak_old = peak_cpu_memory_bytes(normalize_with_singularity_old, data.clone())
     result_new, peak_new = peak_cpu_memory_bytes(normalize_with_singularity, data.clone())
-    assert_close(result_old, result_new)
+    nonzero = data.any(dim=1)
+    assert_close(result_old[nonzero], result_new[nonzero])
+    assert torch.equal(result_new[~nonzero], torch.zeros_like(result_new[~nonzero]))
     print(f"\nPeak memory old: {peak_old / 1e6:.1f} MB")
     print(f"Peak memory new: {peak_new / 1e6:.1f} MB")
     print(f"Reduction:       {(1 - peak_new / peak_old) * 100:.1f}%")

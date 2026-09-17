@@ -142,6 +142,10 @@ The scoring engine only ever reads through ``lengths`` and ``batched``, so those
 be fast; ``batched`` is where a lazy implementation would do its I/O, gathering many indices at once. Indices
 are the row numbers of ``Dataset.labels``: item ``i`` of the accessor describes row ``i``.
 
+``normalize_`` must leave every zero frame entirely zero, including any appended border, and normalize nonzero
+frames to unit direction. Angular distance then assigns zero/zero distance 0 and zero/nonzero distance 1.
+See :ref:`angular-numerics` for compatibility details.
+
 Custom distances
 ================
 
@@ -172,3 +176,7 @@ mutating its inputs. Functions, callable objects and callable dataclass instance
 ``Score`` rejects custom distances on a dataset already normalized with :meth:`.Dataset.normalize_`,
 because that normalization also appended a singularity-border feature and the original representation is gone.
 Build a fresh ``Dataset``/``Task`` for the custom metric.
+
+Distance and alignment outputs may use a different floating dtype from the features; chunked scoring preserves
+that dtype. Return a consistent dtype and device across calls and make each pair's result independent of the
+other pairs in the batch, so changing the chunk size does not change the mathematical result.

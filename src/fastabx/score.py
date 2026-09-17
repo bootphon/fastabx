@@ -111,6 +111,9 @@ class Score:
     All the scores reported by this class are ABX error rates (1 - discriminability).
     Lower is better, and chance level is 0.5.
 
+    Angular distance (also named ``"cosine"``) assigns distance 0 to two zero frames and distance 1
+    to a zero/nonzero pair. Nonzero frames use the angle divided by pi.
+
     Additional :py:class:`.Constraints` can be provided to restrict the possible triplets in each cell.
 
     The full scoring runs eagerly in ``__init__``: constructing a ``Score`` is the expensive step,

@@ -338,7 +338,11 @@ class Dataset:
         return f"labels:\n{self.labels!r}\naccessor: {self.accessor!r}"
 
     def normalize_(self) -> Self:
-        """L2 normalization of the data. Idempotent: a second call is a no-op."""
+        """L2 normalize nonzero frames and leave zero frames zero; append a compatibility border.
+
+        Idempotent: a second call is a no-op. Angular distance assigns zero/zero distance 0 and
+        zero/nonzero distance 1.
+        """
         self.accessor.normalize_()
         return self
 

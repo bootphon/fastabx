@@ -94,6 +94,11 @@ Distance
    Type alias for ``Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]``.
    ``"cosine"`` is an alias for ``"angular"``.
 
+   For nonzero frames, angular distance is the angle between their L2-normalized vectors divided by pi.
+   Two zero frames have distance 0; a zero/nonzero pair has distance 1, regardless of direction.
+   These conventions apply to both pooled features and individual frames before DTW alignment.
+   See :ref:`angular-numerics` for numerical precision and migration details.
+
 .. py:class:: fastabx.Distance
    :canonical: fastabx.distance.Distance
 

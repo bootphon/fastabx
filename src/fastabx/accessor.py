@@ -1,6 +1,5 @@
 """Access to the features of a dataset: the ``Accessor`` protocol and the in-memory implementation."""
 
-import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -70,6 +69,9 @@ class Accessor(Protocol):
 
     def normalize_(self) -> None:
         """L2 normalize the features in place, and extend them with a singularity border.
+
+        Zero frames must remain entirely zero, including the border. Angular distance treats two zero
+        frames as identical and a zero/nonzero pair as maximally distant.
 
         Must be idempotent, and must set ``is_normalized``: a second call, and any :py:class:`.Score`
         using the angular distance on an already normalized accessor, are no-ops.
@@ -148,19 +150,22 @@ class InMemoryAccessor:
 
 
 def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    """Normalize the given vector across the third dimension.
+    """L2 normalize each row without overflowing or underflowing its norm.
 
-    Extend all vectors by eps to put the null vector at the maximal angular distance from any non-null vector.
+    Zero rows stay zero so angular distance can handle them explicitly. Keep the extra column for layout
+    compatibility: ``eps`` for nonzero rows and zero otherwise. The input tensor is never modified.
     """
     verify_continuous_dtype(x)
     dim = x.size(1)
-    norm = x.norm(dim=1, keepdim=True)
-    zero_mask = norm.squeeze(1) == 0
+    scale = x.norm(p=float("inf"), dim=1, keepdim=True)
+    zero_mask = scale == 0
     out = x.new_empty((x.size(0), dim + 1))
     head = out[:, :dim]
     head.copy_(x)
-    head.div_(norm.masked_fill(zero_mask.unsqueeze(1), 1.0))  # zero rows are overwritten just below
-    head[zero_mask] = 1.0 / math.sqrt(dim)
+    head.div_(scale.masked_fill(zero_mask, 1.0))
+    norm_dtype = torch.float64 if x.dtype == torch.float64 else torch.float32
+    norm = head.norm(dim=1, keepdim=True, dtype=norm_dtype)
+    head.div_(norm.masked_fill(zero_mask, 1.0))
     out[:, dim] = eps
-    out[zero_mask, dim] = -2 * eps
+    out[zero_mask.squeeze(1), dim] = 0
     return out

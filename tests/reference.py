@@ -12,12 +12,8 @@ import numpy as np
 
 
 def _normalize(features: np.ndarray) -> np.ndarray:
-    norm = np.linalg.norm(features, axis=1, keepdims=True)
-    out = features / np.where(norm == 0, 1.0, norm)
-    out[norm.squeeze(1) == 0] = 1.0 / math.sqrt(features.shape[1])
-    border = np.full((features.shape[0], 1), 1e-12)
-    border[norm.squeeze(1) == 0] = -2e-12
-    return np.concatenate([out, border], axis=1)
+    # math.hypot provides an independent, scale-safe norm; no production border representation is needed.
+    return np.stack([row / (math.hypot(*row) or 1.0) for row in features])
 
 
 def reference_pointwise_distance(name: str, x: np.ndarray, y: np.ndarray) -> float:
@@ -30,6 +26,9 @@ def reference_pointwise_distance(name: str, x: np.ndarray, y: np.ndarray) -> flo
     if name == "euclidean":
         return float(np.sqrt(((x - y) ** 2).sum()))
     if name in {"cosine", "angular"}:
+        zero_x, zero_y = not np.any(x), not np.any(y)
+        if zero_x or zero_y:
+            return float(zero_x != zero_y)
         dot = float(np.clip(np.dot(x, y), -1.0, 1.0))
         return math.acos(dot) / math.pi
     if name == "kl_symmetric":

@@ -199,11 +199,8 @@ def test_normalize_with_singularity_basic_case() -> None:
     torch.testing.assert_close(out[0, 0].item(), 0.6)
     torch.testing.assert_close(out[0, 1].item(), 0.8)
     torch.testing.assert_close(out[0, 2].item(), 1e-12, atol=1e-13, rtol=0)
-    # Zero row: 1/sqrt(2) for each feature, -2*eps in the border.
-    import math
-
-    torch.testing.assert_close(out[1, 0].item(), 1.0 / math.sqrt(2))
-    assert out[1, 2].item() < 0
+    # Zero frames remain zero, including the border, for explicit distance masking.
+    assert torch.equal(out[1], torch.zeros_like(out[1]))
 
 
 def test_read_labels_item(tmp_path: Path) -> None:

@@ -61,11 +61,15 @@ def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tens
 
 
 def angular_distance(a1: Tensor, a2: Tensor) -> Tensor:
-    """Angular distance (default). WARNING: a1 and a2 must be normalized."""
+    """Angular distance on normalized frames: zero/zero is 0 and zero/nonzero is 1."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
     dot_prods = torch.mm(a1.view(n1 * s1, d), a2.view(n2 * s2, d).T).view(n1, s1, n2, s2).transpose(1, 2)
-    return dot_prods.clamp_(-1, 1).acos_().div_(math.pi)
+    distances = dot_prods.clamp_(-1, 1).acos_().div_(math.pi)
+    zero1 = (a1 == 0).all(dim=-1).view(n1, 1, s1, 1)
+    zero2 = (a2 == 0).all(dim=-1).view(1, n2, 1, s2)
+    distances.masked_fill_(zero1 ^ zero2, 1.0)
+    return distances.masked_fill_(zero1 & zero2, 0.0)
 
 
 def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:

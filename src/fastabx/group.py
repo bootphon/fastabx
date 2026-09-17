@@ -165,6 +165,7 @@ def grouped_distances(
     """Distance matrix between the shared ``x`` and every target of a group, in as few launches as possible.
 
     Groups with more than ``max_rows`` rows are scored in row-chunks to bound the peak memory cost.
+    The output preserves the distance/alignment result dtype, which may differ from the feature dtype.
 
     :param x: The group's X samples already concatenated and padded to a common length.
     :param sx: The real lengths of the X samples.
@@ -180,8 +181,12 @@ def grouped_distances(
     total = targets.size(0)
     if total <= max_rows:
         return distance_matrix(x, sx, targets, target_sizes, distance, alignment=alignment, symmetric=False)
-    out = x.new_empty(x.size(0), total, dtype=x.dtype if x.is_floating_point() else torch.float32)
-    for start in range(0, total, max_rows):
+    first = distance_matrix(
+        x, sx, targets[:max_rows], target_sizes[:max_rows], distance, alignment=alignment, symmetric=False
+    )
+    out = first.new_empty(x.size(0), total)
+    out[:, :max_rows] = first
+    for start in range(max_rows, total, max_rows):
         end = min(start + max_rows, total)
         chunk, chunk_sizes = targets[start:end], target_sizes[start:end]
         out[:, start:end] = distance_matrix(x, sx, chunk, chunk_sizes, distance, alignment=alignment, symmetric=False)

@@ -55,6 +55,38 @@ promoted to float64 before float32 can no longer represent every half-count exac
 ``Score.cells`` DataFrame remain float32. This keeps large counts valid, but it does not make the final displayed
 error rate an arbitrary-precision number.
 
+Custom distances and alignments may return a different floating dtype from the input features. Scoring retains
+that output dtype even when the target rows are chunked. A custom implementation must return a consistent dtype
+and device across calls, and compute each pair independently of the other pairs in its batch.
+
+.. _angular-numerics:
+
+Angular distance and zero frames
+================================
+
+``"angular"`` and its alias ``"cosine"`` use the angle divided by pi for nonzero frames. Zero frames have no
+direction, so fastabx uses an explicit convention: zero/zero has distance 0, and zero/nonzero has distance 1.
+The rule applies before alignment, including to zero frames inside a sequence. Padding is still excluded by
+the real sequence lengths passed to the alignment.
+
+Normalization first scales each nonzero row by its largest absolute component, then computes its L2 norm.
+This avoids overflowing or underflowing the norm for finite extreme inputs. Float16 and bfloat16 norm
+accumulation uses float32; the normalized features retain the input dtype. Values already rounded to zero or
+infinity before reaching fastabx cannot be recovered. Floating-point rounding still applies to distances and
+can affect decisions near ties.
+
+For layout compatibility, normalization continues to append one column: a tiny constant for nonzero rows,
+zero for zero rows. Zero rows remain entirely zero, and angular distance handles them explicitly. Custom
+accessors must preserve this zero-row invariant when implementing ``normalize_``.
+
+.. warning::
+
+   This corrects historical zero-frame behavior: earlier versions replaced zero frames with the positive
+   uniform direction, creating an arbitrary directional preference. Scores involving zero frames can change.
+   Stable normalization can also change decisions near numerical ties or with extreme feature magnitudes.
+   There is no legacy-normalization switch; pin the exact previous package version and dependencies when
+   reproducing historical results, and rebuild datasets from original features when upgrading.
+
 What dominates the runtime
 ==========================
 

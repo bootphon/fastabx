@@ -21,6 +21,10 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Changed
 
+- Angular/cosine distance now explicitly treats two zero frames as identical (distance 0) and a zero/nonzero
+  pair as maximally distant (distance 1). Zero frames remain zero after normalization; the extra column is
+  retained for layout compatibility. Scores involving zero frames can change. Pin the exact previous version
+  and dependencies to reproduce historical behavior; no legacy-normalization switch is provided.
 - Grouped scoring trims excess chunk padding before computing each group's frame distances.
 - The CLI accepts exact fractional feature frequencies and represents them as decimal strings in JSON output.
 - Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
@@ -34,6 +38,10 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Fixed
 
+- Chunked scoring preserves custom distance/alignment output dtypes instead of casting to the feature dtype,
+  preventing chunk-size-dependent ties and scores.
+- L2 normalization scales finite nonzero frames before computing norms, avoiding norm overflow and underflow.
+  Low-precision norm accumulation uses float32. Extreme-magnitude and near-tie scores may change.
 - Timestamp loading honors custom column names and both boundary precisions.
 - Callable distance objects need not be hashable; invalid distance/alignment arguments have actionable errors.
 - Hamming pooling supports float64, and the score reducer handles float64 distance calculations.
