@@ -30,6 +30,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from rich.box import HORIZONTALS
@@ -37,6 +38,56 @@ from rich.console import Console
 from rich.table import Table
 
 console = Console()
+
+
+def positive_runs(value: str) -> int:
+    """Parse a positive number of benchmark runs."""
+    runs = int(value)
+    if runs < 1:
+        msg = "runs must be at least 1"
+        raise argparse.ArgumentTypeError(msg)
+    return runs
+
+
+def absolute_tolerance(value: str) -> float:
+    """Parse a finite, nonnegative absolute tolerance."""
+    tolerance = float(value)
+    if not math.isfinite(tolerance) or tolerance < 0:
+        msg = "tolerance must be finite and nonnegative"
+        raise argparse.ArgumentTypeError(msg)
+    return tolerance
+
+
+def subsample_size(value: str) -> int:
+    """Accept sizes of at least two, or negative values to disable subsampling."""
+    size = int(value)
+    if 0 <= size < 2:
+        msg = "size must be at least 2, or negative to disable subsampling"
+        raise argparse.ArgumentTypeError(msg)
+    return size
+
+
+def feature_frequency(value: str) -> str:
+    """Validate a positive decimal frequency, preserving it as a JSON-compatible string."""
+    try:
+        frequency = Decimal(value)
+    except InvalidOperation:
+        msg = "frequency must be a positive finite decimal"
+        raise argparse.ArgumentTypeError(msg) from None
+    if not frequency.is_finite() or frequency <= 0:
+        msg = "frequency must be a positive finite decimal"
+        raise argparse.ArgumentTypeError(msg)
+    return str(frequency)
+
+
+def nonnegative_seed(value: str) -> int:
+    """Parse a nonnegative random seed."""
+    seed = int(value)
+    if seed < 0:
+        msg = "seed must be nonnegative"
+        raise argparse.ArgumentTypeError(msg)
+    return seed
+
 
 RUNNER = """
 import json, sys, time
@@ -81,6 +132,9 @@ def run(cmd: list[str], params: dict, runs: int) -> tuple[float, list[float]]:
         process = subprocess.run(cmd, check=True, capture_output=True, text=True)
         result = json.loads(process.stdout.strip().splitlines()[-1])
         score, elapsed = result["score"], result["elapsed"]
+        if not math.isfinite(score) or not 0 <= score <= 1 or not math.isfinite(elapsed) or elapsed < 0:
+            msg = "Runner must return a finite score in [0, 1] and a finite nonnegative elapsed time"
+            raise ValueError(msg)
         times.append(elapsed)
     return score, times
 
@@ -102,12 +156,12 @@ def run_both_versions(
         console.print("[dim]Running reference version...[/dim]")
         try:
             ref_score, ref_times = run(ref_cmd, params, runs)
-        except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as error:
-            console.print(f"[yellow]! reference version {ref_version} failed to run, skipping comparison.[/yellow]")
+        except (subprocess.CalledProcessError, ValueError, KeyError, IndexError, TypeError) as error:
+            console.print(f"[red]! reference version {ref_version} failed to run; comparison failed.[/red]")
             if isinstance(error, subprocess.CalledProcessError) and error.stderr:
                 for line in error.stderr.strip().splitlines()[-10:]:
                     console.print(f"  [dim]{line}[/dim]")
-            sys.exit(0)
+            sys.exit(1)
 
         console.print("[dim]Running current version...[/dim]")
         current_score, current_times = run(current_cmd, params, runs)
@@ -125,14 +179,18 @@ def main() -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--ref-version", help="Reference fastabx version from PyPI. Defaults to the latest published.")
-    parser.add_argument("--runs", type=int, default=1, help="Number of times to run each version.")
-    parser.add_argument("--tolerance", type=float, default=1e-8, help="Absolute tolerance for score comparison.")
+    parser.add_argument("--runs", type=positive_runs, default=1, help="Positive number of times to run each version.")
+    parser.add_argument(
+        "--tolerance", type=absolute_tolerance, default=1e-8, help="Absolute tolerance for score comparison."
+    )
 
     parser.add_argument("item", help="Path to the item file")
     parser.add_argument("features", help="Path to the features directory")
-    parser.add_argument("--max-size-group", type=int, required=True, help="Maximum number of A, B, or X in a cell.")
-    parser.add_argument("--max-x-across", type=int, help="With 'across', maximum number of X given (A, B).")
-    parser.add_argument("--frequency", type=int, default=50, help="Feature frequency (in Hz)")
+    parser.add_argument(
+        "--max-size-group", type=subsample_size, required=True, help="Maximum number of A, B, or X in a cell."
+    )
+    parser.add_argument("--max-x-across", type=subsample_size, help="With 'across', maximum number of X given (A, B).")
+    parser.add_argument("--frequency", type=feature_frequency, default="50", help="Positive feature frequency (in Hz)")
     parser.add_argument("--speaker", choices=["within", "across"], default="within", help="Speaker mode")
     parser.add_argument("--context", choices=["within", "any"], default="within", help="Context mode")
     parser.add_argument(
@@ -141,7 +199,7 @@ def main() -> int:
         default="angular",
         help="Distance",
     )
-    parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument("--seed", type=nonnegative_seed, default=0, help="Nonnegative random seed")
 
     args = parser.parse_args()
     if args.max_x_across is None and args.speaker == "across":
@@ -178,7 +236,7 @@ def main() -> int:
     console.print(table)
     console.print()
 
-    scores_match = math.isclose(ref_score, curr_score, abs_tol=args.tolerance)
+    scores_match = math.isclose(ref_score, curr_score, rel_tol=0, abs_tol=args.tolerance)
     diff = f"abs. difference: {abs(ref_score - curr_score):.2e}"
     ref_mean, curr_mean = statistics.mean(ref_times), statistics.mean(curr_times)
     speedup, delta = ref_mean / curr_mean if curr_mean else float("inf"), curr_mean - ref_mean
@@ -191,8 +249,8 @@ def main() -> int:
     console.print(
         f"[bold green]{msg}: faster ✓[/bold green]" if speedup >= 1.0 else f"[bold red]{msg}: slower ✗[/bold red]"
     )
-    return int(scores_match)
+    return int(not scores_match)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

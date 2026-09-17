@@ -34,6 +34,12 @@ uv build                      # Build both release distributions
 CI additionally installs the wheel and source distribution into separate clean environments, then runs an import,
 a minimal end-to-end evaluation, and the installed ``fastabx --version`` command outside the checkout.
 
+To compare scores and runtime against a published version, run:
+
+```bash
+uv run scripts/compare_versions.py path/to/file.item path/to/features --max-size-group 10 --runs 3
+```
+
 ## Pull requests
 
 Branch off `main`, keep the change focused, and make sure the checks above pass. The GitHub Actions CI runs

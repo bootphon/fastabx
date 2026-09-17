@@ -65,6 +65,7 @@ test = [
   "pandas>=3.0.3",
   "pytest>=9.0.2",
   "pytest-cov>=7.1.0",
+  "rich>=15.0.0",
 ]
 
 [build-system]
@@ -91,6 +92,9 @@ only-include = [
   "docs",
   "examples",
   "pyproject.toml",
+  "scripts/__init__.py",
+  "scripts/compare_versions.py",
+  "scripts/smoke_distribution.py",
   "src",
   "tests",
   "uv.lock",
