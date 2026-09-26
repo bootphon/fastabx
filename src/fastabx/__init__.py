@@ -19,6 +19,7 @@ from fastabx.distance import (
     Distance,
     DistanceName,
     IdenticalDistanceDimensionError,
+    NaNDistanceError,
     abx_on_cell,
 )
 from fastabx.pooling import PooledDataset, PoolingName, PoolingNormalizedError, pool_dataset
@@ -39,6 +40,7 @@ from fastabx.verify import (
     InvalidLevelsError,
     LabelReservedNameError,
     LabelSuffixError,
+    MissingLabelError,
     NonContiguousIndicesError,
     PrecomputedCellsError,
     UnknownConditionError,
@@ -79,7 +81,9 @@ __all__ = [
     "InvalidTimesError",
     "LabelReservedNameError",
     "LabelSuffixError",
+    "MissingLabelError",
     "MissingMaxXAcrossError",
+    "NaNDistanceError",
     "NoConstraintsError",
     "NonContiguousIndicesError",
     "NonFiniteError",

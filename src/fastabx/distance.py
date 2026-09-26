@@ -11,7 +11,7 @@ from torchdtw import dtw_batch
 from fastabx.alignment import Alignment
 from fastabx.cell import Cell
 
-__all__ = ["Distance", "DistanceName", "IdenticalDistanceDimensionError", "abx_on_cell"]
+__all__ = ["Distance", "DistanceName", "IdenticalDistanceDimensionError", "NaNDistanceError", "abx_on_cell"]
 
 type Distance = Callable[[Tensor, Tensor], Tensor]
 type DistanceName = Literal["euclidean", "cosine", "angular", "kl_symmetric", "identical"]
@@ -91,6 +91,23 @@ class IdenticalDistanceDimensionError(ValueError):
         )
 
 
+class NaNDistanceError(ValueError):
+    """A distance between two sequences is NaN, so the ABX decision on it is undefined."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Some distances between sequences are NaN. The ABX decision cannot be made on them: counting them as "
+            "ties would silently bias the score. With 'kl_symmetric', the features must be probability "
+            "distributions (non-negative); a custom distance or alignment must not return NaN."
+        )
+
+
+def verify_no_nan_distance(*distances: Tensor) -> None:
+    """Reject NaN distances, which ``torch.sign`` would otherwise turn into ties."""
+    if any(torch.isnan(d).any() for d in distances):
+        raise NaNDistanceError
+
+
 def identical_distance(a1: Tensor, a2: Tensor) -> Tensor:
     """0/1 distance. Useful for computing the ABX on discrete speech units."""
     n1, s1, d = a1.size()
@@ -148,9 +165,10 @@ def abx_on_cell(
     symmetric = cell.is_symmetric
     x, a, b = cell.x, cell.a, cell.b
     dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, alignment=alignment, symmetric=symmetric)
+    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
+    verify_no_nan_distance(dxa, dxb)
     if symmetric:
         dxa.fill_diagonal_(float("inf"))
-    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
     nx, na = dxa.size()
     nx, nb = dxb.size()
     sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))

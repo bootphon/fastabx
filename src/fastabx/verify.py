@@ -22,6 +22,7 @@ __all__ = [
     "InvalidLevelsError",
     "LabelReservedNameError",
     "LabelSuffixError",
+    "MissingLabelError",
     "NonContiguousIndicesError",
     "PrecomputedCellsError",
     "UnknownConditionError",
@@ -171,13 +172,29 @@ def verify_conditions_exist(columns: list[str], conditions: list[str]) -> None:
         raise UnknownConditionError(missing, columns)
 
 
+class MissingLabelError(ValueError):
+    """A condition column has missing (null) values."""
+
+    def __init__(self, missing: dict[str, int]) -> None:
+        counts = ", ".join(f"{name!r} ({count} rows)" for name, count in missing.items())
+        super().__init__(
+            f"Missing (null) labels in condition column(s) {counts}. Every ON, BY and ACROSS condition must be "
+            f"set for every row: a null never matches another value, so these rows would be silently left out of "
+            f"every cell. Fill them with an explicit value (e.g. `labels.with_columns(pl.col(name).fill_null(...))`), "
+            f"or remove these rows before building the Dataset."
+        )
+
+
 def verify_dataset_labels(df: pl.DataFrame) -> None:
-    """Check the column labels."""
+    """Check the column labels: allowed names, and no missing values."""
     for col in df.schema:
         if col in INVALID_COLUMN_NAMES:
             raise LabelReservedNameError(col)
         if col.endswith(INVALID_COLUMN_SUFFIX):
             raise LabelSuffixError(col)
+    missing = {name: count for name, count in df.null_count().row(0, named=True).items() if count > 0}
+    if missing:
+        raise MissingLabelError(missing)
 
 
 class EmptyTaskError(ValueError):

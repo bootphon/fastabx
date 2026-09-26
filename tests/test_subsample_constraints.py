@@ -1,10 +1,12 @@
 """Tests for ``fastabx.subsample`` and ``fastabx.constraints``."""
 
+from collections.abc import Sequence
+
 import numpy as np
 import polars as pl
 import pytest
 
-from fastabx import Dataset, Task
+from fastabx import Dataset, Score, Task
 from fastabx.constraints import (
     NoConstraintsError,
     apply_constraints,
@@ -314,3 +316,66 @@ def test_subsample_across_caps_colliding_groups_independently() -> None:
     assert sampled.group_by("phone").len()["len"].to_list() == [2, 2]
     for row in sampled.iter_rows(named=True):
         assert row in original.to_dicts()
+
+
+def _mic_dataset(mic_name: str, mics: Sequence[object]) -> Dataset:
+    rng = np.random.default_rng(0)
+    features = rng.standard_normal((12, 3)).astype(np.float32)
+    return Dataset.from_numpy(features, {"phone": list("aaaaaabbbbbb"), mic_name: mics})
+
+
+def test_constraint_on_label_ending_like_a_suffix() -> None:
+    """Only one suffix is stripped: ``mic_b_a`` refers to the label ``mic_b``, not ``mic``."""
+    mics = [0, 1, 2] * 4
+    expected = Score(
+        Task(_mic_dataset("mic", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    actual = Score(
+        Task(_mic_dataset("mic_b", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic_b"),
+    )
+    assert actual.cells["score"].to_list() == expected.cells["score"].to_list()
+    assert actual.cells["size"].to_list() == expected.cells["size"].to_list()
+
+
+def test_constraint_without_suffix_raises() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="'mic' has no '_a', '_b' or '_x' suffix"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=[pl.col("mic") != pl.col("mic_x")])
+
+
+def test_constraint_on_unknown_label_names_it() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="'room'"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=constraints_all_different("room"))
+
+
+def test_constraint_evaluating_to_null_invalidates_the_triplet() -> None:
+    """A null label in a constrained column makes the constraint null, and so the triplet invalid."""
+    mics = [0, 1, 2] * 4
+    reference = Score(
+        Task(_mic_dataset("mic", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    with_nulls = Score(
+        Task(_mic_dataset("mic", [None if m == 2 else m for m in mics]), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    # With mic 2 missing, only (A, B, X) all from mics 0, 1 and 2 were valid: none remains.
+    assert (reference.cells["size"] > 0).all()
+    assert with_nulls.cells["score"].null_count() == len(with_nulls.cells)
+
+
+def test_empty_constraints_raise() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="No valid column"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=[])

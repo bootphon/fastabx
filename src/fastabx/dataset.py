@@ -47,13 +47,18 @@ class InvalidItemFileError(Exception):
 
 
 def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
-    """Return the labels from the path to the item file."""
+    """Return the labels from the path to the item file.
+
+    Every column of a text item file (``.item``, ``.csv``) is read as a string: inferring the types would
+    merge distinct labels such as speakers ``01`` and ``1``, and fail on a label that only stops looking
+    numeric after the first rows. The onsets and offsets are then parsed as decimals.
+    """
     schema_overrides = {file_col: pl.String, onset_col: pl.String, offset_col: pl.String}
     match ext := Path(item).suffix:
         case ".item":
-            df = pl.read_csv(item, separator=" ", schema_overrides=schema_overrides)
+            df = pl.read_csv(item, separator=" ", infer_schema=False)
         case ".csv":
-            df = pl.read_csv(item, schema_overrides=schema_overrides)
+            df = pl.read_csv(item, infer_schema=False)
         case ".jsonl" | ".ndjson":
             df = pl.read_ndjson(item, schema_overrides=schema_overrides)
         case _:

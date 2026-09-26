@@ -34,6 +34,8 @@ Releases up to and including 0.8.0 predate this file and are documented at
 - Tabular constructors preserve floating input precision by default. Pass `dtype=torch.float32` for the previous
   conversion behavior. Normalization and pooling require floating-point features; distance kernels defer dtype compatibility to PyTorch.
 - Precomputed index lists reject nulls; duplicate and overlapping indices retain positional counting semantics.
+- Every label column of a `.item` or `.csv` item file is read as a string instead of having its type inferred.
+  Labels that were inferred as numbers, such as numeric speaker IDs, now have the `String` dtype.
 
 
 ### Fixed
@@ -43,6 +45,15 @@ Releases up to and including 0.8.0 predate this file and are documented at
 - L2 normalization scales finite nonzero frames before computing norms, avoiding norm overflow and underflow.
   Low-precision norm accumulation uses float32. Extreme-magnitude and near-tie scores may change.
 - Timestamp loading honors custom column names and both boundary precisions.
+- NaN distances raise `NaNDistanceError` instead of being silently counted as ties. For example, `kl_symmetric`
+  on features with negative values previously returned a meaningless score.
+- Null values in ON, BY or ACROSS conditions raise `MissingLabelError` instead of silently dropping those rows
+  from every cell.
+- Item-file labels are no longer merged when they look like the same number (speakers `01` and `1`), and a
+  label that stops looking numeric after the first 100 rows no longer fails to parse.
+- Constraints strip exactly one `_a`/`_b`/`_x` suffix, so labels ending like a suffix (`mic_b`) can be
+  constrained. A constraint column without a suffix, or naming an unknown label, raises a `NoConstraintsError`
+  that names it. Constraints evaluating to null mark the triplet as invalid, explicitly.
 - Callable distance objects need not be hashable; invalid distance/alignment arguments have actionable errors.
 - Hamming pooling supports float64, and the score reducer handles float64 distance calculations.
 - Duplicate normalized audio identifiers in units files are rejected instead of silently overwritten.

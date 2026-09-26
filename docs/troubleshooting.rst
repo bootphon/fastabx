@@ -69,6 +69,12 @@ Building a Task
    ``__cell``, ``__group``, ``__lookup``, ``__pos``, ``__triplet`` — or ends with ``_a``, ``_b`` or ``_x``.
    Rename the column (``speaker_x`` → ``x_speaker``). See :ref:`the reserved names <reserved-labels>`.
 
+:exc:`.MissingLabelError`
+   A condition column has missing (null) values. A null never equals another value, so those rows could never
+   be paired and would silently drop out of every cell. The message names each column and how many rows are
+   missing. Fill them with an explicit value, such as ``"unknown"``, or remove those rows before building the
+   :class:`.Dataset`. Nulls in columns that are not conditions are fine.
+
 :exc:`.DuplicateConditionsError`
    The same column appears twice across ``on``, ``by`` and ``across``. Each condition plays exactly one role.
 
@@ -113,6 +119,11 @@ Scoring
    singularity column, so the features are no longer in their original space and the second score would be
    silently wrong. Build a fresh :class:`.Dataset` for the other distance.
 
+:exc:`.NaNDistanceError`
+   A distance between two sequences is NaN, so the ABX decision on it is undefined. Scoring stops rather than
+   counting it as a tie. With ``"kl_symmetric"``, the features must be probability distributions: a negative
+   value makes the logarithm NaN. A custom :class:`.Distance` or :class:`.Alignment` must not return NaN.
+
 :exc:`.CollapseError`
    Either ``levels`` and ``weighted=True`` were both given, or neither was, on cells that have more than the
    two ON columns left to average. The message lists the columns that are still there: pass them through
@@ -129,9 +140,12 @@ Scoring
    in the scored cells.
 
 :exc:`.NoConstraintsError`
-   The :class:`.Constraints` expressions do not reference any column of ``Dataset.labels``. Remember the
-   suffixes: a constraint on the ``speaker`` label is written with ``speaker_a``, ``speaker_b`` and
-   ``speaker_x``. See :ref:`constraints`.
+   The :class:`.Constraints` expressions do not reference any column of ``Dataset.labels``, reference a label
+   that does not exist, or use a column without its suffix. Every column in a constraint takes exactly one
+   ``_a``, ``_b`` or ``_x`` suffix: a constraint on the ``speaker`` label is written with ``speaker_a``,
+   ``speaker_b`` and ``speaker_x``, and one on a ``mic_b`` label with ``mic_b_a``, ``mic_b_b`` and
+   ``mic_b_x``. A triplet whose constraint evaluates to null, because of a missing label, is not valid.
+   See :ref:`constraints`.
 
 :exc:`.PoolingNormalizedError`
    :func:`.pool_dataset` was given a :class:`.Dataset` that an ``"angular"`` (or ``"cosine"``)

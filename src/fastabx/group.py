@@ -12,7 +12,7 @@ from torch import Tensor
 from fastabx.accessor import Accessor, Batch
 from fastabx.alignment import Alignment
 from fastabx.constraints import Constraints, NoConstraintsError, apply_constraints
-from fastabx.distance import Distance, distance_matrix
+from fastabx.distance import Distance, NaNDistanceError, distance_matrix
 from fastabx.task import Task
 from fastabx.utils import gather_chunk_rows, max_score_chunk_rows, reduction_flush_cols
 
@@ -231,6 +231,7 @@ class GroupReducer:
         self._positions: list[int] = []  # cell position in the DataFrame, one per cell
         self._nb: list[int] = []  # number of B per cell
         self._cols = 0
+        self._any_nan: Tensor | None = None  # device-side flag, only synchronised once per flush
         self._flush_cols = reduction_flush_cols()
         self._max_score_rows = max_score_chunk_rows()
 
@@ -251,6 +252,8 @@ class GroupReducer:
             alignment=alignment,
             max_rows=self._max_score_rows,
         )
+        has_nan = torch.isnan(distances).any()
+        self._any_nan = has_nan if self._any_nan is None else self._any_nan | has_nan
         na, nx = group.rows[0], group.x.data.size(0)
         dxa = distances[:, :na]
         if is_symmetric:
@@ -277,6 +280,9 @@ class GroupReducer:
         """Reduce all buffered groups in one pass: one ``index_add_`` over the concatenated per-B counts."""
         if not self._per_b:
             return
+        if self._any_nan is not None and self._any_nan.item():
+            raise NaNDistanceError
+        self._any_nan = None
         per_b_all = torch.cat(self._per_b).to(torch.float64)
         device = per_b_all.device
         positions = self._positions

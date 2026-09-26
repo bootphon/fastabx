@@ -27,8 +27,34 @@ def constraints_all_different(*columns: str) -> Constraints:
 class NoConstraintsError(ValueError):
     """Invalid constraints."""
 
-    def __init__(self) -> None:
-        super().__init__("No valid column provided in the constraints or a mask is missing for constrained scoring.")
+    def __init__(self, msg: str | None = None) -> None:
+        super().__init__(
+            msg or "No valid column provided in the constraints or a mask is missing for constrained scoring."
+        )
+
+
+CONSTRAINT_SUFFIXES = ("_a", "_b", "_x")
+
+
+def constrained_columns(constraints: list[pl.Expr], columns: list[str]) -> set[str]:
+    """Label columns referenced by the constraints, each named with exactly one ``_a``, ``_b`` or ``_x`` suffix.
+
+    Only that one suffix is stripped, so a label that itself ends like a suffix (``mic_b``, referenced as
+    ``mic_b_a``) keeps its name.
+    """
+    retrieved = set()
+    for name in {name for constraint in constraints for name in constraint.meta.root_names()}:
+        if not name.endswith(CONSTRAINT_SUFFIXES):
+            msg = (
+                f"Constraint column {name!r} has no '_a', '_b' or '_x' suffix: constraints must say to which of "
+                f"A, B or X each label belongs, e.g. pl.col('{name}_a') != pl.col('{name}_x')."
+            )
+            raise NoConstraintsError(msg)
+        retrieved.add(name[:-2])
+    if unknown := sorted(retrieved - set(columns)):
+        msg = f"Constraints reference label(s) {unknown}, which are not columns of `Dataset.labels`."
+        raise NoConstraintsError(msg)
+    return retrieved
 
 
 def apply_constraints(
@@ -57,14 +83,12 @@ def apply_constraints(
         streaming engine, and an unordered mask is silently wrong rather than an error. ``__triplet`` is
         stamped right after the explodes and the aggregation sorts by it, which restores the order the
         reshape depends on.
+
+        A triplet whose constraints evaluate to null (a null label in a constrained column) is not valid.
     """
     constraints = list(constraints)
-    columns_to_retrieve = {
-        name.removesuffix("_x").removesuffix("_a").removesuffix("_b")
-        for constraint in constraints
-        for name in constraint.meta.root_names()
-    }
-    if not columns_to_retrieve or not columns_to_retrieve.issubset(labels.columns):
+    columns_to_retrieve = constrained_columns(constraints, labels.columns)
+    if not columns_to_retrieve:
         raise NoConstraintsError
     if is_symmetric:
         constraints = [*constraints, pl.col("index_a") != pl.col("index_x")]
@@ -80,7 +104,7 @@ def apply_constraints(
         .join(labels_lazy.rename({c: f"{c}_x" for c in (columns_to_retrieve | {"index"})}), on="index_x")
         .join(labels_lazy.rename({c: f"{c}_a" for c in (columns_to_retrieve | {"index"})}), on="index_a")
         .join(labels_lazy.rename({c: f"{c}_b" for c in (columns_to_retrieve | {"index"})}), on="index_b")
-        .select("__cell", "__triplet", is_valid=functools.reduce(operator.and_, constraints))
+        .select("__cell", "__triplet", is_valid=functools.reduce(operator.and_, constraints).fill_null(value=False))
         .group_by("__cell", maintain_order=True)
         .agg(pl.col("is_valid").sort_by("__triplet"))
         .sort("__cell")

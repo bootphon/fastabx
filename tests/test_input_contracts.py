@@ -19,12 +19,15 @@ from fastabx import (
     InvalidFeaturesError,
     InvalidItemFileError,
     InvalidTimesError,
+    MissingLabelError,
+    NaNDistanceError,
     NonFiniteError,
     PoolingName,
     PrecomputedCellsError,
     Score,
     Task,
     TimesArrayDimensionError,
+    abx_on_cell,
     pool_dataset,
 )
 from fastabx.alignment import alignment_function
@@ -313,3 +316,63 @@ def test_sequence_scoring_preserves_supported_feature_precision(
     score = Score(Task(dataset, on="phone"), distance, progress=False)  # ty: ignore[invalid-argument-type]
     assert 0 <= score.collapse() <= 1
     assert dataset.accessor[0].dtype == dtype
+
+
+def _negative_features_dataset(*, sequences: bool) -> Dataset:
+    rng = np.random.default_rng(0)
+    labels = pl.DataFrame({"phone": list("aaaabbbb")})
+    if not sequences:
+        return Dataset.from_numpy(-rng.random((8, 4)).astype(np.float32), labels, device=DEVICE)
+    data = -torch.from_numpy(rng.random((24, 4)).astype(np.float32))
+    return Dataset(labels, InMemoryAccessor({i: (3 * i, 3 * i + 3) for i in range(8)}, data, DEVICE))
+
+
+@pytest.mark.parametrize("sequences", [False, True])
+def test_nan_distances_are_rejected_not_counted_as_ties(*, sequences: bool) -> None:
+    """``torch.sign(nan) == 0`` would count NaN distances as ties: scoring must raise instead."""
+    task = Task(_negative_features_dataset(sequences=sequences), on="phone")
+    with pytest.raises(NaNDistanceError, match="kl_symmetric"):
+        Score(task, "kl_symmetric", progress=False)
+    with pytest.raises(NaNDistanceError):
+        abx_on_cell(task[0], "kl_symmetric")
+
+
+def test_nan_from_custom_distance_is_rejected() -> None:
+    def nan_distance(a1: torch.Tensor, a2: torch.Tensor) -> torch.Tensor:
+        return euclidean_distance(a1, a2) * float("nan")
+
+    task = Task(_negative_features_dataset(sequences=False), on="phone")
+    with pytest.raises(NaNDistanceError):
+        Score(task, nan_distance, progress=False)
+
+
+@pytest.mark.parametrize("condition", ["on", "by", "across"])
+def test_missing_condition_labels_are_rejected(condition: str) -> None:
+    labels = {"phone": list("aabbaabb"), "context": ["c"] * 8, "speaker": ["s1"] * 4 + ["s2"] * 4}
+    column = {"on": "phone", "by": "context", "across": "speaker"}[condition]
+    labels[column] = [*labels[column][:-1], None]
+    dataset = Dataset.from_numpy(np.zeros((8, 2), dtype=np.float32), labels, device=DEVICE)
+    with pytest.raises(MissingLabelError, match=f"'{column}' \\(1 rows\\)"):
+        Task(dataset, on="phone", by=["context"], across=["speaker"])
+
+
+def test_missing_labels_outside_the_conditions_are_allowed() -> None:
+    labels = {"phone": list("aabb"), "comment": [None, "x", None, None]}
+    dataset = Dataset.from_numpy(np.zeros((4, 2), dtype=np.float32), labels, device=DEVICE)
+    assert len(Task(dataset, on="phone")) == 2
+
+
+@pytest.mark.parametrize("extension", [".item", ".csv"])
+def test_item_labels_are_read_as_strings(tmp_path: Path, extension: str) -> None:
+    """Labels are never type-inferred: ``01`` and ``1`` stay distinct, and a late non-numeric label is fine."""
+    separator = " " if extension == ".item" else ","
+    speakers = ["01", "1"] + [str(i % 3) for i in range(150)] + ["p225"]
+    header = separator.join(["#file", "onset", "offset", "#phone", "speaker"])
+    rows = [header, *(separator.join(["f", "0.0", "0.1", "a", speaker]) for speaker in speakers)]
+    item = tmp_path / f"data{extension}"
+    item.write_text("\n".join(rows) + "\n")
+    torch.save(torch.zeros(10, 2), tmp_path / "f.pt")
+    dataset = Dataset.from_item(item, tmp_path, 50, device=DEVICE, progress=False)
+    assert dataset.labels["speaker"].dtype == pl.String
+    assert dataset.labels["speaker"].to_list() == speakers
+    assert dataset.labels["onset"].dtype == pl.Decimal
