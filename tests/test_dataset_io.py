@@ -168,7 +168,7 @@ def test_in_memory_accessor_iter_and_getitem() -> None:
     assert len(acc) == 10
     items = list(acc)
     assert len(items) == 10
-    assert torch.equal(items[0], data[0:1])
+    assert torch.equal(items[0], data[0:1].to(DEVICE))
     with pytest.raises(IndexError):
         _ = acc[42]
     rep = repr(acc)
@@ -189,7 +189,7 @@ def test_in_memory_accessor_lengths_and_batched() -> None:
     batch = acc.batched([0, 1])
     assert batch.data.shape == (2, 3, 2)  # padded to max length
     # Padded entries beyond actual size are zero.
-    assert torch.equal(batch.data[0, 2], torch.zeros(2))
+    assert torch.equal(batch.data[0, 2], torch.zeros(2, device=DEVICE))
 
 
 def test_dataset_normalize_is_idempotent() -> None:

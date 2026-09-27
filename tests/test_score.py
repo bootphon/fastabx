@@ -15,7 +15,7 @@ from fastabx.score import (
     pl_weighted_mean,
     score_details,
 )
-from tests.conftest import accessor_data
+from tests.conftest import DEVICE, accessor_data
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
     assert accessor_data(tiny_dataset).shape[1] == original.shape[1] + 1
     # Each row (excluding the appended border) must now have unit L2 norm.
     body = accessor_data(tiny_dataset)[:, :-1]
-    torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0)), atol=1e-5, rtol=0)
+    torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0), device=DEVICE), atol=1e-5, rtol=0)
 
 
 def test_score_cosine_twice_does_not_re_normalize(tiny_dataset: Dataset) -> None:

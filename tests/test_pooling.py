@@ -101,7 +101,7 @@ def test_pooling_mean_of_constant_sequence() -> None:
     )
     pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:
-        torch.testing.assert_close(item.squeeze(0), torch.ones(d))
+        torch.testing.assert_close(item.squeeze(0), torch.ones(d, device=DEVICE))
 
 
 def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
