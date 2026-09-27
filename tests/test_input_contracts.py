@@ -280,7 +280,7 @@ def test_custom_timestamp_columns_end_to_end(tmp_path: Path) -> None:
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
 def test_integer_pooling_rejected(pooling: PoolingName) -> None:
     dataset = Dataset.from_numpy([[1], [2]], {"phone": ["a", "b"]})
-    with pytest.raises(RuntimeError, match="floating point"):
+    with pytest.raises(InvalidFeatureDtypeError, match="pooling"):
         pool_dataset(dataset, pooling)
 
 
@@ -376,3 +376,51 @@ def test_item_labels_are_read_as_strings(tmp_path: Path, extension: str) -> None
     assert dataset.labels["speaker"].dtype == pl.String
     assert dataset.labels["speaker"].to_list() == speakers
     assert dataset.labels["onset"].dtype == pl.Decimal
+
+
+def test_timestamps_must_be_sorted() -> None:
+    with pytest.raises(InvalidTimesError, match="sorted"):
+        _timestamp_dataset(torch.tensor([0.5, 0.25]))
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_timestamp_search_matches_a_mask_over_every_frame(seed: int) -> None:
+    """Each item gets exactly the frames with onset <= time <= offset, including repeated and boundary times."""
+    rng = np.random.default_rng(seed)
+    times = torch.tensor(np.sort(rng.choice(np.arange(0, 3, 0.1).round(1), size=40)), dtype=torch.float64)
+    features = torch.arange(40, dtype=torch.float32)[:, None]
+    bounds = [sorted(rng.choice(times.numpy(), size=2)) for _ in range(12)]
+    labels = pl.DataFrame(
+        {
+            "file": ["f"] * len(bounds),
+            "start": [Decimal(f"{lo:.1f}") for lo, _ in bounds],
+            "stop": [Decimal(f"{hi:.1f}") for _, hi in bounds],
+        }
+    )
+    indices, data = load_data_from_item_with_times(
+        {"f": features},
+        {"f": times},
+        labels,
+        lambda x: x,
+        lambda x: x,
+        "file",
+        "start",
+        "stop",
+        torch.device("cpu"),
+        progress=False,
+    )
+    for i, (lo, hi) in enumerate(bounds):
+        start, end = indices[i]
+        expected = features[(times >= float(f"{lo:.1f}")) & (times <= float(f"{hi:.1f}"))]
+        assert torch.equal(data[start:end], expected)
+
+
+def test_feature_files_with_different_dtypes_need_an_explicit_dtype() -> None:
+    labels = pl.DataFrame({"#file": ["f1", "f2"], "onset": [Decimal(0)] * 2, "offset": [Decimal("0.1")] * 2})
+    files = {"f1": torch.zeros(10, 2, dtype=torch.float32), "f2": torch.zeros(10, 2, dtype=torch.float64)}
+    with pytest.raises(InvalidFeaturesError, match="dtype"):
+        load_data_from_item(files, labels, 50, lambda x: x, "#file", "onset", "offset", DEVICE, progress=False)
+    _, data = load_data_from_item(
+        files, labels, 50, lambda x: x, "#file", "onset", "offset", DEVICE, dtype=torch.float64, progress=False
+    )
+    assert data.dtype == torch.float64

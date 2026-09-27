@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import polars as pl
 import pytest
 import torch
 
@@ -132,3 +133,21 @@ def test_timestamp_loading_pooling_preserves_label_order(
         expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=DEVICE)
         torch.testing.assert_close(pooled.accessor[i], expected)
         torch.testing.assert_close(list(dataset.accessor)[i], dataset.accessor[i])
+
+
+@pytest.mark.parametrize("pooling", ["mean", "hamming"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64])
+@pytest.mark.parametrize("dim", [1, 3, 64])
+def test_batched_pooling_is_bit_identical_to_pooling_each_item(
+    monkeypatch: pytest.MonkeyPatch, pooling: PoolingName, dtype: torch.dtype, dim: int
+) -> None:
+    monkeypatch.setenv("FASTABX_GATHER_CHUNK_ROWS", "3")  # Also split the buckets of equal length.
+    generator = torch.Generator().manual_seed(dim)
+    lengths = [1 + (7 * i) % 5 for i in range(20)]
+    items = [torch.randn(length, dim, generator=generator).to(dtype) for length in lengths]
+    ends = torch.tensor(lengths).cumsum(0).tolist()
+    indices = {i: (end - length, end) for i, (end, length) in enumerate(zip(ends, lengths, strict=True))}
+    accessor = InMemoryAccessor(indices, torch.cat(items), torch.device("cpu"))
+    pooled = pool_dataset(Dataset(pl.DataFrame({"i": range(20)}), accessor), pooling)
+    expected = torch.stack([pooling_function(pooling)(x) for x in items])
+    assert torch.equal(torch.cat(list(pooled.accessor)), expected)

@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from fastabx import Batch, Cell, Dataset, Score, Task, abx_on_cell
-from fastabx.group import GroupReducer, contribution_dtype, grouped_contributions
+from fastabx.group import GroupReducer, grouped_contributions
 
 
 @pytest.mark.parametrize("size", [2_000_000_000, 3_000_000_000])
@@ -40,12 +40,11 @@ def test_large_sizes_survive_scoring_collapse_and_csv(
 
 
 @pytest.mark.parametrize("constrained", [False, True])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_reducer_preserves_large_sizes_and_half_counts(dtype: torch.dtype, *, constrained: bool) -> None:
+def test_reducer_preserves_large_sizes_and_half_counts(*, constrained: bool) -> None:
     reducer = GroupReducer(1, constrained=constrained)
     size = 2**31 + 1
-    # Simulate two B columns: all successes in the first, one tie in the second.
-    reducer._per_b = [torch.tensor([size - 1, 0.5], dtype=dtype)]  # ruff: ignore[private-member-access]
+    # Simulate two B columns: all successes in the first, one tie in the second (counts are doubled).
+    reducer._per_b = [torch.tensor([2 * (size - 1), 1], dtype=torch.int64)]  # ruff: ignore[private-member-access]
     reducer._positions = [0]  # ruff: ignore[private-member-access]
     reducer._nb = [2]  # ruff: ignore[private-member-access]
     if constrained:
@@ -58,36 +57,21 @@ def test_reducer_preserves_large_sizes_and_half_counts(dtype: torch.dtype, *, co
     assert scores[0] == pytest.approx(expected, rel=1e-7, abs=0)
 
 
-@pytest.mark.parametrize(
-    ("size", "input_dtype", "expected"),
-    [
-        (2**23, torch.float16, torch.float32),
-        (2**23, torch.float32, torch.float32),
-        (2**23 + 1, torch.float32, torch.float64),
-        (1, torch.float64, torch.float64),
-    ],
-)
-def test_contribution_dtype_crosses_half_count_precision_boundary(
-    size: int, input_dtype: torch.dtype, expected: torch.dtype
-) -> None:
-    assert contribution_dtype(size, input_dtype) == expected
-
-
 @pytest.mark.parametrize("constrained", [False, True])
 def test_grouped_reduction_preserves_half_counts(*, constrained: bool) -> None:
     dxa = torch.tensor([[0.0, 0.0, 1.0]])
     mask = torch.ones(1, 3, 1, dtype=torch.bool) if constrained else None
     result = grouped_contributions(dxa, torch.ones(1, 1), mask)
-    expected = 2.5
-    assert result.dtype == torch.float32
-    assert result.item() == pytest.approx(expected, rel=0, abs=0)
+    # Two wins and one tie: 2.5, doubled to stay an exact integer.
+    assert result.dtype == torch.int64
+    assert result.item() == 5
 
 
 def test_float16_counts_do_not_overflow_in_grouped_or_single_cell_scoring() -> None:
     size = 257  # size**2 exceeds float16's largest finite value.
     dxa = torch.zeros(size, size, dtype=torch.float16)
     counts = grouped_contributions(dxa, torch.ones(size, 1, dtype=torch.float16))
-    assert counts.item() == size**2
+    assert counts.item() == 2 * size**2
 
     a = Batch(torch.zeros(size, 1, 1, dtype=torch.float16), torch.ones(size, dtype=torch.int32))
     b = Batch(torch.ones(1, 1, 1, dtype=torch.float16), torch.ones(1, dtype=torch.int32))
@@ -99,13 +83,13 @@ def test_float16_counts_do_not_overflow_in_grouped_or_single_cell_scoring() -> N
     assert float(abx_on_cell(cell, absolute)) == pytest.approx(0, abs=0)
 
 
-def test_flush_preserves_mixed_precision_groups() -> None:
+def test_flush_preserves_half_counts_across_groups() -> None:
     reducer = GroupReducer(2)
     size = 2**31
-    # A large group's half-count must survive concatenation with a small float32 group.
+    # A large group's half-count must survive concatenation with a small group (counts are doubled).
     reducer._per_b = [  # ruff: ignore[private-member-access]
-        torch.tensor([size - 0.5], dtype=torch.float64),
-        torch.tensor([0.5], dtype=torch.float32),
+        torch.tensor([2 * size - 1], dtype=torch.int64),
+        torch.tensor([1], dtype=torch.int64),
     ]
     reducer._positions = [0, 1]  # ruff: ignore[private-member-access]
     reducer._nb = [1, 1]  # ruff: ignore[private-member-access]

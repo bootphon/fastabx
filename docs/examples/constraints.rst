@@ -21,6 +21,11 @@ To achieve this finer filtering of triplets, the :py:class:`.Score` class accept
 score of the individual cell. The expressions should involve the labels of the triplets contained in ``Dataset.labels``,
 suffixed by ``_a``, ``_b``, and ``_x``. This is a powerful and general mechanism, and it can be used to do any kind of filtering.
 
+Each constraint must be a row-wise expression, relating the labels of the A, B and X of a single triplet, like the
+comparisons below. It is evaluated once per distinct combination of the labels it uses rather than once per triplet,
+so an aggregation over triplets (a mean, a rank, ...) is not supported. A triplet whose constraints evaluate to null,
+because of a missing label, is not valid.
+
 For example, let's say we are interested in accent discrimination from sentence embeddings.
 The dataset is described by the following labels:
 

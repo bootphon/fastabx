@@ -4,8 +4,8 @@
 Performance and memory
 ======================
 
-fastabx keeps the dataset in memory on a single device. Scoring intermediates are chunked. This page describes
-what is allocated, when, and which knob to turn when it does not fit.
+fastabx keeps the dataset in memory on a single device. The large scoring intermediates are split into chunks
+of bounded size. This page describes what is allocated, when, and which knob to turn when it does not fit.
 
 Where the data lives
 ====================
@@ -34,24 +34,34 @@ While scoring
 =============
 
 Cells are not scored one by one. Cells that share the same X and A sets are gathered into a group and scored
-together, so each pair of sequences is compared once instead of once per cell it appears in. Within a group,
-the cost of a comparison is a frame-level lattice: comparing ``n`` sequences of at most ``s`` frames
-against ``m`` sequences of at most ``t`` frames allocates ``n × m × s × t`` floats, which an
-:ref:`alignment <alignment>` then reduces to one distance per pair.
+together, so each pair of sequences is compared once instead of once per cell it appears in. A group with
+``nx`` X, ``na`` A and ``nb`` B in total goes through three steps.
 
-That product may lead to running out of memory. It is bounded by two environment variables described in
-:ref:`perf-env`:
+**Gathering.** The rows of many small groups are read and padded in a single call to the accessor, up to
+:code:`FASTABX_GATHER_CHUNK_ROWS` rows. A larger group reads its X at once, and its A and B chunk by chunk
+when they are compared.
 
-- :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` caps how many sequences are compared against the group's X at once.
-  Lower it first on an out-of-memory error.
-- :code:`FASTABX_GATHER_CHUNK_ROWS` caps how many rows are gathered and padded in one read.
-- :code:`FASTABX_REDUCTION_FLUSH_COLS` caps how many reduced contribution columns are retained before a flush.
+**Distances.** Comparing ``n`` sequences of at most ``s`` frames against ``m`` sequences of at most ``t``
+frames builds a frame-level lattice of ``n × m × s × t`` distances, which an :ref:`alignment <alignment>` then
+reduces to one distance per pair. The comparisons are split, on both the X side and the target side, so that
+no lattice exceeds :code:`FASTABX_MAX_LATTICE_ELEMENTS` elements nor :code:`FASTABX_MAX_SCORE_CHUNK_ROWS`
+target rows. Lower the first on an out-of-memory error. The alignment may allocate buffers of its own, of the
+same order as the lattice.
+
+**Counting.** The ABX decisions are counted without building the ``nx × na × nb`` triplets: each row of X-to-A
+distances is sorted once, and every B is located in it by binary search. With :class:`.Constraints`, the
+triplets are compared in chunks of 2\ :sup:`24`. The constraints are evaluated once per distinct combination of
+the labels they use, not once per triplet.
+
+What is not split: the dataset itself; the X of a group, gathered at once; and the ``nx × (na + nb)`` matrix of
+sequence distances of a group, which is proportional to the number of pairs rather than of triplets.
+:code:`FASTABX_REDUCTION_FLUSH_COLS` caps how many per-B counts are kept before they are reduced to cell scores.
 
 Counts and numerical precision
 ==============================
 
-Cell sizes and constrained denominators use Int64. Small win/tie reductions stay in float32 for speed; a group is
-promoted to float64 before float32 can no longer represent every half-count exactly. Scores exported in the
+Cell sizes and constrained denominators use Int64. The win/tie counts are exact Int64 integers too: a win counts
+2 and a tie 1, and the total is halved only when the float64 cell score is computed. Scores exported in the
 ``Score.cells`` DataFrame remain float32. This keeps large counts valid, but it does not make the final displayed
 error rate an arbitrary-precision number.
 

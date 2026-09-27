@@ -56,10 +56,15 @@ what fastabx expects from that file.
    ``frequency`` was a ``float``. Pass an ``int`` (``50``), or a ``str`` for a non-integer frequency
    (``"12.5"``), so that the times stay exact.
 
-:exc:`.TimesArrayDimensionError`, :exc:`.TimesArrayFrontiersError`
-   From :meth:`.Dataset.from_item_with_times`: the times array of a file is not 1D, or no timestamp of a file
-   falls between the ``onset`` and the ``offset`` of one of its tokens. In the second case, check that the
+:exc:`.TimesArrayDimensionError`, :exc:`.TimesArrayFrontiersError`, :exc:`.InvalidTimesError`
+   From :meth:`.Dataset.from_item_with_times`: the times array of a file is not 1D; has non-finite values, is
+   not sorted in non-decreasing order, or does not have one entry per feature frame; or no timestamp of a file
+   falls between the ``onset`` and the ``offset`` of one of its tokens. In the last case, check that the
    times are in seconds and cover the whole file.
+
+:exc:`.InvalidFeaturesError` — *"... have dtype ..., but the previous files have ..."*
+   The feature files do not all have the same dtype. Pass ``dtype=`` to the :class:`.Dataset` constructor to
+   convert them all to the same one.
 
 Building a Task
 ===============

@@ -40,6 +40,13 @@ To compare scores and runtime against a published version, run:
 uv run scripts/compare_versions.py path/to/file.item path/to/features --max-size-group 10 --runs 3
 ```
 
+To measure the runtime, peak memory and score of synthetic scoring and loading workloads, before and after a
+performance change, run:
+
+```bash
+uv run scripts/benchmark.py --json before.json
+```
+
 ## Pull requests
 
 Branch off `main`, keep the change focused, and make sure the checks above pass. The GitHub Actions CI runs

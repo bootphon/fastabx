@@ -172,16 +172,21 @@ Behaviour
 Performance tuning
 ------------------
 
-The variables below bound the size of intermediate chunks in the scoring engine (gathers, padded batches,
-distance results, triplet comparisons, constraints and reductions). They do not bound the resident dataset or
-extra allocations inside custom callables.
+The variables below bound the size of intermediate chunks in the scoring engine: gathers, padded batches, frame
+lattices and reductions. See :ref:`performance` for what they do and do not bound. They do not bound the
+resident dataset or extra allocations inside custom callables.
 Normal usage should not require changing them: lower them if the scoring runs out of memory, raise them if you
 have memory to spare and the cells are small.
 
-- :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` (default 8192): Maximum number of rows compared at once when scoring a
-  group of cells. Turn down if you have an out-of-memory error.
+- :code:`FASTABX_MAX_LATTICE_ELEMENTS` (default 67108864, i.e. 2\ :sup:`26`): Maximum number of elements of
+  the frame-level distance lattice built at once, ``X rows × target rows × X frames × target frames``. Both the
+  X and the target side are split to stay under it. Turn down first if you have an out-of-memory error.
+- :code:`FASTABX_MAX_SCORE_CHUNK_ROWS` (default 8192): Maximum number of target rows compared at once when
+  scoring a group of cells, whatever the lattice budget.
 - :code:`FASTABX_GATHER_CHUNK_ROWS` (default 8192): Maximum number of rows gathered and padded in a single
-  batched read from the :class:`.InMemoryAccessor`.
+  batched read from the accessor. Several small groups share one read; a group larger than this gathers its X at
+  once and its other rows chunk by chunk, as they are compared. :func:`.pool_dataset` reads at most this many
+  items at a time too.
 - :code:`FASTABX_REDUCTION_FLUSH_COLS` (default 262144): Number of accumulated columns after which the
   per-cell reduction is flushed. Larger values amortise the reduction over more cells, at the cost of
   keeping more intermediate counts around.

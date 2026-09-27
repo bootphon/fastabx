@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from fastabx.accessor import Accessor, ArrayLike, InMemoryAccessor
 from fastabx.utils import hide_progress, resolve_device, with_librilight_bug
-from fastabx.verify import EmptyDatasetError, InvalidDatasetError, verify_feature_shape
+from fastabx.verify import EmptyDatasetError, InvalidDatasetError, InvalidFeaturesError, verify_feature_shape
 
 __all__ = [
     "Dataset",
@@ -197,7 +197,7 @@ def prepare_features(
 
 
 class InvalidTimesError(ValueError):
-    """Timestamps must be finite and match the feature frame count."""
+    """Timestamps must be finite, sorted, and match the feature frame count."""
 
 
 def load_data_from_item[T](
@@ -213,39 +213,52 @@ def load_data_from_item[T](
     dtype: torch.dtype | None = None,
     progress: bool = True,
 ) -> tuple[dict[int, tuple[int, int]], torch.Tensor]:
-    """Load all data in memory on ``device``. Return a dictionary of indices and a tensor of data."""
+    """Load all data in memory on ``device``. Return a dictionary of indices and a tensor of data.
+
+    The output tensor is allocated once, when the first file gives the feature dimension and dtype, and each
+    item is copied into place: at most one file is held besides the output.
+    """
     verify_intervals(labels, onset_col, offset_col)
     metadata = labels[[file_col, onset_col, offset_col]].with_row_index()
     frontiers = item_frontiers(frequency, onset_col, offset_col)
     lazy = metadata.lazy().sort(file_col, maintain_order=True).with_columns(*frontiers)
+    empty = lazy.filter(pl.col("end") <= pl.col("start")).sort("index").select(file_col, onset_col, offset_col)
     indices_lazy = lazy.select("left", "right", "index").sort("index").select("left", "right")
-    by_file_lazy = lazy.select(file_col, "start", "end").group_by(file_col, maintain_order=True).agg("start", "end")
-    indices, by_file = pl.collect_all([indices_lazy, by_file_lazy])
+    by_file_lazy = (
+        lazy.select(file_col, "start", "end", "left")
+        .group_by(file_col, maintain_order=True)
+        .agg("start", "end", "left")
+    )
+    empty, indices, by_file = pl.collect_all([empty, indices_lazy, by_file_lazy])
+    if not empty.is_empty():
+        raise EmptyFeaturesError(empty)
 
-    data = []
-    for fileid, start_indices, end_indices in tqdm(
+    total = int(indices["right"].max())  # ty: ignore[invalid-argument-type]
+    data = None
+    for fileid, start_indices, end_indices, left_indices in tqdm(
         by_file.iter_rows(),
         desc="Building dataset",
         total=len(by_file),
         disable=hide_progress(progress=progress),
     ):
         try:
-            dim = data[0].size(1) if data else None
+            dim = None if data is None else data.size(1)
             features = prepare_features(feature_maker(mapping[fileid]), device, dtype, fileid, dim)
         except KeyError as error:
             raise missing_files_error(set(mapping), set(by_file[file_col].unique())) from error
-        for start, end in zip(start_indices, end_indices, strict=True):
+        if data is None:
+            data = features.new_empty((total, features.size(1)))
+        elif features.dtype != data.dtype:
+            msg = (
+                f"The features of file {fileid!r} have dtype {features.dtype}, but the previous files have "
+                f"{data.dtype}. Pass `dtype=` to convert every file to the same dtype."
+            )
+            raise InvalidFeaturesError(msg)
+        for start, end, left in zip(start_indices, end_indices, left_indices, strict=True):
             if start < 0 or end > features.size(0):
                 raise FeaturesSizeError(fileid, start, end, features.size(0))
-            if end <= start:
-                raise EmptyFeaturesError(
-                    lazy.filter(pl.col("end") <= pl.col("start"))
-                    .sort("index")
-                    .select(file_col, onset_col, offset_col)
-                    .collect()
-                )
-            data.append(features[start:end])
-    return dict(enumerate(indices.rows())), torch.cat(data, dim=0)
+            data[left : left + end - start] = features[start:end]
+    return dict(enumerate(indices.rows())), data  # ty: ignore[invalid-return-type]
 
 
 class TimesArrayDimensionError(ValueError):
@@ -260,6 +273,19 @@ class TimesArrayFrontiersError(ValueError):
 
     def __init__(self, fileid: str, onset: float, offset: float) -> None:
         super().__init__(f"No times were found between onset={onset}, offset={offset} for file {fileid}")
+
+
+def frames_between(times: torch.Tensor, onsets: list[Decimal], offsets: list[Decimal]) -> tuple[list[int], list[int]]:
+    """Return the ``[start, end[`` frames of each item, whose times satisfy ``onset <= time <= offset``.
+
+    Those frames are contiguous since ``times`` is sorted, so each item is located by binary search.
+    """
+    bounds = torch.tensor(
+        [[float(t) for t in onsets], [float(t) for t in offsets]], dtype=times.dtype, device=times.device
+    )
+    starts = torch.searchsorted(times, bounds[0], side="left")
+    ends = torch.searchsorted(times, bounds[1], side="right")
+    return starts.tolist(), ends.tolist()
 
 
 def load_data_from_item_with_times[T](
@@ -310,16 +336,20 @@ def load_data_from_item_with_times[T](
         if times.numel() != features.size(0) or not torch.isfinite(times).all():
             msg = f"Timestamps for {fileid!r} must be finite and have one entry per feature frame."
             raise InvalidTimesError(msg)
+        if (times[1:] < times[:-1]).any():
+            msg = f"Timestamps for {fileid!r} must be sorted in non-decreasing order."
+            raise InvalidTimesError(msg)
         if decimals is not None:
             times = times.round(decimals=decimals)
-        for index, onset, offset in zip(indices, onsets, offsets, strict=True):
-            mask = torch.where(torch.logical_and(float(onset) <= times, times <= float(offset)))[0]
-            if mask.numel() == 0:
+        starts, ends = frames_between(times, onsets, offsets)
+        pieces = []
+        for index, onset, offset, start, end in zip(indices, onsets, offsets, starts, ends, strict=True):
+            if end <= start:
                 raise TimesArrayFrontiersError(fileid, float(onset), float(offset))
-            data.append(features[mask])
-            left = right
-            right += len(mask)
-            all_indices[index] = (left, right)
+            pieces.append(features[start:end])
+            all_indices[index] = (right, right + end - start)
+            right += end - start
+        data.append(torch.cat(pieces))  # One copy per file, so that the whole file is not kept alive.
     return all_indices, torch.cat(data, dim=0)
 
 
@@ -596,22 +626,16 @@ class Dataset:
         if array.ndim != 2:
             msg = "features must be a two-dimensional array (rows, dimension)"
             raise ValueError(msg)
-        features_df = pl.from_numpy(array)
         if isinstance(labels, pl.DataFrame):
             labels_df = labels
         elif _is_pandas_dataframe(labels):
             labels_df: pl.DataFrame = pl.from_pandas(labels)  # ty: ignore[invalid-assignment]
         else:
             labels_df = pl.from_dict(labels)
-        if len(features_df) != len(labels_df):
-            msg = f"`features` and `labels` must have the same length, got {len(features_df)} and {len(labels_df)}"
+        if len(array) != len(labels_df):
+            msg = f"`features` and `labels` must have the same length, got {len(array)} and {len(labels_df)}"
             raise ValueError(msg)
-        collisions = sorted(set(features_df.columns) & set(labels_df.columns))
-        if collisions:
-            msg = (
-                f"`labels` uses column name(s) {collisions} that collide with the auto-generated feature "
-                f"column names ('column_0', 'column_1', ...). Rename the offending label column(s)."
-            )
-            raise ValueError(msg)
-        data = pl.concat((features_df, labels_df), how="horizontal")
-        return cls.from_dataframe(data, features_df.columns, device=device, dtype=dtype)
+        resolved = resolve_device(device)
+        data = prepare_features(torch.tensor(array), resolved, dtype)  # A copy: the dataset never aliases `features`.
+        indices = {i: (i, i + 1) for i in range(len(labels_df))}
+        return Dataset(labels=labels_df, accessor=InMemoryAccessor(indices, data, resolved))

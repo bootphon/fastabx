@@ -116,12 +116,19 @@ def test_from_numpy_length_mismatch_raises() -> None:
         Dataset.from_numpy(features, labels)
 
 
-def test_from_numpy_label_name_collides_with_feature_columns() -> None:
-    """A label column named like an auto-generated feature column must fail with a clear message."""
-    features = np.zeros((2, 3), dtype=np.float32)  # -> column_0, column_1, column_2
-    labels = {"column_1": ["a", "b"]}
-    with pytest.raises(ValueError, match=r"collide.*column_1|column_1.*collide"):
-        Dataset.from_numpy(features, labels)
+def test_from_numpy_accepts_any_label_name() -> None:
+    """The features never go through named columns, so no label name can collide with them."""
+    features = np.arange(6, dtype=np.float32).reshape(2, 3)
+    dataset = Dataset.from_numpy(features, {"column_1": ["a", "b"]}, device="cpu")
+    assert dataset.labels.columns == ["column_1"]
+    torch.testing.assert_close(accessor_data(dataset), torch.from_numpy(features))
+
+
+def test_from_numpy_copies_the_features() -> None:
+    features = np.zeros((2, 3), dtype=np.float32)
+    dataset = Dataset.from_numpy(features, {"phone": ["a", "b"]}, device="cpu")
+    features[0, 0] = 1
+    assert accessor_data(dataset)[0, 0] == 0
 
 
 def test_resolve_device() -> None:

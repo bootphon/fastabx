@@ -109,13 +109,7 @@ packages = ["src/fastabx"]
 
 [tool.pytest]
 addopts = ["--cov=fastabx"]
-filterwarnings = [
-  "error",
-  """ignore:the default behavior of `how='horizontal'` \
-  for `concat` is deprecated and will require equal heights in the \
-  next breaking release. Use `how='horizontal_extend'` to keep the \
-  current behavior.:DeprecationWarning"""
-]
+filterwarnings = ["error"]
 testpaths = ["tests"]
 
 [tool.ruff]

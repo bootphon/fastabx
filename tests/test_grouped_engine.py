@@ -17,7 +17,7 @@ import torch
 from torch.testing import assert_close
 from torchdtw import dtw_batch
 
-from fastabx import Dataset, Task
+from fastabx import Dataset, InMemoryAccessor, Task
 from fastabx.constraints import constraints_all_different
 from fastabx.distance import DistanceName, abx_on_cell, distance_function
 from fastabx.group import GroupReducer, group_cells, grouped_contributions
@@ -106,7 +106,7 @@ def test_grouped_contributions_partial_mask_matches_hand_computed() -> None:
                     diff = dxa[ix, ia] - dxb[ix, ib]
                     sign = 0.0 if diff == 0 else (1.0 if diff > 0 else -1.0)
                     expected[ib] += 0.5 * (1 - sign)
-    torch.testing.assert_close(got, expected)
+    torch.testing.assert_close(got * 0.5, expected)  # Counts are doubled to stay exact integers.
 
 
 def test_max_score_chunk_rows_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -324,3 +324,68 @@ def test_env_var_chunking_invariance_via_subprocess(tmp_path: Path) -> None:
     chunked = subprocess.check_output([sys.executable, str(script)], env=env_tiny, text=True)
     # The chunk env vars must be a no-op on the output, exactly.
     assert json.loads(baseline) == json.loads(chunked)
+
+
+def _scores_with(
+    monkeypatch: pytest.MonkeyPatch, task: Task, constraints: list[pl.Expr] | None, env: dict[str, str], table: int
+) -> tuple[list[float | None], list[int | None]]:
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr("fastabx.constraints.MAX_CONSTRAINT_TABLE", table)
+    try:
+        return score_task(task, distance_function("euclidean"), alignment=dtw_batch, constraints=constraints)
+    finally:
+        for name in env:
+            monkeypatch.delenv(name)
+
+
+@pytest.mark.parametrize("fixture", ["seq_dataset", "tiny_dataset"])
+@pytest.mark.parametrize("across", [False, True])
+@pytest.mark.parametrize("constrained", [False, True])
+@pytest.mark.parametrize(
+    ("env", "table"),
+    [
+        ({"FASTABX_GATHER_CHUNK_ROWS": "1"}, 2**22),  # Every group is oversized, so its targets are gathered lazily.
+        ({"FASTABX_GATHER_CHUNK_ROWS": "9"}, 2**22),  # A mix of batched and lazy gathers.
+        ({"FASTABX_GATHER_CHUNK_ROWS": "40"}, 2**22),  # Several groups per batched gather.
+        ({"FASTABX_MAX_LATTICE_ELEMENTS": "1"}, 2**22),  # One (x, target) pair per call: both sides are split.
+        ({"FASTABX_MAX_LATTICE_ELEMENTS": "40", "FASTABX_MAX_SCORE_CHUNK_ROWS": "3"}, 2**22),
+        ({}, 1),  # Too many label combinations for a table: each block evaluates its own.
+    ],
+)
+def test_scoring_is_invariant_to_memory_bounds(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    fixture: str,
+    env: dict[str, str],
+    table: int,
+    *,
+    across: bool,
+    constrained: bool,
+) -> None:
+    """Splitting the gathers, the frame lattices and the constraint evaluation never changes a score or a size."""
+    dataset: Dataset = request.getfixturevalue(fixture)
+    task = Task(dataset, on="phone", across=["speaker"] if across else None)
+    constraints = [pl.col("context_x") != pl.col("context_b")] if constrained else None
+    expected = _scores_with(monkeypatch, task, constraints, {}, 2**22)
+    assert _scores_with(monkeypatch, task, constraints, env, table) == expected
+    if constrained:
+        assert any(size is not None and size > 0 for size in expected[1])
+
+
+def test_groups_of_different_lengths_gathered_together_match_per_cell() -> None:
+    """A shorter group sliced out of a longer batched gather is trimmed to its own length, without changing it."""
+    rng = np.random.default_rng(4)
+    phones, speakers, pieces, indices, cursor = [], [], [], {}, 0
+    for i in range(16):
+        speaker = "s1" if i < 8 else "s2"
+        length = 2 if speaker == "s1" else 5
+        phones.append("ab"[i % 2])
+        speakers.append(speaker)
+        pieces.append(rng.standard_normal((length, 3)).astype(np.float32))
+        indices[i] = (cursor, cursor + length)
+        cursor += length
+    accessor = InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), torch.device("cpu"))
+    task = Task(Dataset(pl.DataFrame({"phone": phones, "speaker": speakers}), accessor), on="phone", by=["speaker"])
+    scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
+    assert scores == [float(abx_on_cell(cell, "euclidean")) for cell in task]

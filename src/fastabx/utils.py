@@ -48,6 +48,11 @@ def gather_chunk_rows() -> int:
     return positive_int_from_env("FASTABX_GATHER_CHUNK_ROWS", 8192)
 
 
+def max_lattice_elements() -> int:
+    """Maximum number of elements of the frame-level distance lattice built at once when scoring a group."""
+    return positive_int_from_env("FASTABX_MAX_LATTICE_ELEMENTS", 2**26)
+
+
 def reduction_flush_cols() -> int:
     """Accumulated columns after which the per-cell reduction is flushed."""
     return positive_int_from_env("FASTABX_REDUCTION_FLUSH_COLS", 262144)

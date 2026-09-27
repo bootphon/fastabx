@@ -9,7 +9,7 @@ from torch.testing import assert_close
 from torchdtw import dtw_batch
 
 from fastabx import Dataset, InMemoryAccessor, Score, Task, abx_on_cell
-from fastabx.accessor import normalize_with_singularity
+from fastabx.accessor import Batch, normalize_with_singularity
 from fastabx.distance import DistanceName, angular_distance, euclidean_distance
 from fastabx.group import grouped_distances
 from tests.conftest import DEVICE
@@ -71,7 +71,9 @@ def test_chunking_preserves_custom_result_dtype(
     def precise_distance(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         return 1 + euclidean_distance(a.double(), b.double()) * 1e-9
 
-    result = grouped_distances(x, sx, targets, sy, precise_distance, alignment=dtw_batch, max_rows=chunk_rows)
+    result = grouped_distances(
+        Batch(x, sx), Batch(targets, sy), precise_distance, alignment=dtw_batch, max_rows=chunk_rows
+    )
     expected = 1 + (x[:, 0, 0].double()[:, None] - targets[:, 0, 0].double()[None, :]).abs() * 1e-9
     assert result.dtype == torch.float64
     assert_close(result, expected, rtol=0, atol=1e-15)
@@ -85,9 +87,8 @@ def test_chunking_preserves_custom_alignment_precision(chunk_rows: int) -> None:
     def precise_alignment(cost: torch.Tensor, sx: torch.Tensor, sy: torch.Tensor, *, symmetric: bool) -> torch.Tensor:
         return 1 + dtw_batch(cost, sx, sy, symmetric=symmetric).double() * 1e-9
 
-    result = grouped_distances(
-        features, sizes, features, sizes, euclidean_distance, alignment=precise_alignment, max_rows=chunk_rows
-    )
+    batch = Batch(features, sizes)
+    result = grouped_distances(batch, batch, euclidean_distance, alignment=precise_alignment, max_rows=chunk_rows)
     expected = (
         1 + (torch.arange(4, device=DEVICE)[:, None] - torch.arange(4, device=DEVICE)[None, :]).abs().double() * 1e-9
     )
@@ -122,7 +123,8 @@ def test_custom_float32_distance_retains_its_dtype_with_float64_features() -> No
     def single_precision(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         return euclidean_distance(a.float(), b.float())
 
-    result = grouped_distances(features, sizes, features, sizes, single_precision, alignment=dtw_batch, max_rows=1)
+    batch = Batch(features, sizes)
+    result = grouped_distances(batch, batch, single_precision, alignment=dtw_batch, max_rows=1)
     assert result.dtype == torch.float32
     assert_close(result, torch.tensor([[0, 1, 2], [1, 0, 1], [2, 1, 0]], dtype=torch.float32, device=DEVICE))
 

@@ -18,6 +18,9 @@ Releases up to and including 0.8.0 predate this file and are documented at
 - All `Dataset.from_*` constructors accept `dtype=None` to preserve input precision or an explicit torch dtype.
 - Dataset/accessor validation reports inconsistent row counts, invalid feature shapes and slice boundaries.
 - Timestamp loading validates shape, finiteness and frame count; item intervals and frequencies are validated.
+- `FASTABX_MAX_LATTICE_ELEMENTS` bounds the frame-level distance lattice built at once, splitting both the X and the
+  target side of a group.
+- `scripts/benchmark.py` measures the runtime, peak memory and score of synthetic scoring and loading workloads.
 
 ### Changed
 
@@ -28,8 +31,22 @@ Releases up to and including 0.8.0 predate this file and are documented at
 - Grouped scoring trims excess chunk padding before computing each group's frame distances.
 - The CLI accepts exact fractional feature frequencies and represents them as decimal strings in JSON output.
 - Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
-- Count reductions preserve half-integer contributions beyond float32 precision; final score storage stays float32.
-  Small-group contributions stay float32 until a single promotion per flush.
+- Win/tie counts are exact Int64 integers (a win counts 2, a tie 1); final score storage stays float32.
+- Win/tie counting sorts each row of X-to-A distances and locates every B by binary search, instead of building
+  every triplet: memory is proportional to the number of pairs of a group, not of its triplets. On a large
+  unsubsampled pooled task, peak memory drops from 17.7 GB to 0.4 GB and runtime by 20x. Scores are unchanged.
+- Constraints are evaluated once per distinct combination of the labels they use, and counted in chunks of
+  triplets, instead of materialising a mask of every triplet of the task: 16x faster and 20x less memory on a
+  large constrained task. Constraints must be row-wise expressions; aggregations over triplets are not supported.
+- A group larger than `FASTABX_GATHER_CHUNK_ROWS` gathers its targets chunk by chunk as they are compared.
+- `Dataset.from_item` allocates the output once and copies each item into place, holding at most one feature
+  file besides it. Feature files with different dtypes now raise `InvalidFeaturesError` unless `dtype=` is given.
+- `Dataset.from_item_with_times` locates each item by binary search in the timestamps, which must now be sorted in
+  non-decreasing order (`InvalidTimesError` otherwise).
+- `Dataset.from_numpy` converts the array to a tensor directly instead of through a polars DataFrame, and so accepts
+  label columns of any name. The features are stored row-major.
+- `pool_dataset` pools the items by batches of equal length, with bit-identical results, and raises
+  `InvalidFeatureDtypeError` on integer features instead of a torch `RuntimeError`.
 
 - Tabular constructors preserve floating input precision by default. Pass `dtype=torch.float32` for the previous
   conversion behavior. Normalization and pooling require floating-point features; distance kernels defer dtype compatibility to PyTorch.
