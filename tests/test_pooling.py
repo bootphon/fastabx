@@ -17,7 +17,6 @@ from fastabx.pooling import (
     pool_dataset,
     pooling_function,
 )
-from tests.conftest import DEVICE
 
 
 def test_pooling_function_mean_and_hamming() -> None:
@@ -69,7 +68,7 @@ def test_hamming_pooling_downweights_both_boundaries() -> None:
     assert pooled[-1] < pooled[-2] < pooled[2]
 
 
-def test_pooling_returns_pooled_dataset() -> None:
+def test_pooling_returns_pooled_dataset(device: torch.device) -> None:
     rng = np.random.default_rng(0)
     n, length, d = 4, 3, 5
     data = torch.from_numpy(rng.standard_normal((n * length, d)).astype(np.float32))
@@ -78,7 +77,7 @@ def test_pooling_returns_pooled_dataset() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b", "c", "d"]}),
-        accessor=InMemoryAccessor(indices, data, DEVICE),
+        accessor=InMemoryAccessor(indices, data, device),
     )
     pooled = pool_dataset(dataset, "mean")
     assert isinstance(pooled, PooledDataset)
@@ -89,7 +88,7 @@ def test_pooling_returns_pooled_dataset() -> None:
     assert "mean" in repr(pooled)
 
 
-def test_pooling_mean_of_constant_sequence() -> None:
+def test_pooling_mean_of_constant_sequence(device: torch.device) -> None:
     n, length, d = 2, 4, 3
     data = torch.ones(n * length, d)
     indices = {i: (i * length, (i + 1) * length) for i in range(n)}
@@ -97,11 +96,11 @@ def test_pooling_mean_of_constant_sequence() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b"]}),
-        accessor=InMemoryAccessor(indices, data, DEVICE),
+        accessor=InMemoryAccessor(indices, data, device),
     )
     pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:
-        torch.testing.assert_close(item.squeeze(0), torch.ones(d, device=DEVICE))
+        torch.testing.assert_close(item.squeeze(0), torch.ones(d, device=device))
 
 
 def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
@@ -115,7 +114,7 @@ def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
 @pytest.mark.parametrize("files", [("a", "a", "z"), ("z", "z", "a"), ("z", "a", "z")])
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
 def test_timestamp_loading_pooling_preserves_label_order(
-    tmp_path: Path, files: tuple[str, ...], pooling: PoolingName
+    tmp_path: Path, files: tuple[str, ...], pooling: PoolingName, device: torch.device
 ) -> None:
     """File sorting during loading must not change which features belong to a label row."""
     item = tmp_path / "data.item"
@@ -126,11 +125,11 @@ def test_timestamp_loading_pooling_preserves_label_order(
     for file, value in (("a", 1.0), ("z", 9.0)):
         torch.save(torch.full((2, 1), value), features / f"{file}.pt")
         torch.save(torch.tensor([0.0, 1.0]), times / f"{file}.pt")
-    dataset = Dataset.from_item_with_times(item, features, times, device=DEVICE, progress=False)
+    dataset = Dataset.from_item_with_times(item, features, times, device=device, progress=False)
     pooled = pool_dataset(dataset, pooling)
     assert pooled.labels.equals(dataset.labels)
     for i, file in enumerate(files):
-        expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=DEVICE)
+        expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=device)
         torch.testing.assert_close(pooled.accessor[i], expected)
         torch.testing.assert_close(list(dataset.accessor)[i], dataset.accessor[i])
 
@@ -138,16 +137,20 @@ def test_timestamp_loading_pooling_preserves_label_order(
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64])
 @pytest.mark.parametrize("dim", [1, 3, 64])
-def test_batched_pooling_is_bit_identical_to_pooling_each_item(
-    monkeypatch: pytest.MonkeyPatch, pooling: PoolingName, dtype: torch.dtype, dim: int
+def test_batched_pooling_matches_pooling_each_item(
+    monkeypatch: pytest.MonkeyPatch, pooling: PoolingName, dtype: torch.dtype, dim: int, device: torch.device
 ) -> None:
+    """Items of mixed lengths, pooled by chunked buckets of equal length, come back in order.
+
+    Not bit-identical: depending on the device and the BLAS kernels, the batched hamming product rounds differently.
+    """
     monkeypatch.setenv("FASTABX_GATHER_CHUNK_ROWS", "3")  # Also split the buckets of equal length.
     generator = torch.Generator().manual_seed(dim)
     lengths = [1 + (7 * i) % 5 for i in range(20)]
-    items = [torch.randn(length, dim, generator=generator).to(dtype) for length in lengths]
+    items = [torch.randn(length, dim, generator=generator).to(device, dtype) for length in lengths]
     ends = torch.tensor(lengths).cumsum(0).tolist()
     indices = {i: (end - length, end) for i, (end, length) in enumerate(zip(ends, lengths, strict=True))}
-    accessor = InMemoryAccessor(indices, torch.cat(items), torch.device("cpu"))
+    accessor = InMemoryAccessor(indices, torch.cat(items), device)
     pooled = pool_dataset(Dataset(pl.DataFrame({"i": range(20)}), accessor), pooling)
     expected = torch.stack([pooling_function(pooling)(x) for x in items])
-    assert torch.equal(torch.cat(list(pooled.accessor)), expected)
+    torch.testing.assert_close(torch.cat(list(pooled.accessor)), expected, atol=4 * torch.finfo(dtype).eps, rtol=0)

@@ -43,9 +43,9 @@ def test_distance_function_unknown_raises() -> None:
         distance_function("bogus")  # ty: ignore[invalid-argument-type]
 
 
-def test_euclidean_known_values() -> None:
-    a = torch.tensor([[[0.0, 0.0]], [[1.0, 0.0]]])  # (2, 1, 2)
-    b = torch.tensor([[[0.0, 0.0]], [[0.0, 1.0]]])  # (2, 1, 2)
+def test_euclidean_known_values(device: torch.device) -> None:
+    a = torch.tensor([[[0.0, 0.0]], [[1.0, 0.0]]], device=device)  # (2, 1, 2)
+    b = torch.tensor([[[0.0, 0.0]], [[0.0, 1.0]]], device=device)  # (2, 1, 2)
     out = euclidean_distance(a, b)
     assert out.shape == (2, 2, 1, 1)
     assert_close(out[0, 0, 0, 0].item(), 0.0)
@@ -54,10 +54,10 @@ def test_euclidean_known_values() -> None:
     assert_close(out[1, 1, 0, 0].item(), math.sqrt(2.0))
 
 
-def test_angular_known_values() -> None:
+def test_angular_known_values(device: torch.device) -> None:
     # orthogonal, identical, opposite — pre-normalised inputs.
-    a = torch.tensor([[[1.0, 0.0]], [[1.0, 0.0]], [[1.0, 0.0]]])  # (3, 1, 2)
-    b = torch.tensor([[[0.0, 1.0]], [[1.0, 0.0]], [[-1.0, 0.0]]])
+    a = torch.tensor([[[1.0, 0.0]], [[1.0, 0.0]], [[1.0, 0.0]]], device=device)  # (3, 1, 2)
+    b = torch.tensor([[[0.0, 1.0]], [[1.0, 0.0]], [[-1.0, 0.0]]], device=device)
     out = angular_distance(a, b)
     assert out.shape == (3, 3, 1, 1)
     assert_close(out[0, 0, 0, 0].item(), 0.5, atol=1e-6, rtol=0)  # orthogonal -> 0.5
@@ -65,38 +65,38 @@ def test_angular_known_values() -> None:
     assert_close(out[2, 2, 0, 0].item(), 1.0, atol=1e-6, rtol=0)  # opposite -> 1
 
 
-def test_identical_rejects_multidimensional_features() -> None:
+def test_identical_rejects_multidimensional_features(device: torch.device) -> None:
     """Named error rather than a raw torch reshape failure."""
-    a = torch.randn(2, 1, 3)
-    b = torch.randn(2, 1, 3)
+    a = torch.randn(2, 1, 3, device=device)
+    b = torch.randn(2, 1, 3, device=device)
     with pytest.raises(IdenticalDistanceDimensionError, match="single"):
         identical_distance(a, b)
 
 
-def test_identical_known_values() -> None:
-    a = torch.tensor([[[1.0]], [[2.0]]])  # (2, 1, 1)
-    b = torch.tensor([[[1.0]], [[3.0]]])
+def test_identical_known_values(device: torch.device) -> None:
+    a = torch.tensor([[[1.0]], [[2.0]]], device=device)  # (2, 1, 1)
+    b = torch.tensor([[[1.0]], [[3.0]]], device=device)
     out = identical_distance(a, b)
     assert out.shape == (2, 2, 1, 1)
-    assert out[0, 0, 0, 0] == torch.tensor([0.0])
-    assert out[0, 1, 0, 0] == torch.tensor([1.0])
-    assert out[1, 0, 0, 0] == torch.tensor([1.0])
-    assert out[1, 1, 0, 0] == torch.tensor([1.0])
+    assert out[0, 0, 0, 0] == torch.tensor([0.0], device=device)
+    assert out[0, 1, 0, 0] == torch.tensor([1.0], device=device)
+    assert out[1, 0, 0, 0] == torch.tensor([1.0], device=device)
+    assert out[1, 1, 0, 0] == torch.tensor([1.0], device=device)
 
 
-def test_kl_symmetric_zero_distance_for_same_distribution() -> None:
-    p = torch.tensor([[[0.25, 0.25, 0.5]]])
+def test_kl_symmetric_zero_distance_for_same_distribution(device: torch.device) -> None:
+    p = torch.tensor([[[0.25, 0.25, 0.5]]], device=device)
     out = kl_symmetric_distance(p, p)
     assert_close(out.item(), 0.0, atol=1e-6, rtol=0)
 
 
-def test_kl_symmetric_non_negative_and_finite_near_zero() -> None:
+def test_kl_symmetric_non_negative_and_finite_near_zero(device: torch.device) -> None:
     # Near-degenerate distributions: one mass concentrated, the other uniform.
     eps = 1e-7
     n, d = 4, 5
-    concentrated = torch.full((n, 1, d), eps)
+    concentrated = torch.full((n, 1, d), eps, device=device)
     concentrated[:, 0, 0] = 1.0 - (d - 1) * eps
-    uniform = torch.full((n, 1, d), 1.0 / d)
+    uniform = torch.full((n, 1, d), 1.0 / d, device=device)
     out = kl_symmetric_distance(concentrated, uniform)
     assert torch.isfinite(out).all()
     assert (out >= -KL_FLOAT32_TOL).all()
@@ -110,20 +110,20 @@ def test_kl_symmetric_non_negative_and_finite_near_zero() -> None:
         ("identical", identical_distance),
     ],
 )
-def test_output_shape_contract(name: str, fn: Callable[..., torch.Tensor]) -> None:
+def test_output_shape_contract(name: str, fn: Callable[..., torch.Tensor], device: torch.device) -> None:
     n1, n2, s1, s2, d = 3, 2, 4, 5, 1 if name == "identical" else 6
-    a = make_tensor((n1, s1, d), dtype=torch.float32, low=0.1, high=1.0, device="cpu")
-    b = make_tensor((n2, s2, d), dtype=torch.float32, low=0.1, high=1.0, device="cpu")
+    a = make_tensor((n1, s1, d), dtype=torch.float32, low=0.1, high=1.0, device=device)
+    b = make_tensor((n2, s2, d), dtype=torch.float32, low=0.1, high=1.0, device=device)
     if name == "kl_symmetric":
         a, b = a / a.sum(-1, keepdim=True), b / b.sum(-1, keepdim=True)
     out = fn(a, b)
     assert out.shape == (n1, n2, s1, s2)
 
 
-def test_angular_output_in_unit_interval() -> None:
+def test_angular_output_in_unit_interval(device: torch.device) -> None:
     rng = torch.Generator().manual_seed(0)
-    a = torch.randn(5, 1, 8, generator=rng)
-    b = torch.randn(4, 1, 8, generator=rng)
+    a = torch.randn(5, 1, 8, generator=rng).to(device)
+    b = torch.randn(4, 1, 8, generator=rng).to(device)
     a /= a.norm(dim=-1, keepdim=True)
     b /= b.norm(dim=-1, keepdim=True)
     out = angular_distance(a, b)
@@ -138,9 +138,9 @@ def test_angular_output_in_unit_interval() -> None:
     seed=st.integers(0, 10_000),
 )
 @settings(deadline=None, max_examples=20)
-def test_euclidean_symmetry_and_diagonal(n: int, s: int, d: int, seed: int) -> None:
+def test_euclidean_symmetry_and_diagonal(n: int, s: int, d: int, seed: int, device: torch.device) -> None:
     rng = torch.Generator().manual_seed(seed)
-    a = torch.randn(n, s, d, generator=rng)
+    a = torch.randn(n, s, d, generator=rng).to(device)
     dij = euclidean_distance(a, a)  # (n, n, s, s)
     # symmetry: d(a, a)[i, j] == d(a, a)[j, i].T (swap s1<->s2)
     assert_close(dij, dij.transpose(0, 1).transpose(2, 3))
@@ -159,40 +159,43 @@ def test_euclidean_symmetry_and_diagonal(n: int, s: int, d: int, seed: int) -> N
     seed=st.integers(0, 10_000),
 )
 @settings(deadline=None, max_examples=20)
-def test_kl_symmetric_non_negative(n: int, s: int, d: int, seed: int) -> None:
+def test_kl_symmetric_non_negative(n: int, s: int, d: int, seed: int, device: torch.device) -> None:
     rng = torch.Generator().manual_seed(seed)
-    a = torch.rand(n, s, d, generator=rng).clamp(min=0.05)
-    b = torch.rand(n, s, d, generator=rng).clamp(min=0.05)
+    a = torch.rand(n, s, d, generator=rng).to(device).clamp(min=0.05)
+    b = torch.rand(n, s, d, generator=rng).to(device).clamp(min=0.05)
     a, b = a / a.sum(-1, keepdim=True), b / b.sum(-1, keepdim=True)
     out = kl_symmetric_distance(a, b)
     assert (out >= -KL_FLOAT32_TOL).all()
 
 
-def test_distance_matrix_no_dtw_squeezes() -> None:
-    a = torch.randn(3, 1, 5)
-    b = torch.randn(4, 1, 5)
-    sa, sb = torch.tensor([1, 1, 1], dtype=torch.int32), torch.tensor([1, 1, 1, 1], dtype=torch.int32)
+def test_distance_matrix_no_dtw_squeezes(device: torch.device) -> None:
+    a = torch.randn(3, 1, 5, device=device)
+    b = torch.randn(4, 1, 5, device=device)
+    sa, sb = (
+        torch.tensor([1, 1, 1], dtype=torch.int32, device=device),
+        torch.tensor([1, 1, 1, 1], dtype=torch.int32, device=device),
+    )
     out = distance_matrix(a, sa, b, sb, euclidean_distance, alignment=dtw_batch, symmetric=False)
     assert out.shape == (3, 4)
     expected = euclidean_distance(a, b).squeeze(2, 3)
     assert_close(out, expected)
 
 
-def test_distance_matrix_dtw_matches_torchdtw() -> None:
+def test_distance_matrix_dtw_matches_torchdtw(device: torch.device) -> None:
     rng = torch.Generator().manual_seed(0)
-    a = torch.randn(2, 3, 4, generator=rng)
-    b = torch.randn(2, 4, 4, generator=rng)
-    sa = torch.tensor([3, 2], dtype=torch.int32)
-    sb = torch.tensor([4, 3], dtype=torch.int32)
+    a = torch.randn(2, 3, 4, generator=rng).to(device)
+    b = torch.randn(2, 4, 4, generator=rng).to(device)
+    sa = torch.tensor([3, 2], dtype=torch.int32, device=device)
+    sb = torch.tensor([4, 3], dtype=torch.int32, device=device)
     out = distance_matrix(a, sa, b, sb, euclidean_distance, alignment=dtw_batch, symmetric=False)
     expected = dtw_batch(euclidean_distance(a, b), sa, sb, symmetric=False)
     assert_close(out, expected)
 
 
-def test_distance_matrix_symmetric_flag_passed_through() -> None:
+def test_distance_matrix_symmetric_flag_passed_through(device: torch.device) -> None:
     rng = torch.Generator().manual_seed(0)
-    a = torch.randn(3, 3, 4, generator=rng)
-    sa = torch.tensor([3, 2, 3], dtype=torch.int32)
+    a = torch.randn(3, 3, 4, generator=rng).to(device)
+    sa = torch.tensor([3, 2, 3], dtype=torch.int32, device=device)
     sym = distance_matrix(a, sa, a, sa, euclidean_distance, alignment=dtw_batch, symmetric=True)
     asym = distance_matrix(a, sa, a, sa, euclidean_distance, alignment=dtw_batch, symmetric=False)
     # Same numerical contract; symmetric=True only changes how torchdtw fills the upper triangle.

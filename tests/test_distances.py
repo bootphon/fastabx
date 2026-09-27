@@ -60,10 +60,11 @@ def test_distance_new_implementation(
     d: int,
     low: float,
     high_minus_low: float,
+    device: torch.device,
 ) -> None:
     """Bit-close agreement of the new and old implementations for non-cosine distances."""
-    a = make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu")
-    b = make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu")
+    a = make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device)
+    b = make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device)
     if name.startswith("kl"):
         a, b = torch.clamp(a, min=0.1), torch.clamp(b, min=0.1)
         a, b = a / a.sum(dim=-1, keepdim=True), b / b.sum(dim=-1, keepdim=True)
@@ -79,7 +80,7 @@ def _normalize(t: Tensor) -> Tensor:
 
 @given(n1=BATCH, n2=BATCH, s1=SEQ, s2=SEQ, d=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
 def test_cosine_new_implementation_boundary(
-    n1: int, n2: int, s1: int, s2: int, d: int, low: float, high_minus_low: float
+    n1: int, n2: int, s1: int, s2: int, d: int, low: float, high_minus_low: float, device: torch.device
 ) -> None:
     """Cosine agreement in the boundary regime, including parallel/antipodal unit vectors.
 
@@ -88,14 +89,14 @@ def test_cosine_new_implementation_boundary(
     ceiling we can guarantee. The well-conditioned regime is exercised separately below
     with a much tighter check.
     """
-    a = _normalize(make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu"))
-    b = _normalize(make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu"))
+    a = _normalize(make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device))
+    b = _normalize(make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device))
     assert_close(distance_function("cosine")(a, b), cosine_distance(a, b), atol=1e-3, rtol=1.3e-6)
 
 
 @given(n1=BATCH, n2=BATCH, s1=SEQ, s2=SEQ, d=DIM, low=LOW, high_minus_low=HIGH_MINUS_LOW)
 def test_cosine_new_implementation_well_conditioned(
-    n1: int, n2: int, s1: int, s2: int, d: int, low: float, high_minus_low: float
+    n1: int, n2: int, s1: int, s2: int, d: int, low: float, high_minus_low: float, device: torch.device
 ) -> None:
     """Cosine agreement when all dot products are bounded away from ±1.
 
@@ -104,8 +105,8 @@ def test_cosine_new_implementation_well_conditioned(
     for ``d`` up to 1024, the output noise is bounded by ``3.2 * 4e-6 / pi ≈ 4e-6`` — well
     under the default ``assert_close`` atol of ``1e-5``.
     """
-    a = _normalize(make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu"))
-    b = _normalize(make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device="cpu"))
+    a = _normalize(make_tensor((n1, s1, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device))
+    b = _normalize(make_tensor((n2, s2, d), dtype=torch.float32, low=low, high=high_minus_low + low, device=device))
     # Compute the dot-product matrix and let hypothesis re-sample if it lands too close to ±1.
     dots = torch.einsum("nsd,mtd->nmst", a, b)
     assume(dots.abs().max().item() <= COSINE_WELL_CONDITIONED_DOT_BOUND)

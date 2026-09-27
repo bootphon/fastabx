@@ -52,8 +52,8 @@ Releases up to and including 0.8.0 predate this file and are documented at
   non-decreasing order (`InvalidTimesError` otherwise).
 - `Dataset.from_numpy` converts the array to a tensor directly instead of through a polars DataFrame, and so accepts
   label columns of any name. The features are stored row-major.
-- `pool_dataset` pools the items by batches of equal length, with bit-identical results, and raises
-  `InvalidFeatureDtypeError` on integer features instead of a torch `RuntimeError`.
+- `pool_dataset` pools the items by batches of equal length (hamming pooling may differ by a few ulps from pooling
+  each item), and raises `InvalidFeatureDtypeError` on integer features instead of a torch `RuntimeError`.
 - `Subsampler` raises `ValueError` for a size below 2 (previously `TypeError`), `InputTypeError` for a non-integer
   size, and accepts NumPy integers.
 - `abx_on_cell` accepts the name of a built-in alignment (`alignment="dtw"`, the default), like `Score`.

@@ -34,6 +34,9 @@ uv build                      # Build both release distributions
 CI additionally installs the wheel and source distribution into separate clean environments, then runs an import,
 a minimal end-to-end evaluation, and the installed ``fastabx --version`` command outside the checkout.
 
+On a machine with a GPU, `pytest` runs every test twice: on the CPU, then on CUDA. The device is part of each test
+id (`[cpu]` or `[cuda]`), and it is the default of the `Dataset` constructors during that run.
+
 To compare scores and runtime against a published version, run:
 
 ```bash

@@ -28,7 +28,7 @@ from fastabx.dataset import (
     read_labels,
 )
 from fastabx.utils import resolve_device
-from tests.conftest import DEVICE, accessor_data
+from tests.conftest import accessor_data
 
 
 def test_batch_repr() -> None:
@@ -147,6 +147,13 @@ def test_resolve_device() -> None:
     assert resolve_device("cuda:1") == torch.device("cuda:1")
 
 
+def test_default_device_is_the_device_of_the_run(device: torch.device) -> None:
+    """Without an explicit device, the constructors store the features on the device the tests are running on."""
+    dataset = Dataset.from_numpy(np.zeros((2, 1), dtype=np.float32), {"phone": ["a", "b"]})
+    assert dataset.accessor.device == device
+    assert accessor_data(dataset).device.type == device.type
+
+
 def test_dataset_constructors_honour_device() -> None:
     """An explicit device overrides the default, and reaches both the data and the accessor."""
     features = np.arange(12, dtype=np.float32).reshape(6, 2)
@@ -161,21 +168,21 @@ def test_dataset_constructors_honour_device() -> None:
     assert from_df.accessor.device == torch.device("cpu")
 
 
-def test_in_memory_accessor_iter_and_getitem() -> None:
+def test_in_memory_accessor_iter_and_getitem(device: torch.device) -> None:
     data = torch.arange(20, dtype=torch.float32).view(10, 2)
     indices = {i: (i, i + 1) for i in range(10)}
-    acc = InMemoryAccessor(indices, data, DEVICE)
+    acc = InMemoryAccessor(indices, data, device)
     assert len(acc) == 10
     items = list(acc)
     assert len(items) == 10
-    assert torch.equal(items[0], data[0:1].to(DEVICE))
+    assert torch.equal(items[0], data[0:1].to(device))
     with pytest.raises(IndexError):
         _ = acc[42]
     rep = repr(acc)
     assert "InMemoryAccessor" in rep
 
 
-def test_in_memory_accessor_lengths_and_batched() -> None:
+def test_in_memory_accessor_lengths_and_batched(device: torch.device) -> None:
     # Build variable-length entries.
     lengths = [2, 3, 1, 4]
     cursor = 0
@@ -184,12 +191,12 @@ def test_in_memory_accessor_lengths_and_batched() -> None:
         indices[i] = (cursor, cursor + length)
         cursor += length
     data = torch.arange(cursor * 2, dtype=torch.float32).view(cursor, 2)
-    acc = InMemoryAccessor(indices, data, DEVICE)
+    acc = InMemoryAccessor(indices, data, device)
     assert list(acc.lengths([0, 1, 2, 3])) == lengths
     batch = acc.batched([0, 1])
     assert batch.data.shape == (2, 3, 2)  # padded to max length
     # Padded entries beyond actual size are zero.
-    assert torch.equal(batch.data[0, 2], torch.zeros(2, device=DEVICE))
+    assert torch.equal(batch.data[0, 2], torch.zeros(2, device=device))
 
 
 def test_dataset_normalize_is_idempotent() -> None:
@@ -336,7 +343,7 @@ def test_find_all_files(tmp_path: Path) -> None:
     assert set(found.keys()) == {"a", "sub/b"}
 
 
-def test_load_data_from_item_missing_file_raises() -> None:
+def test_load_data_from_item_missing_file_raises(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["only_file"],
@@ -350,10 +357,10 @@ def test_load_data_from_item_missing_file_raises() -> None:
         return torch.zeros(10, 3)
 
     with pytest.raises(FileNotFoundError, match="missing"):
-        load_data_from_item(mapping, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item(mapping, labels, 50, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_feature_maker_key_error_propagates() -> None:
+def test_load_data_from_item_feature_maker_key_error_propagates(device: torch.device) -> None:
     labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.1")]})
 
     def loader(_p: Path) -> torch.Tensor:
@@ -361,10 +368,10 @@ def test_load_data_from_item_feature_maker_key_error_propagates() -> None:
         raise KeyError(msg)
 
     with pytest.raises(KeyError, match="bug inside the feature maker"):
-        load_data_from_item({"f1": Path("f1.pt")}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item({"f1": Path("f1.pt")}, labels, 50, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_non_finite_raises() -> None:
+def test_load_data_from_item_non_finite_raises(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["f1"],
@@ -378,10 +385,10 @@ def test_load_data_from_item_non_finite_raises() -> None:
         return bad
 
     with pytest.raises(NonFiniteError, match="f1"):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_features_size_error() -> None:
+def test_load_data_from_item_features_size_error(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["f1"],
@@ -394,10 +401,10 @@ def test_load_data_from_item_features_size_error() -> None:
         return torch.zeros(5, 3)  # way too short
 
     with pytest.raises(FeaturesSizeError, match="f1"):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_empty_features_error() -> None:
+def test_load_data_from_item_empty_features_error(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["f1", "f1"],
@@ -410,10 +417,10 @@ def test_load_data_from_item_empty_features_error() -> None:
         return torch.zeros(100, 3)
 
     with pytest.raises(EmptyFeaturesError):
-        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item({"f1": "anything"}, labels, 50, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_with_times_dimension_error(tmp_path: Path) -> None:
+def test_load_data_from_item_with_times_dimension_error(tmp_path: Path, device: torch.device) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
     torch.save(torch.zeros(10, 3), features_path)
@@ -435,11 +442,11 @@ def test_load_data_from_item_with_times_dimension_error(tmp_path: Path) -> None:
             "#file",
             "onset",
             "offset",
-            DEVICE,
+            device,
         )
 
 
-def test_load_data_from_item_with_times_happy_path(tmp_path: Path) -> None:
+def test_load_data_from_item_with_times_happy_path(tmp_path: Path, device: torch.device) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
     torch.save(torch.arange(30, dtype=torch.float32).view(10, 3), features_path)
@@ -460,7 +467,7 @@ def test_load_data_from_item_with_times_happy_path(tmp_path: Path) -> None:
         "#file",
         "onset",
         "offset",
-        DEVICE,
+        device,
     )
     assert set(indices.keys()) == {0, 1}
     for start, end in indices.values():
@@ -482,7 +489,7 @@ def test_from_item_with_times_end_to_end(tmp_path: Path) -> None:
     assert accessor_data(ds).shape[1] == 3
 
 
-def test_load_data_from_item_with_times_missing_file_raises() -> None:
+def test_load_data_from_item_with_times_missing_file_raises(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["only_file"],
@@ -495,10 +502,10 @@ def test_load_data_from_item_with_times_missing_file_raises() -> None:
         return torch.zeros(10, 3)
 
     with pytest.raises(FileNotFoundError, match="missing"):
-        load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset", DEVICE)
+        load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_with_times_time_maker_key_error_propagates() -> None:
+def test_load_data_from_item_with_times_time_maker_key_error_propagates(device: torch.device) -> None:
     labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.1")]})
 
     def features(_p: str) -> torch.Tensor:
@@ -510,10 +517,10 @@ def test_load_data_from_item_with_times_time_maker_key_error_propagates() -> Non
 
     paths = {"f1": "f1.pt"}
     with pytest.raises(KeyError, match="bug inside the time maker"):
-        load_data_from_item_with_times(paths, paths, labels, features, times, "#file", "onset", "offset", DEVICE)
+        load_data_from_item_with_times(paths, paths, labels, features, times, "#file", "onset", "offset", device)
 
 
-def test_load_data_from_item_with_times_non_finite_raises() -> None:
+def test_load_data_from_item_with_times_non_finite_raises(device: torch.device) -> None:
     labels = pl.DataFrame(
         {
             "#file": ["f1"],
@@ -538,11 +545,11 @@ def test_load_data_from_item_with_times_non_finite_raises() -> None:
             "#file",
             "onset",
             "offset",
-            DEVICE,
+            device,
         )
 
 
-def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
+def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path, device: torch.device) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
     torch.save(torch.zeros(3, 3), features_path)
@@ -564,18 +571,18 @@ def test_load_data_from_item_with_times_frontiers_error(tmp_path: Path) -> None:
             "#file",
             "onset",
             "offset",
-            DEVICE,
+            device,
         )
 
 
-def test_load_data_from_item_with_times_selects_first_frame_only(tmp_path: Path) -> None:
+def test_load_data_from_item_with_times_selects_first_frame_only(tmp_path: Path, device: torch.device) -> None:
     features_path = tmp_path / "f1.pt"
     times_path = tmp_path / "f1_times.pt"
     torch.save(torch.arange(15, dtype=torch.float32).view(5, 3), features_path)
     torch.save(torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0]), times_path)
     labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.0")]})
     indices, data = load_data_from_item_with_times(
-        {"f1": features_path}, {"f1": times_path}, labels, torch.load, torch.load, "#file", "onset", "offset", DEVICE
+        {"f1": features_path}, {"f1": times_path}, labels, torch.load, torch.load, "#file", "onset", "offset", device
     )
     assert indices == {0: (0, 1)}
     assert data.cpu().tolist() == [[0.0, 1.0, 2.0]]  # exactly frame 0

@@ -52,12 +52,11 @@ def pooling_function(name: PoolingName) -> Callable[[torch.Tensor], torch.Tensor
 def pool_batch(data: torch.Tensor, name: PoolingName) -> torch.Tensor:
     """Pool a ``(n, length, dim)`` batch of sequences that all have the same length, without padding.
 
-    Gives exactly the same result as :py:func:`pooling_function` applied to each sequence.
+    Gives the same result as :py:func:`pooling_function` applied to each sequence, up to rounding: depending on the
+    device and the BLAS kernels, the batched hamming product can differ from the per-item one by a few ulps.
     """
     if name == "mean":
         return data.mean(dim=1)
-    if data.size(2) == 1:  # With one dimension, the batched product rounds differently from the per-item one.
-        return torch.stack([hamming_pooling(x) for x in data])
     window = torch.hamming_window(data.size(1), periodic=False, device=data.device, dtype=data.dtype)
     return torch.matmul(window, data) / window.sum()
 

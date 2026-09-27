@@ -373,7 +373,7 @@ def test_scoring_is_invariant_to_memory_bounds(
         assert any(size is not None and size > 0 for size in expected[1])
 
 
-def test_groups_of_different_lengths_gathered_together_match_per_cell() -> None:
+def test_groups_of_different_lengths_gathered_together_match_per_cell(device: torch.device) -> None:
     """A shorter group sliced out of a longer batched gather is trimmed to its own length, without changing it."""
     rng = np.random.default_rng(4)
     phones, speakers, pieces, indices, cursor = [], [], [], {}, 0
@@ -385,14 +385,14 @@ def test_groups_of_different_lengths_gathered_together_match_per_cell() -> None:
         pieces.append(rng.standard_normal((length, 3)).astype(np.float32))
         indices[i] = (cursor, cursor + length)
         cursor += length
-    accessor = InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), torch.device("cpu"))
+    accessor = InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), device)
     task = Task(Dataset(pl.DataFrame({"phone": phones, "speaker": speakers}), accessor), on="phone", by=["speaker"])
     scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert scores == [float(abx_on_cell(cell, "euclidean")) for cell in task]
 
 
-def _sequence_dataset(distance: DistanceName) -> Dataset:
-    """Variable-length sequences on the CPU, with several items per (phone, context) so that DTW is exercised."""
+def _sequence_dataset(distance: DistanceName, device: torch.device) -> Dataset:
+    """Variable-length sequences, with several items per (phone, context) so that DTW is exercised."""
     rng = np.random.default_rng(11)
     phones, speakers, contexts, pieces, indices, cursor = [], [], [], [], {}, 0
     for i in range(48):
@@ -404,15 +404,15 @@ def _sequence_dataset(distance: DistanceName) -> Dataset:
         indices[i] = (cursor, cursor + length)
         cursor += length
     labels = pl.DataFrame({"phone": phones, "speaker": speakers, "context": contexts})
-    dataset = Dataset(labels, InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), torch.device("cpu")))
+    dataset = Dataset(labels, InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), device))
     if distance == "angular":
         dataset.normalize_()
     return dataset
 
 
 @pytest.mark.parametrize("distance", ["euclidean", "angular", "kl_symmetric"])
-def test_symmetric_groups_with_dtw_match_abx_on_cell(distance: DistanceName) -> None:
+def test_symmetric_groups_with_dtw_match_abx_on_cell(distance: DistanceName, device: torch.device) -> None:
     """Within-condition groups of variable-length sequences, aligned with DTW, match the per-cell scores exactly."""
-    task = Task(_sequence_dataset(distance), on="phone", by=["context"])
+    task = Task(_sequence_dataset(distance, device), on="phone", by=["context"])
     scores, _ = score_task(task, distance_function(distance), alignment=dtw_batch)
     assert scores == [float(abx_on_cell(cell, distance)) for cell in task]
