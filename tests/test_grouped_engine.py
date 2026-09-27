@@ -389,3 +389,30 @@ def test_groups_of_different_lengths_gathered_together_match_per_cell() -> None:
     task = Task(Dataset(pl.DataFrame({"phone": phones, "speaker": speakers}), accessor), on="phone", by=["speaker"])
     scores, _ = score_task(task, distance_function("euclidean"), alignment=dtw_batch)
     assert scores == [float(abx_on_cell(cell, "euclidean")) for cell in task]
+
+
+def _sequence_dataset(distance: DistanceName) -> Dataset:
+    """Variable-length sequences on the CPU, with several items per (phone, context) so that DTW is exercised."""
+    rng = np.random.default_rng(11)
+    phones, speakers, contexts, pieces, indices, cursor = [], [], [], [], {}, 0
+    for i in range(48):
+        length = int(rng.integers(2, 7))
+        phones.append("abc"[i % 3])
+        speakers.append(f"s{(i // 6) % 2}")
+        contexts.append(f"c{(i // 3) % 2}")
+        pieces.append(_normalize_for_distance(rng.standard_normal((length, 4)), distance))
+        indices[i] = (cursor, cursor + length)
+        cursor += length
+    labels = pl.DataFrame({"phone": phones, "speaker": speakers, "context": contexts})
+    dataset = Dataset(labels, InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), torch.device("cpu")))
+    if distance == "angular":
+        dataset.normalize_()
+    return dataset
+
+
+@pytest.mark.parametrize("distance", ["euclidean", "angular", "kl_symmetric"])
+def test_symmetric_groups_with_dtw_match_abx_on_cell(distance: DistanceName) -> None:
+    """Within-condition groups of variable-length sequences, aligned with DTW, match the per-cell scores exactly."""
+    task = Task(_sequence_dataset(distance), on="phone", by=["context"])
+    scores, _ = score_task(task, distance_function(distance), alignment=dtw_batch)
+    assert scores == [float(abx_on_cell(cell, distance)) for cell in task]
