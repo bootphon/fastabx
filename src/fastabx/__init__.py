@@ -1,4 +1,4 @@
-"""Full ABX."""
+"""Efficient computation of ABX discriminability."""
 
 from fastabx.accessor import Accessor, Batch, InMemoryAccessor
 from fastabx.alignment import Alignment, AlignmentName

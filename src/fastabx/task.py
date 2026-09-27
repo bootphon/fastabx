@@ -30,7 +30,7 @@ def task_cells(
         cells = cells_on_by_across(dataset.labels.lazy(), on, by, across)
     else:
         cells = cells_on_by(dataset.labels.lazy(), on, by)
-    if subsampler:
+    if subsampler is not None:
         cells = subsampler(cells, with_across=bool(across))
     return cells.with_columns(
         description=cell_description(on, by, across),
@@ -79,7 +79,7 @@ class Task:
             by=by,
             across=across,
             is_symmetric=not bool(across),
-            subsampler_description=subsampler.description(with_across=bool(across)) if subsampler else "",
+            subsampler_description=subsampler.description(with_across=bool(across)) if subsampler is not None else "",
         )
 
     def _set_parts(
