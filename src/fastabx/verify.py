@@ -291,12 +291,22 @@ def verify_precomputed_cells(cells: pl.DataFrame, num_items: int, *, is_symmetri
         raise PrecomputedCellsError(msg)
 
 
+def is_integer(value: object) -> bool:
+    """Whether ``value`` is an integer, Python or NumPy, but not a boolean."""
+    return isinstance(value, Integral) and not isinstance(value, bool)
+
+
 def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
-    """All sizes must be integers greater than or equal to 2."""
-    if not all(isinstance(s, int) and s > 1 for s in sizes if s is not None):
-        msg = "sizes should be integers >= 2"
-        raise TypeError(msg)
-    if not isinstance(seed, int):
+    """Sizes must be ``None`` or integers of at least ``MIN_A_LEN``, and the seed an integer."""
+    for size in sizes:
+        if size is None:
+            continue
+        if not is_integer(size):
+            raise InputTypeError(int, type(size))
+        if size < MIN_A_LEN:
+            msg = f"Subsampling sizes must be at least {MIN_A_LEN} (a cell needs two items to compare), not {size}"
+            raise ValueError(msg)
+    if not is_integer(seed):
         raise InputTypeError(int, type(seed))
 
 

@@ -39,7 +39,7 @@ def test_distance_function_cosine_and_angular_alias() -> None:
 
 
 def test_distance_function_unknown_raises() -> None:
-    with pytest.raises(ValueError, match="bogus"):
+    with pytest.raises(ValueError, match=r"'bogus'\. Choose euclidean"):
         distance_function("bogus")  # ty: ignore[invalid-argument-type]
 
 

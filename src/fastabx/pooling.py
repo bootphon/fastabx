@@ -45,7 +45,8 @@ def pooling_function(name: PoolingName) -> Callable[[torch.Tensor], torch.Tensor
         case "hamming":
             return hamming_pooling
         case _:
-            raise ValueError(name)
+            msg = f"Unknown pooling: {name!r}. Choose mean or hamming."
+            raise ValueError(msg)
 
 
 def pool_batch(data: torch.Tensor, name: PoolingName) -> torch.Tensor:
@@ -63,7 +64,7 @@ def pool_batch(data: torch.Tensor, name: PoolingName) -> torch.Tensor:
 
 @dataclass
 class PooledDataset(Dataset):
-    """Pooled dataset."""
+    """Dataset whose items have been pooled into a single frame each. Built by :py:func:`pool_dataset`."""
 
     pooling: PoolingName
 

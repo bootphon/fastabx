@@ -99,6 +99,14 @@ A mismatch raises a :exc:`FileNotFoundError` saying how many files were found ou
 If your item file uses bare utterance ids but your features are in per-speaker subdirectories, flatten the
 directory, or rewrite the column, whichever is easier.
 
+``extension`` is matched as a filename suffix, so it must contain a dot: ``".pt"`` or ``"_features.pt"``, but
+not ``"pt"``, which would also match ``script``.
+
+:meth:`.Dataset.from_item_and_units` matches differently: all the units are in one JSONL file, and each line is
+identified by the **base name** of its audio path, without directories nor extension. The audio path
+``/data/dev-clean/84/121123/84-121123-0000.flac`` is the ``#file`` ``84-121123-0000``, so two lines whose audio
+files only differ by their directory are rejected as duplicates.
+
 Each matched file is passed to ``feature_maker``, which defaults to :func:`torch.load` and must return a 2D
 tensor of shape ``(frames, dimension)``. Pass your own if you prefer to compute the representations on the fly
 instead of loading them from disk, see the tutorial :doc:`examples/external` with the model called inside

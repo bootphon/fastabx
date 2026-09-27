@@ -96,8 +96,8 @@ Building a Task
    together. Otherwise, the corpus is too small for the conditions asked for.
 
 :exc:`.InputTypeError`
-   A condition is not a string, or a :class:`.Subsampler` got a non-integer ``seed``. The subsampler also
-   rejects sizes below 2: a cell needs at least two items to compare.
+   A condition is not a string, or a :class:`.Subsampler` got a non-integer size or ``seed``. The subsampler
+   also rejects sizes below 2 with a ``ValueError``: a cell needs at least two items to compare.
 
 :exc:`.PrecomputedCellsError`
    From :meth:`.Task.from_cells`. The message says which rule was broken: a missing column among ``header``,

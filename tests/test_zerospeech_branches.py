@@ -91,13 +91,13 @@ def test_zerospeech_abx_validates_subsampler_before_loading(tmp_path: Path) -> N
     """A bad ``max_size_group`` must fail before the features are read, not after.
 
     Loading a real corpus takes minutes; pointing at a directory with no features at all means the
-    only way this raises ``TypeError`` rather than ``FileNotFoundError`` is if the subsampler is
+    only way this raises ``ValueError`` rather than ``FileNotFoundError`` is if the subsampler is
     validated first.
     """
     item, _ = _build_tiny_corpus(tmp_path)
     empty = tmp_path / "no-features"
     empty.mkdir()
-    with pytest.raises(TypeError, match="sizes should be integers >= 2"):
+    with pytest.raises(ValueError, match="at least 2"):
         zerospeech_abx(item, empty, max_size_group=1, max_x_across=None, distance="euclidean")
 
 

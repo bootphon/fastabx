@@ -68,9 +68,9 @@ class Subsampler:
 
     def __init__(self, max_size_group: int | None, max_x_across: int | None, seed: int = 0) -> None:
         verify_subsampler_params(max_size_group, max_x_across, seed=seed)
-        self.max_size_group = max_size_group
-        self.max_x_across = max_x_across
-        self.seed = seed
+        self.max_size_group = None if max_size_group is None else int(max_size_group)
+        self.max_x_across = None if max_x_across is None else int(max_x_across)
+        self.seed = int(seed)
 
     def __call__(self, lazy_cells: pl.LazyFrame, *, with_across: bool) -> pl.LazyFrame:
         """Subsample the cells."""

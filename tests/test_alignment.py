@@ -129,3 +129,13 @@ def test_abx_on_cell_accepts_alignment(seq_dataset: Dataset) -> None:
     assert cell.needs_alignment
     assert_close(abx_on_cell(cell, "euclidean", alignment=dtw_batch), abx_on_cell(cell, "euclidean"))
     assert_close(abx_on_cell(cell, "euclidean", alignment=alignment_function("dtw")), abx_on_cell(cell, "euclidean"))
+
+
+def test_abx_on_cell_accepts_alignment_names(seq_dataset: Dataset) -> None:
+    cell = Task(seq_dataset, on="phone")[0]
+    assert cell.needs_alignment
+    by_name = abx_on_cell(cell, "euclidean", alignment="dtw")
+    assert torch.equal(by_name, abx_on_cell(cell, "euclidean"))
+    assert torch.equal(by_name, abx_on_cell(cell, "euclidean", alignment=dtw_batch))
+    with pytest.raises(ValueError, match="Unknown alignment"):
+        abx_on_cell(cell, "euclidean", alignment="bogus")  # ty: ignore[invalid-argument-type]

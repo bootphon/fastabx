@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 import torch
 
-from fastabx import Dataset
+from fastabx import Dataset, PooledDataset
 from fastabx.accessor import Batch, InMemoryAccessor, normalize_with_singularity
 from fastabx.dataset import (
     EmptyFeaturesError,
@@ -556,3 +556,45 @@ def test_tabular_non_finite_features_rejected(value: float, constructor: str) ->
     else:
         with pytest.raises(NonFiniteError, match="tabular input"):
             Dataset.from_dataframe({"feature": [0.0, value], "phone": ["a", "b"]}, "feature", dtype=torch.float32)
+
+
+def test_find_all_files_extension_is_a_suffix_with_a_dot(tmp_path: Path) -> None:
+    (tmp_path / "a_features.pt").write_bytes(b"x")
+    (tmp_path / "script").write_bytes(b"x")
+    (tmp_path / "dir.pt").mkdir()
+    assert set(find_all_files(tmp_path, "_features.pt")) == {"a"}
+    assert set(find_all_files(tmp_path, ".pt")) == {"a_features"}  # The directory is not a feature file.
+    with pytest.raises(ValueError, match=r"must contain a dot, such as '\.pt'"):
+        find_all_files(tmp_path, "pt")
+
+
+def test_from_item_and_units_matches_base_names(tmp_path: Path) -> None:
+    item = tmp_path / "data.item"
+    item.write_text("#file onset offset phone\nf1 0.00 0.10 a\nf2 0.00 0.10 b\n")
+    units = tmp_path / "units.jsonl"
+    lines = [{"audio": "/data/dev/f1.flac", "units": [1] * 10}, {"audio": "C:\\data\\dev\\f2.wav", "units": [2] * 10}]
+    units.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
+    dataset = Dataset.from_item_and_units(item, units, 50, device="cpu", progress=False)
+    assert accessor_data(dataset)[:, 0].tolist() == [1] * 5 + [2] * 5
+
+
+def test_from_item_and_units_lists_duplicates(tmp_path: Path) -> None:
+    item = tmp_path / "data.item"
+    item.write_text("#file onset offset phone\nf 0.0 0.1 a\n")
+    units = tmp_path / "units.jsonl"
+    units.write_text(
+        '{"audio":"a/f.wav","units":[1]}\n{"audio":"b/f.wav","units":[2]}\n{"audio":"g.wav","units":[3]}\n'
+    )
+    with pytest.raises(InvalidItemFileError, match=r"\['f'\]"):
+        Dataset.from_item_and_units(item, units, 50, progress=False)
+
+
+def test_constructors_return_the_subclass_they_are_called_on() -> None:
+    class LabelledDataset(Dataset):
+        pass
+
+    dataset = LabelledDataset.from_numpy(np.zeros((2, 1), dtype=np.float32), {"phone": ["a", "b"]}, device="cpu")
+    assert type(dataset) is LabelledDataset
+    # PooledDataset has a required `pooling` field, so it cannot be built from raw features by mistake.
+    with pytest.raises(TypeError, match="pooling"):
+        PooledDataset.from_numpy(np.zeros((2, 1), dtype=np.float32), {"phone": ["a", "b"]}, device="cpu")

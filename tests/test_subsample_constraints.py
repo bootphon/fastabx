@@ -75,12 +75,21 @@ def test_subsampler_disabled_passes_through() -> None:
 
 
 def test_subsampler_rejects_invalid_sizes() -> None:
-    with pytest.raises(TypeError):
-        Subsampler(max_size_group=1, max_x_across=None)  # must be > 1
-    with pytest.raises(TypeError):
-        Subsampler(max_size_group="oops", max_x_across=None)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="at least 2"):
+        Subsampler(max_size_group=1, max_x_across=None)
+    with pytest.raises(ValueError, match="at least 2"):
+        Subsampler(max_size_group=10, max_x_across=0)
+    for size in ("oops", 2.5, True):
+        with pytest.raises(InputTypeError):
+            Subsampler(max_size_group=size, max_x_across=None)  # ty: ignore[invalid-argument-type]
     with pytest.raises(InputTypeError):
         Subsampler(max_size_group=10, max_x_across=5, seed=0.5)  # ty: ignore[invalid-argument-type]
+
+
+def test_subsampler_accepts_numpy_integers() -> None:
+    subsampler = Subsampler(np.int64(10), np.int32(5), seed=np.int64(3))  # ty: ignore[invalid-argument-type]
+    assert (subsampler.max_size_group, subsampler.max_x_across, subsampler.seed) == (10, 5, 3)
+    assert all(type(v) is int for v in (subsampler.max_size_group, subsampler.max_x_across, subsampler.seed))
 
 
 def test_constraints_all_different_builds_expressions() -> None:

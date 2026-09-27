@@ -47,6 +47,12 @@ Releases up to and including 0.8.0 predate this file and are documented at
   label columns of any name. The features are stored row-major.
 - `pool_dataset` pools the items by batches of equal length, with bit-identical results, and raises
   `InvalidFeatureDtypeError` on integer features instead of a torch `RuntimeError`.
+- `Subsampler` raises `ValueError` for a size below 2 (previously `TypeError`), `InputTypeError` for a non-integer
+  size, and accepts NumPy integers.
+- `abx_on_cell` accepts the name of a built-in alignment (`alignment="dtw"`, the default), like `Score`.
+- The `Dataset.from_*` constructors return an instance of the class they are called on. `PooledDataset` is only
+  built by `pool_dataset`: its inherited constructors raise `TypeError` instead of returning a plain `Dataset`.
+- Unknown distance and pooling names raise a `ValueError` that lists the valid names.
 
 - Tabular constructors preserve floating input precision by default. Pass `dtype=torch.float32` for the previous
   conversion behavior. Normalization and pooling require floating-point features; distance kernels defer dtype compatibility to PyTorch.
@@ -68,6 +74,10 @@ Releases up to and including 0.8.0 predate this file and are documented at
   from every cell.
 - Item-file labels are no longer merged when they look like the same number (speakers `01` and `1`), and a
   label that stops looking numeric after the first 100 rows no longer fails to parse.
+- `extension` must contain a dot: `"pt"` used to also match files such as `script`. Directories whose name ends
+  with the extension are no longer taken for feature files.
+- `Dataset.from_item_and_units` also strips Windows-style directories from the audio paths, and its duplicate
+  identifiers error lists the duplicates. Its matching on base names is documented.
 - Constraints strip exactly one `_a`/`_b`/`_x` suffix, so labels ending like a suffix (`mic_b`) can be
   constrained. A constraint column without a suffix, or naming an unknown label, raises a `NoConstraintsError`
   that names it. Constraints evaluating to null mark the triplet as invalid, explicitly.

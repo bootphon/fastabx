@@ -33,7 +33,7 @@ def test_pooling_function_mean_and_hamming() -> None:
 
 
 def test_pooling_function_unknown_raises() -> None:
-    with pytest.raises(ValueError, match="bogus"):
+    with pytest.raises(ValueError, match=r"'bogus'\. Choose mean or hamming"):
         pooling_function("bogus")  # ty: ignore[invalid-argument-type]
 
 

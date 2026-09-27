@@ -6,9 +6,8 @@ from typing import Literal
 
 import torch
 from torch import Tensor
-from torchdtw import dtw_batch
 
-from fastabx.alignment import Alignment
+from fastabx.alignment import Alignment, AlignmentName, alignment_function
 from fastabx.cell import Cell
 
 __all__ = ["Distance", "DistanceName", "IdenticalDistanceDimensionError", "NaNDistanceError", "abx_on_cell"]
@@ -38,7 +37,11 @@ def distance_function(distance: DistanceName | Distance) -> Distance:
         case "identical":
             return identical_distance
         case _:
-            raise ValueError(distance)
+            msg = (
+                f"Unknown distance: {distance!r}. Choose euclidean, cosine, angular, kl_symmetric or identical, "
+                f"or pass a callable."
+            )
+            raise ValueError(msg)
 
 
 def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tensor:
@@ -141,7 +144,7 @@ def abx_on_cell(
     cell: Cell,
     distance_name: DistanceName | Distance = "angular",
     *,
-    alignment: Alignment = dtw_batch,
+    alignment: AlignmentName | Alignment = "dtw",
 ) -> torch.Tensor:
     """Compute the ABX of a ``cell`` using the given ``distance``.
 
@@ -158,14 +161,16 @@ def abx_on_cell(
     :param distance_name: The distance to use, either the name of a built-in one ("euclidean", "cosine",
         "angular", "kl_symmetric", "identical") or a custom :py:class:`.Distance` callable.
         Defaults to "angular".
-    :param alignment: How to align sequences that span several frames, as an :py:class:`.Alignment` callable.
-        Defaults to ``torchdtw.dtw_batch``. Never called on the distance matrices whose lattice is ``1x1``.
+    :param alignment: How to align sequences that span several frames, either the name of a built-in alignment
+        ("dtw") or a custom :py:class:`.Alignment`, as in :py:class:`.Score`. Defaults to "dtw". Never called on the
+        distance matrices whose lattice is ``1x1``.
     """
     distance = distance_function(distance_name)
+    align = alignment_function(alignment)
     symmetric = cell.is_symmetric
     x, a, b = cell.x, cell.a, cell.b
-    dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, alignment=alignment, symmetric=symmetric)
-    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
+    dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, alignment=align, symmetric=symmetric)
+    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=align, symmetric=False)
     verify_no_nan_distance(dxa, dxb)
     if symmetric:
         dxa.fill_diagonal_(float("inf"))

@@ -37,9 +37,18 @@ def _is_pandas_dataframe(obj: object) -> bool:
 
 
 def find_all_files(root: str | Path, extension: str) -> dict[str, Path]:
-    """Recursively find all files with the given `extension` in `root`."""
+    """Recursively find all files whose name ends with ``extension`` in ``root``.
+
+    Each one is keyed by its path relative to ``root``, in POSIX form, without ``extension``. The extension is a
+    filename suffix, so it must contain a dot: ``".pt"``, or ``"_features.pt"``, but not ``"pt"``, which would also
+    match ``script``.
+    """
+    if "." not in extension:
+        msg = f"`extension` must contain a dot, such as '.{extension}', not {extension!r}: it is a filename suffix."
+        raise ValueError(msg)
     r = Path(root)
-    return dict(sorted((p.relative_to(r).as_posix().removesuffix(extension), p) for p in r.rglob(f"*{extension}")))
+    files = (p for p in r.rglob(f"*{extension}") if p.is_file())
+    return dict(sorted((p.relative_to(r).as_posix().removesuffix(extension), p) for p in files))
 
 
 class InvalidItemFileError(Exception):
@@ -396,7 +405,7 @@ class Dataset:
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
         progress: bool = True,
-    ) -> "Dataset":
+    ) -> Self:
         """Create a dataset from an item file.
 
         See :doc:`/items` for the format of the item file, and how ``#file`` is matched to the feature files.
@@ -410,7 +419,9 @@ class Dataset:
             If it is not an integer, pass it as a string to avoid floating-point errors.
         :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
         :param extension: The filename extension of the files to process in ``root``, default is ".pt".
-        :param file_col: Column in the item file that contains the audio file names, default is "#file".
+            It must contain a dot.
+        :param file_col: Column in the item file that contains the file identifiers: the path of each feature
+            file relative to ``root``, without the extension. Default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
         :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
@@ -433,7 +444,7 @@ class Dataset:
             dtype=dtype,
             progress=progress,
         )
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
+        return cls(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_item_with_times(
@@ -451,7 +462,7 @@ class Dataset:
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
         progress: bool = True,
-    ) -> "Dataset":
+    ) -> Self:
         """Create a dataset from an item file.
 
         Use arrays containing the times associated to the features instead of a given frequency.
@@ -489,7 +500,7 @@ class Dataset:
             dtype=dtype,
             progress=progress,
         )
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
+        return cls(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_item_and_units(
@@ -506,16 +517,19 @@ class Dataset:
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
         progress: bool = True,
-    ) -> "Dataset":
+    ) -> Self:
         """Create a dataset from an item file with the units all described in a single JSONL file.
 
-        See :doc:`/items` for the format of the item file.
+        See :doc:`/items` for the format of the item file. Unlike :py:meth:`from_item`, which matches the path of
+        each feature file relative to a root directory, the units are matched on the **base name** of their
+        ``audio_key`` path, without directories nor extension: ``/data/dev-clean/84/84-121123-0000.flac`` is the
+        ``#file`` ``84-121123-0000``. Those base names must therefore be unique in the units file.
 
         :param item: Path to the item file.
         :param units: Path to the JSONL file containing the units.
         :param frequency: The feature frequency, in Hz.
             If it is not an integer, pass it as a string to avoid floating-point errors.
-        :param audio_key: Key in the JSONL file that contains the audio file names (str), default is "audio".
+        :param audio_key: Key in the JSONL file that contains the audio file paths (str), default is "audio".
         :param units_key: Key in the JSONL file that contains the units (list[int]), default is "units".
         :param file_col: Column in the item file that contains the audio file names, default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
@@ -528,12 +542,15 @@ class Dataset:
         labels = read_labels(item, file_col, onset_col, offset_col)
         units_df = (
             pl.scan_ndjson(units)
-            .with_columns(pl.col(audio_key).str.split("/").list.last().str.replace(r"\.[^.]+$", ""))
+            .with_columns(pl.col(audio_key).str.replace(r"^.*[/\\]", "").str.replace(r"\.[^.]+$", ""))
             .collect()
         )
 
-        if units_df[audio_key].is_duplicated().any():
-            msg = "Units contain duplicate audio identifiers after removing directories and extensions."
+        if duplicated := sorted(units_df.filter(pl.col(audio_key).is_duplicated())[audio_key].unique()):
+            msg = (
+                f"Units contain duplicate audio identifiers after removing directories and extensions: "
+                f"{duplicated[:10]}{' ...' if len(duplicated) > 10 else ''}. Units are matched on base names only."
+            )
             raise InvalidItemFileError(msg)
 
         def feature_maker(idx: int) -> torch.Tensor:
@@ -553,7 +570,7 @@ class Dataset:
             dtype=dtype,
             progress=progress,
         )
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
+        return cls(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_dataframe(
@@ -564,7 +581,7 @@ class Dataset:
         separator: str = ",",
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> "Dataset":
+    ) -> Self:
         """Create a dataset from any tabular source containing both the labels and the features.
 
         Accepted inputs for ``source``:
@@ -599,7 +616,7 @@ class Dataset:
         features = df.select(feature_columns)
         resolved = resolve_device(device)
         data = prepare_features(features.to_torch(), resolved, dtype)
-        return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
+        return cls(labels=labels, accessor=InMemoryAccessor(indices, data, resolved))
 
     @classmethod
     def from_numpy(
@@ -609,7 +626,7 @@ class Dataset:
         *,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> "Dataset":
+    ) -> Self:
         """Create a dataset from the features and the labels.
 
         Despite the name, ``features`` is not restricted to a numpy array: any input accepted by ``np.asarray``
@@ -638,4 +655,4 @@ class Dataset:
         resolved = resolve_device(device)
         data = prepare_features(torch.tensor(array), resolved, dtype)  # A copy: the dataset never aliases `features`.
         indices = {i: (i, i + 1) for i in range(len(labels_df))}
-        return Dataset(labels=labels_df, accessor=InMemoryAccessor(indices, data, resolved))
+        return cls(labels=labels_df, accessor=InMemoryAccessor(indices, data, resolved))
