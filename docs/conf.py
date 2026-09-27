@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TypeAliasType
 
 from packaging.version import parse
+from sphinx.application import Sphinx
+from sphinx.pycode import ModuleAnalyzer
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -99,3 +101,31 @@ def linkcode_resolve(domain: str, info: dict) -> str | None:
     source, start = inspect.getsourcelines(obj)
     end = start + len(source) - 1
     return f"https://github.com/bootphon/fastabx/blob/{linkcode_ref}/src/fastabx/{file}#L{start}-L{end}"
+
+
+def hide_zerospeech_overloads(_app: Sphinx) -> None:
+    """Document ``zerospeech_abx`` with its implementation signature instead of its overloads."""
+    analyzer = ModuleAnalyzer.for_module("fastabx.zerospeech")
+    analyzer.analyze()
+    analyzer.overloads.pop("zerospeech_abx", None)
+
+
+def show_unset_as_none(
+    _app: Sphinx,
+    _what: str,
+    name: str,
+    _obj: object,
+    _options: object,
+    signature: str | None,
+    return_annotation: str,
+) -> tuple[str, str] | None:
+    """Show the ``_UNSET`` sentinel default of ``max_x_across`` as ``None``."""
+    if name == "fastabx.zerospeech_abx" and signature is not None:
+        return signature.replace("max_x_across=_UNSET", "max_x_across=None"), return_annotation
+    return None
+
+
+def setup(app: Sphinx) -> None:
+    """Connect the handlers above."""
+    app.connect("builder-inited", hide_zerospeech_overloads)
+    app.connect("autodoc-process-signature", show_unset_as_none)
