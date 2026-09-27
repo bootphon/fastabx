@@ -97,11 +97,10 @@ def score_task(
     triplet get a ``None`` score and size.
     """
     reducer = GroupReducer(len(task), constrained=constraints is not None)
-    pbar = tqdm(total=len(task), desc="Scoring each cell", disable=hide_progress(progress=progress))
-    for group in prefetch(group_cells(task, constraints=constraints)):
-        reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
-        pbar.update(len(group.positions))
-    pbar.close()
+    with tqdm(total=len(task), desc="Scoring each cell", disable=hide_progress(progress=progress)) as pbar:
+        for group in prefetch(group_cells(task, constraints=constraints)):
+            reducer.add(group, distance, alignment=alignment, is_symmetric=task.is_symmetric)
+            pbar.update(len(group.positions))
     return reducer.finalize()
 
 
@@ -155,7 +154,7 @@ class Score:
             raise IncompatibleNormalizationError(display_name(distance_name))
         scores, sizes = score_task(task, distance, alignment=align, constraints=constraints, progress=progress)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
-            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int64)
+            score=pl.Series(scores, dtype=pl.Float64), size=pl.Series(sizes, dtype=pl.Int64)
         )
 
     @property

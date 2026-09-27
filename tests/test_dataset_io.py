@@ -24,6 +24,7 @@ from fastabx.dataset import (
     item_frontiers,
     load_data_from_item,
     load_data_from_item_with_times,
+    parse_times,
     read_labels,
 )
 from fastabx.utils import resolve_device
@@ -63,6 +64,14 @@ def test_from_dataframe_csv_path(tmp_path: Path) -> None:
     assert ds.labels.columns == ["phone"]
 
 
+def test_from_dataframe_csv_labels_read_as_strings(tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x0,speaker\n1.5,01\n2.5,1\n")
+    ds = Dataset.from_dataframe(path, feature_columns="x0", device="cpu")
+    assert ds.labels["speaker"].to_list() == ["01", "1"]
+    assert accessor_data(ds).dtype == torch.float64
+
+
 def test_from_dataframe_pandas_basic() -> None:
     pd = pytest.importorskip("pandas")
     # All columns are simple numpy-backed dtypes so polars doesn't require pyarrow.
@@ -73,7 +82,7 @@ def test_from_dataframe_pandas_basic() -> None:
 
 
 def test_from_dataframe_invalid_source_raises() -> None:
-    with pytest.raises(ValueError, match="not valid"):
+    with pytest.raises(TypeError, match="not valid"):
         Dataset.from_dataframe(42, feature_columns=["x0"])  # ty: ignore[invalid-argument-type]
 
 
@@ -233,6 +242,59 @@ def test_read_labels_jsonl(tmp_path: Path) -> None:
     assert df.columns == ["#file", "onset", "offset", "phone"]
 
 
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (["0.1", "0.25"], [Decimal("0.10"), Decimal("0.25")]),
+        (["0", "0"], [Decimal(0), Decimal(0)]),
+        (["0.0", "-0", None], [Decimal(0), Decimal(0), None]),
+        ([None, None], [None, None]),
+    ],
+)
+def test_parse_times(values: list[str | None], expected: list[Decimal | None]) -> None:
+    parsed = parse_times(pl.Series("onset", values, dtype=pl.String))
+    assert parsed.dtype == pl.Decimal
+    assert parsed.to_list() == expected
+
+
+@pytest.mark.parametrize("value", ["1e-3", "5E-05", "+2.5e1", ".5e2"])
+def test_parse_times_rejects_scientific_notation(value: str) -> None:
+    with pytest.raises(InvalidItemFileError, match="scientific notation"):
+        parse_times(pl.Series("onset", ["0.1", value]))
+
+
+def test_from_item_with_every_onset_at_zero(tmp_path: Path) -> None:
+    features = tmp_path / "features"
+    features.mkdir()
+    for name in ("f1", "f2"):
+        torch.save(torch.randn(10, 3), features / f"{name}.pt")
+    item = tmp_path / "data.item"
+    item.write_text("#file onset offset phone\nf1 0 0.1 a\nf2 0 0.12 b\n")
+    ds = Dataset.from_item(item, features, 50, device="cpu", progress=False)
+    assert ds.labels["onset"].to_list() == [Decimal(0), Decimal(0)]
+    assert [len(x) for x in ds.accessor] == [5, 6]
+
+
+def test_default_loaders_map_onto_cpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files saved from a GPU must load on a CPU-only machine: the default loaders pass ``map_location="cpu"``."""
+    for root in ("features", "times"):
+        (tmp_path / root).mkdir()
+    torch.save(torch.randn(10, 3), tmp_path / "features" / "f1.pt")
+    torch.save(torch.arange(10, dtype=torch.float64) / 50, tmp_path / "times" / "f1.pt")
+    item = tmp_path / "data.item"
+    item.write_text("#file onset offset phone\nf1 0 0.1 a\n")
+    load, locations = torch.load, []
+
+    def spy(path: Path, **kwargs: object) -> torch.Tensor:
+        locations.append(kwargs.get("map_location"))
+        return load(path, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(torch, "load", spy)
+    Dataset.from_item(item, tmp_path / "features", 50, device="cpu", progress=False)
+    Dataset.from_item_with_times(item, tmp_path / "features", tmp_path / "times", device="cpu", progress=False)
+    assert locations == ["cpu"] * 3
+
+
 def test_read_labels_unsupported_extension(tmp_path: Path) -> None:
     path = tmp_path / "data.bogus"
     path.write_text("noop")
@@ -289,6 +351,17 @@ def test_load_data_from_item_missing_file_raises() -> None:
 
     with pytest.raises(FileNotFoundError, match="missing"):
         load_data_from_item(mapping, labels, 50, loader, "#file", "onset", "offset", DEVICE)
+
+
+def test_load_data_from_item_feature_maker_key_error_propagates() -> None:
+    labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.1")]})
+
+    def loader(_p: Path) -> torch.Tensor:
+        msg = "bug inside the feature maker"
+        raise KeyError(msg)
+
+    with pytest.raises(KeyError, match="bug inside the feature maker"):
+        load_data_from_item({"f1": Path("f1.pt")}, labels, 50, loader, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_non_finite_raises() -> None:
@@ -423,6 +496,21 @@ def test_load_data_from_item_with_times_missing_file_raises() -> None:
 
     with pytest.raises(FileNotFoundError, match="missing"):
         load_data_from_item_with_times({}, {}, labels, loader, loader, "#file", "onset", "offset", DEVICE)
+
+
+def test_load_data_from_item_with_times_time_maker_key_error_propagates() -> None:
+    labels = pl.DataFrame({"#file": ["f1"], "onset": [Decimal("0.0")], "offset": [Decimal("0.1")]})
+
+    def features(_p: str) -> torch.Tensor:
+        return torch.zeros(10, 3)
+
+    def times(_p: str) -> torch.Tensor:
+        msg = "bug inside the time maker"
+        raise KeyError(msg)
+
+    paths = {"f1": "f1.pt"}
+    with pytest.raises(KeyError, match="bug inside the time maker"):
+        load_data_from_item_with_times(paths, paths, labels, features, times, "#file", "onset", "offset", DEVICE)
 
 
 def test_load_data_from_item_with_times_non_finite_raises() -> None:

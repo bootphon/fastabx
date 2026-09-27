@@ -135,6 +135,12 @@ def test_task_repr_reflects_conditions(tiny_dataset: Dataset) -> None:
     assert "maximal" in rep  # subsampler description
 
 
+@pytest.mark.parametrize("conditions", [{"by": "context"}, {"across": "speaker"}])
+def test_task_rejects_single_string_conditions(tiny_dataset: Dataset, conditions: dict[str, str]) -> None:
+    with pytest.raises(InputTypeError):
+        Task(tiny_dataset, on="phone", **conditions)  # ty: ignore[invalid-argument-type]
+
+
 def test_task_is_symmetric_iff_no_across(tiny_dataset: Dataset) -> None:
     sym = Task(tiny_dataset, on="phone", by=["context"])
     asym = Task(tiny_dataset, on="phone", across=["speaker"])

@@ -3,6 +3,7 @@
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from pathlib import Path
 from typing import Any, Self
 
@@ -21,7 +22,6 @@ __all__ = [
     "EmptyFeaturesError",
     "FeaturesSizeError",
     "FrequencyTypeError",
-    "InMemoryAccessor",
     "InvalidItemFileError",
     "InvalidTimesError",
     "NonFiniteError",
@@ -55,6 +55,26 @@ class InvalidItemFileError(Exception):
     """The item file is invalid."""
 
 
+def parse_times(column: pl.Series) -> pl.Series:
+    """Parse a column of onsets or offsets, written as strings, into decimals.
+
+    The precision and scale are inferred from the values, except when none of them has a nonzero digit: polars
+    cannot infer a decimal type from zeros alone, and every such value is exactly representable with scale 0.
+    Scientific notation is rejected, since the decimal parser would silently read ``1e-3`` as 0.
+    """
+    scientific = column.str.contains(r"^[+-]?(\d+\.?\d*|\.\d+)[eE][+-]?\d+$")
+    if scientific.any():
+        example = column.filter(scientific)[0]
+        msg = (
+            f"Column {column.name!r} holds times in scientific notation, such as {example!r}. "
+            f"Write the times as plain decimal numbers instead, e.g. '0.00005' rather than '5e-05'."
+        )
+        raise InvalidItemFileError(msg)
+    if not column.str.contains("[1-9]").any():
+        return column.str.to_decimal(scale=0)
+    return column.str.to_decimal(inference_length=len(column))
+
+
 def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str) -> pl.DataFrame:
     """Return the labels from the path to the item file.
 
@@ -78,10 +98,21 @@ def read_labels(item: str | Path, file_col: str, onset_col: str, offset_col: str
     if missing := {file_col, onset_col, offset_col} - set(df.columns):
         msg = f"Item metadata is missing required columns: {sorted(missing)}"
         raise InvalidItemFileError(msg)
-    return df.with_columns(
-        df[onset_col].str.to_decimal(inference_length=len(df)),
-        df[offset_col].str.to_decimal(inference_length=len(df)),
-    )
+    return df.with_columns(parse_times(df[onset_col]), parse_times(df[offset_col]))
+
+
+def read_csv_labels_as_strings(
+    source: str | Path, separator: str, feature_columns: str | Collection[str]
+) -> pl.DataFrame:
+    """Read a CSV file of labels and features, with every label column read as a string.
+
+    Only the feature columns have their types inferred: as in :py:func:`read_labels`, inferring the types of the
+    labels would merge distinct labels such as speakers ``01`` and ``1``.
+    """
+    features = {feature_columns} if isinstance(feature_columns, str) else set(feature_columns)
+    columns = pl.scan_csv(source, separator=separator).collect_schema().names()
+    labels = {name: pl.String for name in columns if name not in features}
+    return pl.read_csv(source, separator=separator, schema_overrides=labels)
 
 
 class FrequencyTypeError(TypeError):
@@ -251,10 +282,11 @@ def load_data_from_item[T](
         disable=hide_progress(progress=progress),
     ):
         try:
-            dim = None if data is None else data.size(1)
-            features = prepare_features(feature_maker(mapping[fileid]), device, dtype, fileid, dim)
+            source = mapping[fileid]
         except KeyError as error:
             raise missing_files_error(set(mapping), set(by_file[file_col].unique())) from error
+        dim = None if data is None else data.size(1)
+        features = prepare_features(feature_maker(source), device, dtype, fileid, dim)
         if data is None:
             data = features.new_empty((total, features.size(1)))
         elif features.dtype != data.dtype:
@@ -333,13 +365,14 @@ def load_data_from_item_with_times[T](
         disable=hide_progress(progress=progress),
     ):
         try:
-            dim = data[0].size(1) if data else None
-            features = prepare_features(feature_maker(paths_features[fileid]), device, dtype, fileid, dim)
-            times = time_maker(paths_times[fileid]).detach().to(device=device, dtype=torch.float64)
+            sources = paths_features[fileid], paths_times[fileid]
         except KeyError as error:
             raise missing_files_error(
                 set(paths_features) & set(paths_times), set(by_file[file_col].unique())
             ) from error
+        dimension = data[0].size(1) if data else None
+        features = prepare_features(feature_maker(sources[0]), device, dtype, fileid, dimension)
+        times = time_maker(sources[1]).detach().to(device=device, dtype=torch.float64)
         if times.ndim != 1:
             raise TimesArrayDimensionError
         if times.numel() != features.size(0) or not torch.isfinite(times).all():
@@ -397,7 +430,7 @@ class Dataset:
         root: str | Path,
         frequency: int | str | Decimal,
         *,
-        feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
+        feature_maker: Callable[[str | Path], torch.Tensor] | None = None,
         extension: str = ".pt",
         file_col: str = "#file",
         onset_col: str = "onset",
@@ -417,7 +450,8 @@ class Dataset:
         :param root: Path to the root directory containing either the features or the audio files.
         :param frequency: The feature frequency of the features / the output of the feature maker, in Hz.
             If it is not an integer, pass it as a string to avoid floating-point errors.
-        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
+        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``None``, which
+            loads each file with ``torch.load``.
         :param extension: The filename extension of the files to process in ``root``, default is ".pt".
             It must contain a dot.
         :param file_col: Column in the item file that contains the file identifiers: the path of each feature
@@ -436,7 +470,7 @@ class Dataset:
             paths,
             labels,
             frequency,
-            feature_maker,
+            feature_maker or partial(torch.load, map_location="cpu"),
             file_col,
             onset_col,
             offset_col,
@@ -453,8 +487,8 @@ class Dataset:
         root_features: str | Path,
         root_times: str | Path,
         *,
-        feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
-        time_maker: Callable[[str | Path], torch.Tensor] = torch.load,
+        feature_maker: Callable[[str | Path], torch.Tensor] | None = None,
+        time_maker: Callable[[str | Path], torch.Tensor] | None = None,
         extension: str = ".pt",
         file_col: str = "#file",
         onset_col: str = "onset",
@@ -471,11 +505,15 @@ class Dataset:
         :param item: Path to the item file.
         :param root_features: Path to the root directory containing either the features or the audio files.
         :param root_times: Path to the root directory containing the times arrays.
-        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
-        :param time_maker: Function that takes a path and returns a 1D torch.Tensor. Defaults to ``torch.load``.
+        :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``None``, which
+            loads each file with ``torch.load``.
+        :param time_maker: Function that takes a path and returns a 1D torch.Tensor. Defaults to ``None``, which
+            loads each file with ``torch.load``.
         :param extension: The filename extension of the files to process in ``root_features`` and ``root_times``,
             default is ".pt".
-        :param file_col: Column in the item file that contains the audio file names, default is "#file".
+        :param file_col: Column in the item file that contains the file identifiers: the path of each feature
+            file relative to ``root_features``, and of each times file relative to ``root_times``, without the
+            extension. Default is "#file".
         :param onset_col: Column in the item file that contains the onset times, default is "onset".
         :param offset_col: Column in the item file that contains the offset times, default is "offset".
         :param dtype: Optional torch dtype for feature conversion. None preserves the input dtype.
@@ -491,8 +529,8 @@ class Dataset:
             paths_feat,
             paths_time,
             labels,
-            feature_maker,
-            time_maker,
+            feature_maker or partial(torch.load, map_location="cpu"),
+            time_maker or partial(torch.load, map_location="cpu"),
             file_col,
             onset_col,
             offset_col,
@@ -586,7 +624,8 @@ class Dataset:
 
         Accepted inputs for ``source``:
 
-        - ``str`` or ``Path``: path to a CSV file (uses ``separator``).
+        - ``str`` or ``Path``: path to a CSV file (uses ``separator``). As with :py:meth:`from_item`, every label
+          column is read as a string, so that distinct labels such as speakers ``01`` and ``1`` are not merged.
         - A polars or pandas ``DataFrame``.
         - ``Mapping[str, Sequence]`` (column name → values).
         - ``Iterable[Mapping]`` (sequence of row dictionaries).
@@ -599,7 +638,7 @@ class Dataset:
             Defaults to CUDA if available, and CPU otherwise.
         """
         if isinstance(source, (str, Path)):
-            df = pl.read_csv(source, separator=separator)
+            df = read_csv_labels_as_strings(source, separator, feature_columns)
         elif isinstance(source, pl.DataFrame):
             df = source
         elif _is_pandas_dataframe(source):
@@ -609,8 +648,8 @@ class Dataset:
         elif isinstance(source, Iterable):
             df = pl.from_dicts(source)
         else:
-            msg = "Type of given `source` in Dataset.from_dataframe is not valid"
-            raise ValueError(msg)
+            msg = f"Type of given `source` in Dataset.from_dataframe is not valid: {type(source).__name__}"
+            raise TypeError(msg)
         labels = df.select(cs.exclude(feature_columns))
         indices = {i: (i, i + 1) for i in range(len(labels))}
         features = df.select(feature_columns)

@@ -62,7 +62,7 @@ Counts and numerical precision
 
 Cell sizes and constrained denominators use Int64. The win/tie counts are exact Int64 integers too: a win counts
 2 and a tie 1, and the total is halved only when the float64 cell score is computed. Scores exported in the
-``Score.cells`` DataFrame remain float32. This keeps large counts valid, but it does not make the final displayed
+``Score.cells`` DataFrame are float64 too. This keeps large counts valid, but it does not make the final displayed
 error rate an arbitrary-precision number.
 
 Custom distances and alignments may return a different floating dtype from the input features. Scoring retains

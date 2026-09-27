@@ -8,6 +8,7 @@ from fastabx.cell import Cell, cell_description, cell_header, cells_on_by, cells
 from fastabx.dataset import Dataset
 from fastabx.subsample import Subsampler
 from fastabx.verify import (
+    InputTypeError,
     verify_conditions_exist,
     verify_dataset_labels,
     verify_precomputed_cells,
@@ -65,6 +66,9 @@ class Task:
         across: list[str] | None = None,
         subsampler: Subsampler | None = None,
     ) -> None:
+        for conditions in (by, across):
+            if isinstance(conditions, str):
+                raise InputTypeError(list, str)
         by, across = by or [], across or []
         conditions = [on, *by, *across]
         verify_task_conditions(conditions)

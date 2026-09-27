@@ -73,7 +73,7 @@ def test_zerospeech_abx_max_x_across_optional_within(tmp_path: Path) -> None:
 
 def test_zerospeech_abx_invalid_speaker_context(tmp_path: Path) -> None:
     item, feats = _build_tiny_corpus(tmp_path)
-    with pytest.raises(InvalidSpeakerOrContextError):
+    with pytest.raises(InvalidSpeakerOrContextError, match="speaker='bogus'"):
         # No overload accepts an unknown speaker mode: this checks the runtime guard behind them.
         zerospeech_abx(  # ty: ignore[no-matching-overload]
             item,

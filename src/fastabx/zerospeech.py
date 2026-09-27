@@ -19,6 +19,12 @@ __all__ = ["InvalidSpeakerOrContextError", "MissingMaxXAcrossError", "zerospeech
 class InvalidSpeakerOrContextError(ValueError):
     """The speaker or context conditions are not set correctly."""
 
+    def __init__(self, speaker: object, context: object) -> None:
+        super().__init__(
+            f"Invalid speaker or context mode: speaker={speaker!r}, context={context!r}. "
+            f"speaker must be 'within' or 'across', and context 'within' or 'any'."
+        )
+
 
 class MissingMaxXAcrossError(ValueError):
     """``max_x_across`` must be set in the "across" speaker mode."""
@@ -41,7 +47,7 @@ def zerospeech_abx(
     context: Literal["within", "any"] = ...,
     distance: DistanceName = ...,
     frequency: int | str | Decimal = ...,
-    feature_maker: Callable[[str | Path], torch.Tensor] = ...,
+    feature_maker: Callable[[str | Path], torch.Tensor] | None = ...,
     extension: str = ...,
     seed: int = ...,
     device: str | torch.device | None = ...,
@@ -61,7 +67,7 @@ def zerospeech_abx(
     context: Literal["within", "any"] = ...,
     distance: DistanceName = ...,
     frequency: int | str | Decimal = ...,
-    feature_maker: Callable[[str | Path], torch.Tensor] = ...,
+    feature_maker: Callable[[str | Path], torch.Tensor] | None = ...,
     extension: str = ...,
     seed: int = ...,
     device: str | torch.device | None = ...,
@@ -80,7 +86,7 @@ def zerospeech_abx(
     context: Literal["within", "any"] = "within",
     distance: DistanceName = "angular",
     frequency: int | str | Decimal = 50,
-    feature_maker: Callable[[str | Path], torch.Tensor] = torch.load,
+    feature_maker: Callable[[str | Path], torch.Tensor] | None = None,
     extension: str = ".pt",
     seed: int = 0,
     device: str | torch.device | None = None,
@@ -113,7 +119,8 @@ def zerospeech_abx(
         Defaults to "angular".
     :param frequency: The feature frequency of the features / the output of the feature maker, in Hz.
         Defaults to 50 Hz.
-    :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``torch.load``.
+    :param feature_maker: Function that takes a path and returns a torch.Tensor. Defaults to ``None``, which
+        loads each file with ``torch.load``.
     :param extension: The filename extension of the files to process in ``root``, default is ".pt".
     :param seed: The random seed for the subsampling, default is 0.
     :param device: Device on which to store the features, such as "cpu" or "cuda:1".
@@ -138,7 +145,7 @@ def zerospeech_abx(
         case ("across", "any"):
             by, across = None, ["speaker"]
         case _:
-            raise InvalidSpeakerOrContextError
+            raise InvalidSpeakerOrContextError(speaker, context)
     subsampler = Subsampler(max_size_group, max_x_across, seed)
     dataset = Dataset.from_item(
         item,

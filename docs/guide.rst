@@ -25,7 +25,7 @@ to discriminate is which Gaussian a point came from:
    score = Score(task, "euclidean")  # How to compare them
 
    print(score.collapse(levels=["speaker"]))
-   # 0.03059999644756317
+   # 0.030599999707192183
 
 - :class:`.Dataset` holds the labels and gives access to the representations.
 - :class:`.Task` turns the ON, BY and ACROSS conditions into :class:`.Cell` objects. ``on="phone"`` asks for

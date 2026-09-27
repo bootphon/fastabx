@@ -31,7 +31,14 @@ Releases up to and including 0.8.0 predate this file and are documented at
 - Grouped scoring trims excess chunk padding before computing each group's frame distances.
 - The CLI accepts exact fractional feature frequencies and represents them as decimal strings in JSON output.
 - Cell sizes use Int64 so large triplet totals remain valid when collapsing or exporting scores.
-- Win/tie counts are exact Int64 integers (a win counts 2, a tie 1); final score storage stays float32.
+- Win/tie counts are exact Int64 integers (a win counts 2, a tie 1).
+- `Score.cells` stores the cell scores as Float64 instead of Float32, so collapsed scores no longer carry float32
+  rounding noise (for example `0.4913194444444444` instead of `0.4913194353381793`).
+- `Dataset.from_dataframe` reads every label column of a CSV file as a string, like the item files, so distinct
+  labels such as speakers `01` and `1` are no longer merged. It raises `TypeError` for an unsupported `source`.
+- `Task` raises `InputTypeError` when `by` or `across` is a single string instead of a list.
+- The default `feature_maker` and `time_maker` load each file with `torch.load(path, map_location="cpu")`, so
+  features saved from a GPU load on a CPU-only machine. They are now `None` in the signatures.
 - Win/tie counting sorts each row of X-to-A distances and locates every B by binary search, instead of building
   every triplet: memory is proportional to the number of pairs of a group, not of its triplets. On a large
   unsubsampled pooled task, peak memory drops from 17.7 GB to 0.4 GB and runtime by 20x. Scores are unchanged.
@@ -63,6 +70,11 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 ### Fixed
 
+- An item file whose onsets (or offsets) are all zero no longer crashes while its times are parsed as decimals.
+- Times written in scientific notation (`5e-05`) are rejected with an `InvalidItemFileError`: the decimal
+  parser silently read them as 0.
+- An exception raised inside a user's `feature_maker` or `time_maker`, including a `KeyError`, now propagates
+  as is instead of being reported as missing feature files.
 - Chunked scoring preserves custom distance/alignment output dtypes instead of casting to the feature dtype,
   preventing chunk-size-dependent ties and scores.
 - L2 normalization scales finite nonzero frames before computing norms, avoiding norm overflow and underflow.
