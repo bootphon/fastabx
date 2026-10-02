@@ -15,8 +15,11 @@ from fastabx.constraints import Constraints, NoConstraintsError, apply_constrain
 from fastabx.distance import Distance, distance_matrix
 from fastabx.task import Task
 from fastabx.utils import gather_chunk_rows, max_score_chunk_rows, reduction_flush_cols
+from fastabx.verify import NaNDistanceError
 
 __all__ = []
+
+MAX_FLOAT32_SIZE = 2**23
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,8 +174,11 @@ def grouped_distances(
     total = targets.size(0)
     if total <= max_rows:
         return distance_matrix(x, sx, targets, target_sizes, distance, alignment=alignment, symmetric=False)
-    out = x.new_empty(x.size(0), total, dtype=x.dtype if x.is_floating_point() else torch.float32)
-    for start in range(0, total, max_rows):
+    chunk, chunk_sizes = targets[:max_rows], target_sizes[:max_rows]
+    first = distance_matrix(x, sx, chunk, chunk_sizes, distance, alignment=alignment, symmetric=False)
+    out = first.new_empty(x.size(0), total)
+    out[:, :max_rows] = first
+    for start in range(max_rows, total, max_rows):
         end = min(start + max_rows, total)
         chunk, chunk_sizes = targets[start:end], target_sizes[start:end]
         out[:, start:end] = distance_matrix(x, sx, chunk, chunk_sizes, distance, alignment=alignment, symmetric=False)
@@ -191,9 +197,10 @@ def grouped_contributions(dxa: Tensor, dxb_all: Tensor, mask: Tensor | None = No
     """
     nx, na = dxa.size()
     diff = dxa.unsqueeze(2) - dxb_all.unsqueeze(1)
+    dtype = torch.float64 if nx * na > MAX_FLOAT32_SIZE or diff.dtype == torch.float64 else torch.float32
     if mask is not None:
-        return (0.5 * (1 - torch.sign(diff)) * mask).sum(dim=(0, 1))
-    return 0.5 * (nx * na - torch.sign(diff).sum(dim=(0, 1)))
+        return (0.5 * (1 - torch.sign(diff)) * mask).sum(dim=(0, 1), dtype=dtype)
+    return 0.5 * (nx * na - torch.sign(diff).sum(dim=(0, 1), dtype=dtype))
 
 
 class GroupReducer:
@@ -216,6 +223,7 @@ class GroupReducer:
         self._positions: list[int] = []  # cell position in the DataFrame, one per cell
         self._nb: list[int] = []  # number of B per cell
         self._cols = 0
+        self._any_nan: Tensor | None = None
         self._flush_cols = reduction_flush_cols()
         self._max_score_rows = max_score_chunk_rows()
 
@@ -236,6 +244,8 @@ class GroupReducer:
             alignment=alignment,
             max_rows=self._max_score_rows,
         )
+        has_nan = torch.isnan(distances).any()
+        self._any_nan = has_nan if self._any_nan is None else self._any_nan | has_nan
         na, nx = group.rows[0], group.x.data.size(0)
         dxa = distances[:, :na]
         if is_symmetric:
@@ -262,7 +272,10 @@ class GroupReducer:
         """Reduce all buffered groups in one pass: one ``index_add_`` over the concatenated per-B counts."""
         if not self._per_b:
             return
-        per_b_all = torch.cat(self._per_b)
+        if self._any_nan is not None and self._any_nan.item():
+            raise NaNDistanceError
+        self._any_nan = None
+        per_b_all = torch.cat(self._per_b).to(torch.float64)
         device = per_b_all.device
         positions = self._positions
         n_cells = len(positions)
@@ -270,15 +283,15 @@ class GroupReducer:
         counts = per_b_all.new_zeros(n_cells).index_add_(0, cell_ids, per_b_all)
 
         if self.constrained:
-            valid_all = torch.cat(self._per_b_valid).to(counts.dtype)
-            denom = counts.new_zeros(n_cells).index_add_(0, cell_ids, valid_all)
+            valid_all = torch.cat(self._per_b_valid)
+            denom = valid_all.new_zeros(n_cells).index_add_(0, cell_ids, valid_all)
             for size, position in zip(denom.tolist(), positions, strict=True):
                 self.sizes[position] = int(size) if size > 0 else None
         else:
-            denom = torch.tensor([self.sizes[p] for p in positions], device=device, dtype=counts.dtype)
+            denom = torch.tensor([self.sizes[p] for p in positions], device=device, dtype=torch.int64)
 
         cell_scores = 1 - counts / denom
-        self.scores[torch.tensor(positions)] = cell_scores.cpu()
+        self.scores[torch.tensor(positions)] = cell_scores.to(device="cpu", dtype=self.scores.dtype)
         self._per_b, self._per_b_valid, self._positions, self._nb, self._cols = [], [], [], [], 0
 
     def finalize(self) -> tuple[list[float | None], list[int | None]]:

@@ -1,4 +1,4 @@
-"""Full ABX."""
+"""Efficient computation of ABX discriminability."""
 
 from fastabx.accessor import Accessor, Batch, InMemoryAccessor
 from fastabx.alignment import Alignment, AlignmentName
@@ -10,11 +10,17 @@ from fastabx.dataset import (
     FeaturesSizeError,
     FrequencyTypeError,
     InvalidItemFileError,
+    InvalidTimesError,
     NonFiniteError,
     TimesArrayDimensionError,
     TimesArrayFrontiersError,
 )
-from fastabx.distance import Distance, DistanceName, IdenticalDistanceDimensionError, abx_on_cell
+from fastabx.distance import (
+    Distance,
+    DistanceName,
+    IdenticalDistanceDimensionError,
+    abx_on_cell,
+)
 from fastabx.pooling import PooledDataset, PoolingName, PoolingNormalizedError, pool_dataset
 from fastabx.score import CollapseError, EmptyScoreError, IncompatibleNormalizationError, Score
 from fastabx.subsample import Subsampler
@@ -27,9 +33,14 @@ from fastabx.verify import (
     EmptyTaskError,
     InputTypeError,
     InvalidCellError,
+    InvalidDatasetError,
+    InvalidFeatureDtypeError,
+    InvalidFeaturesError,
     InvalidLevelsError,
     LabelReservedNameError,
     LabelSuffixError,
+    MissingLabelError,
+    NaNDistanceError,
     NonContiguousIndicesError,
     PrecomputedCellsError,
     UnknownConditionError,
@@ -60,13 +71,19 @@ __all__ = [
     "IncompatibleNormalizationError",
     "InputTypeError",
     "InvalidCellError",
+    "InvalidDatasetError",
     "InvalidEnvironmentVariableError",
+    "InvalidFeatureDtypeError",
+    "InvalidFeaturesError",
     "InvalidItemFileError",
     "InvalidLevelsError",
     "InvalidSpeakerOrContextError",
+    "InvalidTimesError",
     "LabelReservedNameError",
     "LabelSuffixError",
+    "MissingLabelError",
     "MissingMaxXAcrossError",
+    "NaNDistanceError",
     "NoConstraintsError",
     "NonContiguousIndicesError",
     "NonFiniteError",

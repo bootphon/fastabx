@@ -6,6 +6,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Releases up to and including 0.8.0 predate this file and are documented at
 <https://github.com/bootphon/fastabx/releases>.
 
+## Unreleased
+
+### Added
+
+- `Dataset.from_*` constructors accept a `dtype` argument; `dtype=None` preserves the input precision.
+- Datasets, timestamps and item files are validated: row counts, feature shapes, slice boundaries, item
+  intervals, frequencies and non-finite features.
+
+### Changed
+
+- Angular/cosine distance: two zero frames are at distance 0, and a zero frame is at distance 0.5 from any
+  nonzero frame. Scores involving zero frames can change.
+- Tabular constructors preserve floating input precision instead of casting to float32. Pass
+  `dtype=torch.float32` for the previous behavior.
+- Item-file labels are always read as strings, so numeric speaker IDs now have the `String` dtype.
+- Cell sizes are Int64, and win/tie counts no longer lose precision beyond float32.
+
+### Fixed
+
+- NaN distances raise `NaNDistanceError` instead of counting as ties.
+- Null ON, BY or ACROSS labels raise `MissingLabelError` instead of silently dropping rows.
+- Labels such as speakers `01` and `1` are no longer merged.
+- Constraints strip exactly one `_a`/`_b`/`_x` suffix, so labels like `mic_b` work; a column without a
+  suffix or with an unknown label raises `NoConstraintsError`.
+- Subsampling no longer merges distinct cells whose labels contain hyphens, and ACROSS subsampling samples
+  complete X condition combinations.
+- Pooling keeps features aligned with labels after timestamp-based loading.
+- Chunked scoring preserves custom distance/alignment output dtypes, so the chunk size cannot change scores.
+- L2 normalization no longer overflows or underflows on extreme magnitudes.
+- Hamming pooling and score reduction support float64; callable distances need not be hashable.
+- Duplicate audio identifiers in units files are rejected instead of silently overwritten.
+
 ## 0.9.0
 
 ### Added

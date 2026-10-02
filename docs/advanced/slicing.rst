@@ -54,3 +54,10 @@ Therefore, the beginning and end indices (both included) are:
 In Libri-Light, because the features were sliced with :code:`features[i_start : i_end]` instead of :code:`features[i_start : i_end + 1]`,
 the last included index was :math:`i_\text{end} - 1 = \left\lfloor \frac{\offset}{\Delta t} - \frac{1}{2} \right\rfloor - 1`
 (see `here <https://github.com/facebookresearch/libri-light/blob/3fb5006a39e6f9e86daf3e5e52bc87630f3cdf3e/eval/ABX_src/abx_iterators.py#L178-L189>`_).
+
+Timestamp validation
+====================
+
+With ``Dataset.from_item_with_times``, each feature frame must have exactly one finite timestamp in a
+one-dimensional array. Both interval boundaries are inclusive: frames with ``onset <= timestamp <= offset``
+are selected.

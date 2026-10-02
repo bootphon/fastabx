@@ -192,6 +192,10 @@ Building a Dataset
 .. autoexception:: fastabx.EmptyDataPointsError
 .. autoexception:: fastabx.EmptyDatasetError
 .. autoexception:: fastabx.NonContiguousIndicesError
+.. autoexception:: fastabx.InvalidDatasetError
+.. autoexception:: fastabx.InvalidFeaturesError
+.. autoexception:: fastabx.InvalidFeatureDtypeError
+.. autoexception:: fastabx.InvalidTimesError
 .. autoexception:: fastabx.NonFiniteError
 .. autoexception:: fastabx.TimesArrayDimensionError
 .. autoexception:: fastabx.TimesArrayFrontiersError
@@ -204,6 +208,7 @@ Building a Task
 .. autoexception:: fastabx.InputTypeError
 .. autoexception:: fastabx.LabelReservedNameError
 .. autoexception:: fastabx.LabelSuffixError
+.. autoexception:: fastabx.MissingLabelError
 .. autoexception:: fastabx.UnknownConditionError
 .. autoexception:: fastabx.PrecomputedCellsError
 .. autoexception:: fastabx.InvalidCellError
@@ -216,6 +221,7 @@ Scoring
 .. autoexception:: fastabx.IdenticalDistanceDimensionError
 .. autoexception:: fastabx.IncompatibleNormalizationError
 .. autoexception:: fastabx.InvalidLevelsError
+.. autoexception:: fastabx.NaNDistanceError
 .. autoexception:: fastabx.NoConstraintsError
 .. autoexception:: fastabx.PoolingNormalizedError
 

@@ -146,13 +146,13 @@ class Score:
         self.alignment = alignment
         distance = distance_function(distance_name)
         align = alignment_function(alignment)
-        if distance_name in {"cosine", "angular"}:
+        if isinstance(distance_name, str) and distance_name in {"cosine", "angular"}:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(display_name(distance_name))
         scores, sizes = score_task(task, distance, alignment=align, constraints=constraints, progress=progress)
         self._cells = task.cells.select(cs.exclude("description", "header")).with_columns(
-            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int32)
+            score=pl.Series(scores, dtype=pl.Float32), size=pl.Series(sizes, dtype=pl.Int64)
         )
 
     @property

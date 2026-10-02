@@ -142,6 +142,10 @@ The scoring engine only ever reads through ``lengths`` and ``batched``, so those
 be fast; ``batched`` is where a lazy implementation would do its I/O, gathering many indices at once. Indices
 are the row numbers of ``Dataset.labels``: item ``i`` of the accessor describes row ``i``.
 
+``normalize_`` must produce the layout of ``normalize_with_singularity``: nonzero frames normalized to unit
+direction with an appended 0, and zero frames mapped to the unit vector along the appended dimension. Angular
+distance then assigns zero/zero distance 0 and zero/nonzero distance 0.5.
+
 Custom distances
 ================
 
@@ -167,4 +171,12 @@ name of a built-in distance is accepted, to :class:`.Score` and to :func:`.abx_o
 The two batches are ``(n, s, d)`` tensors, padded to a common length ``s``; the alignment that consumes the
 lattice is the one that knows the real lengths and reads only the valid sub-block of each pair. Only the
 built-in ``"angular"`` and ``"cosine"`` names L2-normalize the dataset, so a custom distance receives the
-features exactly as they are. Normalize them yourself, via :meth:`.Dataset.normalize_`, if yours needs it.
+features exactly as they are. If a custom distance requires normalization, perform it inside the callable, without
+mutating its inputs. Functions, callable objects and callable dataclass instances are accepted.
+``Score`` rejects custom distances on a dataset already normalized with :meth:`.Dataset.normalize_`,
+because that normalization also appended a singularity-border feature and the original representation is gone.
+Build a fresh ``Dataset``/``Task`` for the custom metric.
+
+Distance and alignment outputs may use a different floating dtype from the features; chunked scoring preserves
+that dtype. Return a consistent dtype and device across calls and make each pair's result independent of the
+other pairs in the batch, so changing the chunk size does not change the mathematical result.

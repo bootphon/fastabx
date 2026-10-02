@@ -10,6 +10,7 @@ from torchdtw import dtw_batch
 
 from fastabx.alignment import Alignment
 from fastabx.cell import Cell
+from fastabx.verify import verify_no_nan_distance
 
 __all__ = ["Distance", "DistanceName", "IdenticalDistanceDimensionError", "abx_on_cell"]
 
@@ -24,6 +25,9 @@ def distance_function(distance: DistanceName | Distance) -> Distance:
         the :py:class:`.Distance` type alias.
     """
     if not isinstance(distance, str):
+        if not callable(distance):
+            msg = "distance must be a string or a callable"
+            raise TypeError(msg)
         return distance
     match distance:
         case "euclidean":
@@ -58,11 +62,11 @@ def kl_symmetric_distance(a1: Tensor, a2: Tensor, epsilon: float = 1e-6) -> Tens
 
 
 def angular_distance(a1: Tensor, a2: Tensor) -> Tensor:
-    """Angular distance (default). WARNING: a1 and a2 must be normalized."""
+    """Angular distance (default). WARNING: a1 and a2 must be normalized with ``normalize_with_singularity``."""
     n1, s1, d = a1.size()
     n2, s2, d = a2.size()
     dot_prods = torch.mm(a1.view(n1 * s1, d), a2.view(n2 * s2, d).T).view(n1, s1, n2, s2).transpose(1, 2)
-    return torch.clamp(dot_prods, -1, 1).acos() / math.pi
+    return dot_prods.clamp_(-1, 1).acos_().div_(math.pi)
 
 
 def euclidean_distance(a1: Tensor, a2: Tensor) -> Tensor:
@@ -141,10 +145,11 @@ def abx_on_cell(
     symmetric = cell.is_symmetric
     x, a, b = cell.x, cell.a, cell.b
     dxa = distance_matrix(x.data, x.sizes, a.data, a.sizes, distance, alignment=alignment, symmetric=symmetric)
+    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
+    verify_no_nan_distance(dxa, dxb)
     if symmetric:
         dxa.fill_diagonal_(float("inf"))
-    dxb = distance_matrix(x.data, x.sizes, b.data, b.sizes, distance, alignment=alignment, symmetric=False)
     nx, na = dxa.size()
     nx, nb = dxb.size()
     sc = 0.5 * (1 - torch.sign(dxa.view(nx, na, 1) - dxb.view(nx, 1, nb)))
-    return 1 - sc.sum() / len(cell)
+    return (1 - sc.sum(dtype=torch.float64) / len(cell)).to(sc.dtype)

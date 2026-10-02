@@ -30,7 +30,7 @@ class PoolingNormalizedError(ValueError):
 
 def hamming_pooling(x: torch.Tensor) -> torch.Tensor:
     """Apply the symmetric hamming window on the input Tensor."""
-    window = torch.hamming_window(x.size(0), periodic=False, device=x.device)
+    window = torch.hamming_window(x.size(0), periodic=False, device=x.device, dtype=x.dtype)
     return (window @ x) / window.sum()
 
 

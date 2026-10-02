@@ -1,6 +1,5 @@
 """Access to the features of a dataset: the ``Accessor`` protocol and the in-memory implementation."""
 
-import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -9,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from fastabx.verify import verify_empty_datapoints
+from fastabx.verify import InvalidFeaturesError, verify_continuous_dtype, verify_empty_datapoints, verify_feature_shape
 
 __all__ = ["Accessor", "Batch", "InMemoryAccessor"]
 
@@ -89,6 +88,10 @@ class InMemoryAccessor:
         self.device = device
         self.indices = indices
         verify_empty_datapoints(self.indices)
+        verify_feature_shape(data)
+        if any(start < 0 or end > data.size(0) for start, end in indices.values()):
+            msg = "Accessor slices must lie within the feature tensor's frame dimension."
+            raise InvalidFeaturesError(msg)
         self.data = data.to(self.device)
         self.is_normalized = False
         size = max(self.indices) + 1
@@ -113,7 +116,7 @@ class InMemoryAccessor:
         return len(self.indices)
 
     def __iter__(self) -> Iterator[torch.Tensor]:
-        for i in self.indices:
+        for i in range(len(self)):
             yield self[i]
 
     def lengths(self, indices: list[int]) -> np.ndarray[tuple[int], np.dtype[np.int64]]:
@@ -142,19 +145,22 @@ class InMemoryAccessor:
         return Batch(gathered, sizes)
 
 
-def normalize_with_singularity(x: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    """Normalize the given vector across the third dimension.
+def normalize_with_singularity(x: torch.Tensor) -> torch.Tensor:
+    """Normalize the given vectors across the second dimension.
 
-    Extend all vectors by eps to put the null vector at the maximal angular distance from any non-null vector.
+    Extend all vectors by one dimension, set to 1 for null vectors and 0 otherwise.
+    Null vectors are then at angular distance 0 from each other and 0.5 from any non-null vector.
     """
+    verify_continuous_dtype(x)
     dim = x.size(1)
-    norm = x.norm(dim=1, keepdim=True)
-    zero_mask = norm.squeeze(1) == 0
+    scale = x.norm(p=float("inf"), dim=1, keepdim=True)
+    zero_mask = scale == 0
     out = x.new_empty((x.size(0), dim + 1))
     head = out[:, :dim]
     head.copy_(x)
-    head.div_(norm.masked_fill(zero_mask.unsqueeze(1), 1.0))  # zero rows are overwritten just below
-    head[zero_mask] = 1.0 / math.sqrt(dim)
-    out[:, dim] = eps
-    out[zero_mask, dim] = -2 * eps
+    head.div_(scale.masked_fill(zero_mask, 1.0))
+    norm_dtype = torch.float64 if x.dtype == torch.float64 else torch.float32
+    norm = head.norm(dim=1, keepdim=True, dtype=norm_dtype)
+    head.div_(norm.masked_fill(zero_mask, 1.0))
+    out[:, dim] = zero_mask.squeeze(1)
     return out

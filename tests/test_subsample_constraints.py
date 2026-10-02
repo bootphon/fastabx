@@ -1,10 +1,12 @@
 """Tests for ``fastabx.subsample`` and ``fastabx.constraints``."""
 
+from collections.abc import Sequence
+
 import numpy as np
 import polars as pl
 import pytest
 
-from fastabx import Dataset, Task
+from fastabx import Dataset, Score, Task
 from fastabx.constraints import (
     NoConstraintsError,
     apply_constraints,
@@ -261,3 +263,119 @@ def test_condition_named_like_an_index_column_is_not_treated_as_one() -> None:
     score = Score(task, "euclidean", progress=False)
     assert "indexer" in score.details(levels=[]).columns
     assert 0 <= score.collapse(levels=["indexer"]) <= 1
+
+
+@pytest.mark.parametrize("conditions", [("a-b", "c", "a", "b-c"), ("a", "b", "a", "b")])
+def test_subsampling_keeps_each_cells_own_indices(conditions: tuple[str, str, str, str]) -> None:
+    """Neither colliding text keys nor identical metadata may merge distinct cells."""
+    p1, q1, p2, q2 = conditions
+    original = _cells_frame().collect().with_columns(pl.Series("p", [p1, p2]), pl.Series("q", [q1, q2]))
+    sampled = subsample_each_cell(original.lazy(), size=5, seed=0).collect()
+    for before, after in zip(original.iter_rows(named=True), sampled.iter_rows(named=True), strict=True):
+        for column in ("index_a", "index_b", "index_x"):
+            assert len(after[column]) == 5
+            assert set(after[column]).issubset(before[column])
+        assert after["index_a"] == after["index_x"]
+
+
+@pytest.mark.parametrize("size", [2, 5])
+def test_subsample_across_preserves_observed_tuples_and_groups(size: int) -> None:
+    """Sample tuples with unequal cardinalities, preserving even colliding A/B group labels."""
+    original = pl.DataFrame(
+        {
+            "phone": ["a-b"] * 3 + ["a"] * 3,
+            "phone_b": ["c"] * 3 + ["b-c"] * 3,
+            "speaker_x": ["Alice", "Alice", "Bob"] * 2,
+            "microphone_x": ["USB", "Studio", "Headset"] * 2,
+            "index_a": [[0]] * 3 + [[1]] * 3,
+            "index_b": [[2]] * 3 + [[3]] * 3,
+            "index_x": [[i] for i in range(4, 10)],
+        }
+    )
+    sampled = subsample_across_group(original.lazy(), size, seed=7).collect()
+    assert sampled.equals(subsample_across_group(original.lazy(), size, seed=7).collect())
+    assert sampled.height == 2 * min(size, 3)
+    for group in sampled.partition_by("phone"):
+        assert group.height == min(size, 3)
+    for row in sampled.iter_rows(named=True):
+        assert row in original.to_dicts()
+
+
+def test_subsample_across_caps_colliding_groups_independently() -> None:
+    original = pl.DataFrame(
+        {
+            "phone": ["a-b"] * 3 + ["a"] * 3,
+            "phone_b": ["c"] * 3 + ["b-c"] * 3,
+            "speaker_x": [f"s{i}" for i in range(6)],
+            "index_a": [[0]] * 3 + [[1]] * 3,
+            "index_b": [[2]] * 3 + [[3]] * 3,
+            "index_x": [[i] for i in range(4, 10)],
+        }
+    )
+    sampled = subsample_across_group(original.lazy(), size=2, seed=0).collect()
+    assert sampled.group_by("phone").len()["len"].to_list() == [2, 2]
+    for row in sampled.iter_rows(named=True):
+        assert row in original.to_dicts()
+
+
+def _mic_dataset(mic_name: str, mics: Sequence[object]) -> Dataset:
+    rng = np.random.default_rng(0)
+    features = rng.standard_normal((12, 3)).astype(np.float32)
+    return Dataset.from_numpy(features, {"phone": list("aaaaaabbbbbb"), mic_name: mics})
+
+
+def test_constraint_on_label_ending_like_a_suffix() -> None:
+    """Only one suffix is stripped: ``mic_b_a`` refers to the label ``mic_b``, not ``mic``."""
+    mics = [0, 1, 2] * 4
+    expected = Score(
+        Task(_mic_dataset("mic", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    actual = Score(
+        Task(_mic_dataset("mic_b", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic_b"),
+    )
+    assert actual.cells["score"].to_list() == expected.cells["score"].to_list()
+    assert actual.cells["size"].to_list() == expected.cells["size"].to_list()
+
+
+def test_constraint_without_suffix_raises() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="'mic' has no '_a', '_b' or '_x' suffix"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=[pl.col("mic") != pl.col("mic_x")])
+
+
+def test_constraint_on_unknown_label_names_it() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="'room'"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=constraints_all_different("room"))
+
+
+def test_constraint_evaluating_to_null_invalidates_the_triplet() -> None:
+    """A null label in a constrained column makes the constraint null, and so the triplet invalid."""
+    mics = [0, 1, 2] * 4
+    reference = Score(
+        Task(_mic_dataset("mic", mics), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    with_nulls = Score(
+        Task(_mic_dataset("mic", [None if m == 2 else m for m in mics]), on="phone"),
+        "euclidean",
+        progress=False,
+        constraints=constraints_all_different("mic"),
+    )
+    # With mic 2 missing, only (A, B, X) all from mics 0, 1 and 2 were valid: none remains.
+    assert (reference.cells["size"] > 0).all()
+    assert with_nulls.cells["score"].null_count() == len(with_nulls.cells)
+
+
+def test_empty_constraints_raise() -> None:
+    dataset = _mic_dataset("mic", [0, 1, 2] * 4)
+    with pytest.raises(NoConstraintsError, match="No valid column"):
+        Score(Task(dataset, on="phone"), "euclidean", progress=False, constraints=[])
