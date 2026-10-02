@@ -19,6 +19,8 @@ Releases up to and including 0.8.0 predate this file and are documented at
 
 - Angular/cosine distance: two zero frames are at distance 0, and a zero frame is at distance 0.5 from any
   nonzero frame. Scores involving zero frames can change.
+- The CLI accepts fractional feature frequencies (`--frequency 49.95`), written as decimal strings in the
+  JSON output.
 - Tabular constructors preserve floating input precision instead of casting to float32. Pass
   `dtype=torch.float32` for the previous behavior.
 - Item-file labels are always read as strings, so numeric speaker IDs now have the `String` dtype.
