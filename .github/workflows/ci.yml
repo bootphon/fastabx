@@ -106,3 +106,37 @@ jobs:
 
       - name: Build the documentation
         run: make docs SPHINXOPTS=-W
+
+  artifacts:
+    name: Build and smoke-test distributions
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "latest"
+          enable-cache: false
+          python-version: "3.12"
+
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Install and smoke-test each distribution outside the checkout
+        shell: bash
+        run: |
+          cp scripts/smoke_distribution.py "$RUNNER_TEMP/smoke_distribution.py"
+          index=0
+          for package in dist/*; do
+            environment="$RUNNER_TEMP/fastabx-artifact-$index"
+            uv venv --python 3.12 "$environment"
+            uv pip install --python "$environment/bin/python" "$package"
+            (cd "$RUNNER_TEMP" && "$environment/bin/python" smoke_distribution.py)
+            (cd "$RUNNER_TEMP" && "$environment/bin/fastabx" --version)
+            index=$((index + 1))
+          done

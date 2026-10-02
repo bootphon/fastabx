@@ -119,6 +119,20 @@ jobs:
       - name: Build wheel and sdist
         run: uv build
 
+      - name: Install and smoke-test each distribution outside the checkout
+        shell: bash
+        run: |
+          cp scripts/smoke_distribution.py "$RUNNER_TEMP/smoke_distribution.py"
+          index=0
+          for package in dist/*; do
+            environment="$RUNNER_TEMP/fastabx-artifact-$index"
+            uv venv --python 3.12 "$environment"
+            uv pip install --python "$environment/bin/python" "$package"
+            (cd "$RUNNER_TEMP" && "$environment/bin/python" smoke_distribution.py)
+            (cd "$RUNNER_TEMP" && "$environment/bin/fastabx" --version)
+            index=$((index + 1))
+          done
+
       - name: Attest build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:

@@ -28,9 +28,13 @@ The following are what CI runs; they should all pass before a pull request is me
 uv run pytest                 # Tests, with coverage (must stay above 99%)
 uv run prek run --all-files   # ruff check, ruff format, ty, typos, tombi, zizmor, uv lock/audit
 make docs                     # Build the documentation into docs/build
+uv build                      # Build both release distributions
 ```
 
-On a machine with a GPU, `pytest` runs every test twice: on the CPU, then on CUDA
+CI additionally installs the wheel and the source distribution into separate clean environments, then runs an
+import, a minimal end-to-end evaluation and `fastabx --version` outside the checkout.
+
+On a machine with a GPU, `pytest` runs every test twice: on the CPU, then on CUDA.
 
 To compare scores and runtime against a published version, run:
 
@@ -50,8 +54,11 @@ User-visible changes go in `CHANGELOG.md`, under `## Unreleased`, in the pull re
 ## Releases
 
 Releases are automated: the version comes from the git tag (`hatch-vcs`), and pushing a tag triggers the
-release workflow, which runs the checks, builds the wheel and the sdist, publishes to PyPI with trusted
-publishing, and creates the GitHub release.
+release workflow, which runs the checks, builds the wheel and the sdist, smoke-tests both in clean
+environments outside the checkout, publishes to PyPI with trusted publishing, and creates the GitHub release.
+
+The hosted CI is CPU-only. Run the test suite on a CUDA machine before releasing changes that affect
+device-specific code.
 
 Before tagging, rename the `## Unreleased` heading of `CHANGELOG.md` to the version being released and
 commit it.
