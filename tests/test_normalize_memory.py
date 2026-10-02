@@ -51,10 +51,10 @@ def test_normalize_memory_cpu() -> None:
     assert peak_new < peak_old
 
 
-def test_normalize_does_not_modify_its_input() -> None:
+def test_normalize_does_not_modify_its_input(device: torch.device) -> None:
     """The border forces a new tensor anyway, so the input is left alone rather than normalized in place."""
     torch.manual_seed(0)
-    data = torch.randn(64, 8)
+    data = torch.randn(64, 8, device=device)
     data[::7] = 0  # zero vectors take the singularity branch
     before = data.clone()
     out = normalize_with_singularity(data)
@@ -62,7 +62,7 @@ def test_normalize_does_not_modify_its_input() -> None:
     assert torch.equal(data, before)
 
 
-def test_score_does_not_modify_a_caller_owned_tensor() -> None:
+def test_score_does_not_modify_a_caller_owned_tensor(device: torch.device) -> None:
     """A Dataset built around a tensor the caller still holds must not have it rewritten by Score.
 
     ``InMemoryAccessor`` deliberately does not copy when the data is already on the target device, so
@@ -74,11 +74,11 @@ def test_score_does_not_modify_a_caller_owned_tensor() -> None:
     from fastabx.accessor import InMemoryAccessor
 
     torch.manual_seed(0)
-    data = torch.randn(12, 5)
+    data = torch.randn(12, 5, device=device)
     before = data.clone()
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b"] * 6, "speaker": ["s0", "s0", "s1", "s1"] * 3}),
-        accessor=InMemoryAccessor({i: (i, i + 1) for i in range(12)}, data, torch.device("cpu")),
+        accessor=InMemoryAccessor({i: (i, i + 1) for i in range(12)}, data, device),
     )
     Score(Task(dataset, on="phone", by=["speaker"]), "angular", progress=False)
     assert torch.equal(data, before)

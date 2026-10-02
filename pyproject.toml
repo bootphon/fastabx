@@ -65,6 +65,7 @@ test = [
   "pandas>=3.0.3",
   "pytest>=9.0.2",
   "pytest-cov>=7.1.0",
+  "rich>=15.0.0",
 ]
 
 [build-system]

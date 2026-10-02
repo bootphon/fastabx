@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
+import torch
 
 from fastabx import Dataset, Score, Task
 from fastabx.constraints import constraints_all_different
@@ -36,9 +37,7 @@ def test_score_cells_setter_is_read_only(small_score: Score) -> None:
         small_score.cells = small_score.cells  # ty: ignore[invalid-assignment]
 
 
-def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
-    import torch
-
+def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset, device: torch.device) -> None:
     original = accessor_data(tiny_dataset).clone()
     task = Task(tiny_dataset, on="phone", by=["context"])
     Score(task, "cosine")
@@ -46,7 +45,7 @@ def test_score_auto_normalizes_for_cosine(tiny_dataset: Dataset) -> None:
     assert accessor_data(tiny_dataset).shape[1] == original.shape[1] + 1
     # Each row (excluding the appended border) must now have unit L2 norm.
     body = accessor_data(tiny_dataset)[:, :-1]
-    torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0)), atol=1e-5, rtol=0)
+    torch.testing.assert_close(body.norm(dim=1), torch.ones(body.size(0), device=device), atol=1e-5, rtol=0)
 
 
 def test_score_cosine_twice_does_not_re_normalize(tiny_dataset: Dataset) -> None:

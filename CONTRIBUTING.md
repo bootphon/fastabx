@@ -30,6 +30,14 @@ uv run prek run --all-files   # ruff check, ruff format, ty, typos, tombi, zizmo
 make docs                     # Build the documentation into docs/build
 ```
 
+On a machine with a GPU, `pytest` runs every test twice: on the CPU, then on CUDA
+
+To compare scores and runtime against a published version, run:
+
+```bash
+uv run scripts/compare_versions.py path/to/file.item path/to/features --max-size-group 10 --runs 3
+```
+
 ## Pull requests
 
 Branch off `main`, keep the change focused, and make sure the checks above pass. The GitHub Actions CI runs

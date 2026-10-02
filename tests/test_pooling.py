@@ -16,7 +16,6 @@ from fastabx.pooling import (
     pool_dataset,
     pooling_function,
 )
-from tests.conftest import DEVICE
 
 
 def test_pooling_function_mean_and_hamming() -> None:
@@ -68,7 +67,7 @@ def test_hamming_pooling_downweights_both_boundaries() -> None:
     assert pooled[-1] < pooled[-2] < pooled[2]
 
 
-def test_pooling_returns_pooled_dataset() -> None:
+def test_pooling_returns_pooled_dataset(device: torch.device) -> None:
     rng = np.random.default_rng(0)
     n, length, d = 4, 3, 5
     data = torch.from_numpy(rng.standard_normal((n * length, d)).astype(np.float32))
@@ -77,7 +76,7 @@ def test_pooling_returns_pooled_dataset() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b", "c", "d"]}),
-        accessor=InMemoryAccessor(indices, data, DEVICE),
+        accessor=InMemoryAccessor(indices, data, device),
     )
     pooled = pool_dataset(dataset, "mean")
     assert isinstance(pooled, PooledDataset)
@@ -88,7 +87,7 @@ def test_pooling_returns_pooled_dataset() -> None:
     assert "mean" in repr(pooled)
 
 
-def test_pooling_mean_of_constant_sequence() -> None:
+def test_pooling_mean_of_constant_sequence(device: torch.device) -> None:
     n, length, d = 2, 4, 3
     data = torch.ones(n * length, d)
     indices = {i: (i * length, (i + 1) * length) for i in range(n)}
@@ -96,11 +95,11 @@ def test_pooling_mean_of_constant_sequence() -> None:
 
     dataset = Dataset(
         labels=pl.DataFrame({"phone": ["a", "b"]}),
-        accessor=InMemoryAccessor(indices, data, DEVICE),
+        accessor=InMemoryAccessor(indices, data, device),
     )
     pooled = pool_dataset(dataset, "mean")
     for item in pooled.accessor:
-        torch.testing.assert_close(item.squeeze(0), torch.ones(d))
+        torch.testing.assert_close(item.squeeze(0), torch.ones(d, device=device))
 
 
 def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
@@ -114,7 +113,7 @@ def test_pool_dataset_rejects_normalized_dataset(tiny_dataset: Dataset) -> None:
 @pytest.mark.parametrize("files", [("a", "a", "z"), ("z", "z", "a"), ("z", "a", "z")])
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
 def test_timestamp_loading_pooling_preserves_label_order(
-    tmp_path: Path, files: tuple[str, ...], pooling: PoolingName
+    tmp_path: Path, files: tuple[str, ...], pooling: PoolingName, device: torch.device
 ) -> None:
     """File sorting during loading must not change which features belong to a label row."""
     item = tmp_path / "data.item"
@@ -125,10 +124,10 @@ def test_timestamp_loading_pooling_preserves_label_order(
     for file, value in (("a", 1.0), ("z", 9.0)):
         torch.save(torch.full((2, 1), value), features / f"{file}.pt")
         torch.save(torch.tensor([0.0, 1.0]), times / f"{file}.pt")
-    dataset = Dataset.from_item_with_times(item, features, times, device=DEVICE, progress=False)
+    dataset = Dataset.from_item_with_times(item, features, times, device=device, progress=False)
     pooled = pool_dataset(dataset, pooling)
     assert pooled.labels.equals(dataset.labels)
     for i, file in enumerate(files):
-        expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=DEVICE)
+        expected = torch.tensor([[1.0 if file == "a" else 9.0]], device=device)
         torch.testing.assert_close(pooled.accessor[i], expected)
         torch.testing.assert_close(list(dataset.accessor)[i], dataset.accessor[i])

@@ -33,33 +33,32 @@ from fastabx import (
 from fastabx.alignment import alignment_function
 from fastabx.dataset import decimal_frequency, load_data_from_item, load_data_from_item_with_times
 from fastabx.distance import distance_function, euclidean_distance
-from tests.conftest import DEVICE
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64, torch.int64])
 @pytest.mark.parametrize("convert", [None, torch.float32, torch.float64])
-def test_tabular_dtype_policy(dtype: torch.dtype, convert: torch.dtype | None) -> None:
+def test_tabular_dtype_policy(dtype: torch.dtype, convert: torch.dtype | None, device: torch.device) -> None:
     features = torch.arange(8, dtype=dtype).reshape(4, 2)
     labels = {"phone": ["a", "a", "b", "b"]}
     datasets = [
-        Dataset.from_numpy(features.numpy(), labels, dtype=convert, device=DEVICE),
+        Dataset.from_numpy(features.numpy(), labels, dtype=convert, device=device),
         Dataset.from_dataframe(
             pl.from_numpy(features.numpy()).with_columns(pl.Series("phone", labels["phone"])),
             ["column_0", "column_1"],
             dtype=convert,
-            device=DEVICE,
+            device=device,
         ),
     ]
     for dataset in datasets:
         assert dataset.accessor[0].dtype == (convert or dtype)
-        torch.testing.assert_close(dataset.accessor[0], features[:1].to(device=DEVICE, dtype=convert))
+        torch.testing.assert_close(dataset.accessor[0], features[:1].to(device=device, dtype=convert))
         if (convert or dtype).is_floating_point:
             score = Score(Task(dataset, on="phone"), "euclidean", progress=False).collapse()
             assert 0 <= score <= 1
 
 
 @pytest.mark.parametrize("dtype", [None, torch.float32, torch.float64])
-def test_item_constructor_dtypes(tmp_path: Path, dtype: torch.dtype | None) -> None:
+def test_item_constructor_dtypes(tmp_path: Path, dtype: torch.dtype | None, device: torch.device) -> None:
     item = tmp_path / "data.item"
     item.write_text("#file onset offset phone\nf 0.0 1.0 a\n")
     features, times = tmp_path / "features", tmp_path / "times"
@@ -70,9 +69,9 @@ def test_item_constructor_dtypes(tmp_path: Path, dtype: torch.dtype | None) -> N
     units = tmp_path / "units.jsonl"
     units.write_text('{"audio":"f.wav","units":[16777217,16777218]}\n')
     datasets = [
-        Dataset.from_item(item, features, 2, dtype=dtype, device=DEVICE, progress=False),
-        Dataset.from_item_with_times(item, features, times, dtype=dtype, device=DEVICE, progress=False),
-        Dataset.from_item_and_units(item, units, 2, dtype=dtype, device=DEVICE, progress=False),
+        Dataset.from_item(item, features, 2, dtype=dtype, device=device, progress=False),
+        Dataset.from_item_with_times(item, features, times, dtype=dtype, device=device, progress=False),
+        Dataset.from_item_and_units(item, units, 2, dtype=dtype, device=device, progress=False),
     ]
     for dataset, original in zip(datasets, [torch.float64, torch.float64, torch.int64], strict=True):
         assert dataset.accessor[0].dtype == (dtype or original)
@@ -80,7 +79,9 @@ def test_item_constructor_dtypes(tmp_path: Path, dtype: torch.dtype | None) -> N
         assert datasets[2].accessor[0][0].item() == 16777217
 
 
-def _timestamp_dataset(times: torch.Tensor, labels: pl.DataFrame | None = None) -> tuple[dict, torch.Tensor]:
+def _timestamp_dataset(
+    times: torch.Tensor, labels: pl.DataFrame | None = None, *, device: torch.device
+) -> tuple[dict, torch.Tensor]:
     """Load two frames with configurable timestamps and metadata."""
     if labels is None:
         labels = pl.DataFrame({"file": ["f"], "start": [Decimal("0.0")], "stop": [Decimal("1.00")]})
@@ -93,35 +94,35 @@ def _timestamp_dataset(times: torch.Tensor, labels: pl.DataFrame | None = None) 
         "file",
         "start",
         "stop",
-        DEVICE,
+        device,
         progress=False,
     )
 
 
 @pytest.mark.parametrize("times", [torch.tensor(0.5), torch.tensor([[0.0, 1.0]])])
-def test_timestamp_requires_one_dimension(times: torch.Tensor) -> None:
+def test_timestamp_requires_one_dimension(times: torch.Tensor, device: torch.device) -> None:
     with pytest.raises(TimesArrayDimensionError):
-        _timestamp_dataset(times)
+        _timestamp_dataset(times, device=device)
 
 
 @pytest.mark.parametrize(
     "times", [torch.tensor([0.0]), torch.tensor([0.0, float("nan")]), torch.tensor([0.0, float("inf")])]
 )
-def test_timestamp_length_and_finiteness(times: torch.Tensor) -> None:
+def test_timestamp_length_and_finiteness(times: torch.Tensor, device: torch.device) -> None:
     with pytest.raises(InvalidTimesError):
-        _timestamp_dataset(times)
+        _timestamp_dataset(times, device=device)
 
 
-def test_timestamp_uses_both_boundary_precisions() -> None:
+def test_timestamp_uses_both_boundary_precisions(device: torch.device) -> None:
     labels = pl.DataFrame({"file": ["f"], "start": [Decimal("0.1")], "stop": [Decimal("0.15")]})
-    indices, data = _timestamp_dataset(torch.tensor([0.1, 0.15]), labels)
+    indices, data = _timestamp_dataset(torch.tensor([0.1, 0.15]), labels, device=device)
     assert indices == {0: (0, 2)}
     assert data[:, 0].tolist() == [1.0, 2.0]
 
 
-def test_timestamp_float_metadata_is_not_rounded_to_integer() -> None:
+def test_timestamp_float_metadata_is_not_rounded_to_integer(device: torch.device) -> None:
     labels = pl.DataFrame({"file": ["f"], "start": [0.1], "stop": [0.15]})
-    _, data = _timestamp_dataset(torch.tensor([0.1, 0.15], dtype=torch.float64), labels)
+    _, data = _timestamp_dataset(torch.tensor([0.1, 0.15], dtype=torch.float64), labels, device=device)
     assert data.shape == (2, 1)
 
 
@@ -134,16 +135,16 @@ def test_frequency_rejects_non_positive_or_non_finite(frequency: int | str) -> N
 @pytest.mark.parametrize(
     ("onset", "offset"), [(-1.0, 1.0), (2.0, 1.0), (None, 1.0), (0.0, float("inf")), (float("nan"), 1.0)]
 )
-def test_invalid_intervals(onset: float | None, offset: float) -> None:
+def test_invalid_intervals(onset: float | None, offset: float, device: torch.device) -> None:
     labels = pl.DataFrame({"file": ["f"], "start": [onset], "stop": [offset]})
     with pytest.raises(InvalidItemFileError, match="intervals"):
-        _timestamp_dataset(torch.tensor([0.0, 1.0]), labels)
+        _timestamp_dataset(torch.tensor([0.0, 1.0]), labels, device=device)
 
 
-def test_empty_item_metadata() -> None:
+def test_empty_item_metadata(device: torch.device) -> None:
     labels = pl.DataFrame(schema={"file": pl.String, "start": pl.Float64, "stop": pl.Float64})
     with pytest.raises(EmptyDatasetError):
-        _timestamp_dataset(torch.tensor([0.0, 1.0]), labels)
+        _timestamp_dataset(torch.tensor([0.0, 1.0]), labels, device=device)
 
 
 def test_callable_dataclass_distance(tiny_dataset: Dataset) -> None:
@@ -165,19 +166,19 @@ def test_non_callable_configuration_rejected(resolver: Callable) -> None:
 
 
 @pytest.mark.parametrize("shape", [(4,), (2, 0), (2, 2, 1)])
-def test_invalid_feature_dimensions(shape: tuple[int, ...]) -> None:
+def test_invalid_feature_dimensions(shape: tuple[int, ...], device: torch.device) -> None:
     with pytest.raises(InvalidFeaturesError, match="shape"):
-        InMemoryAccessor({0: (0, 1)}, torch.zeros(shape), DEVICE)
+        InMemoryAccessor({0: (0, 1)}, torch.zeros(shape), device)
 
 
 @pytest.mark.parametrize("interval", [(-1, 1), (0, 3)])
-def test_accessor_slice_bounds(interval: tuple[int, int]) -> None:
+def test_accessor_slice_bounds(interval: tuple[int, int], device: torch.device) -> None:
     with pytest.raises(InvalidFeaturesError, match="slices"):
-        InMemoryAccessor({0: interval}, torch.zeros(2, 1), DEVICE)
+        InMemoryAccessor({0: interval}, torch.zeros(2, 1), device)
 
 
-def test_dataset_label_accessor_lengths() -> None:
-    accessor = InMemoryAccessor({0: (0, 1)}, torch.zeros(1, 1), DEVICE)
+def test_dataset_label_accessor_lengths(device: torch.device) -> None:
+    accessor = InMemoryAccessor({0: (0, 1)}, torch.zeros(1, 1), device)
     with pytest.raises(InvalidDatasetError, match="same length"):
         Dataset(pl.DataFrame({"phone": ["a", "b"]}), accessor)
 
@@ -201,14 +202,14 @@ def test_duplicate_unit_identifiers(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64])
 @pytest.mark.parametrize("pooling", ["mean", "hamming"])
-def test_pooling_float_dtypes(dtype: torch.dtype, pooling: PoolingName) -> None:
-    accessor = InMemoryAccessor({0: (0, 2)}, torch.tensor([[1.0], [3.0]], dtype=dtype), DEVICE)
+def test_pooling_float_dtypes(dtype: torch.dtype, pooling: PoolingName, device: torch.device) -> None:
+    accessor = InMemoryAccessor({0: (0, 2)}, torch.tensor([[1.0], [3.0]], dtype=dtype), device)
     pooled = pool_dataset(Dataset(pl.DataFrame({"phone": ["a"]}), accessor), pooling)
     assert pooled.accessor[0].dtype == dtype
     assert pooled.accessor[0].item() == pytest.approx(2.0)
 
 
-def test_item_feature_dimension_consistency() -> None:
+def test_item_feature_dimension_consistency(device: torch.device) -> None:
     labels = pl.DataFrame({"file": ["a", "b"], "start": [0.0, 0.0], "stop": [1.0, 1.0]})
     with pytest.raises(InvalidFeaturesError, match="consistent"):
         load_data_from_item(
@@ -219,7 +220,7 @@ def test_item_feature_dimension_consistency() -> None:
             "file",
             "start",
             "stop",
-            DEVICE,
+            device,
             progress=False,
         )
 
@@ -235,15 +236,15 @@ def test_numpy_requires_matrix() -> None:
 
 
 @pytest.mark.parametrize("index", [0.0, True])
-def test_accessor_rejects_non_integer_row_keys(*, index: float | bool) -> None:
+def test_accessor_rejects_non_integer_row_keys(*, index: float | bool, device: torch.device) -> None:
     with pytest.raises(InvalidDatasetError, match="integer row"):
-        InMemoryAccessor({index: (0, 1)}, torch.zeros(1, 1), DEVICE)  # ty: ignore[invalid-argument-type]
+        InMemoryAccessor({index: (0, 1)}, torch.zeros(1, 1), device)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("boundary", [0.5, True])
-def test_accessor_rejects_non_integer_slice_bounds(*, boundary: float | bool) -> None:
+def test_accessor_rejects_non_integer_slice_bounds(*, boundary: float | bool, device: torch.device) -> None:
     with pytest.raises(InvalidFeaturesError, match="integers"):
-        InMemoryAccessor({0: (boundary, 2)}, torch.zeros(2, 1), DEVICE)  # ty: ignore[invalid-argument-type]
+        InMemoryAccessor({0: (boundary, 2)}, torch.zeros(2, 1), device)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize(
@@ -307,63 +308,63 @@ def test_precomputed_lists_count_positions_including_duplicates(*, symmetric: bo
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("distance", ["euclidean", "angular", "kl_symmetric"])
 def test_sequence_scoring_preserves_supported_feature_precision(
-    seq_dataset: Dataset, dtype: torch.dtype, distance: str
+    seq_dataset: Dataset, dtype: torch.dtype, distance: str, device: torch.device
 ) -> None:
     original = seq_dataset.accessor
     assert isinstance(original, InMemoryAccessor)
     features = original.data.to(dtype=dtype).softmax(dim=1)
-    dataset = Dataset(seq_dataset.labels, InMemoryAccessor(original.indices, features, DEVICE))
+    dataset = Dataset(seq_dataset.labels, InMemoryAccessor(original.indices, features, device))
     score = Score(Task(dataset, on="phone"), distance, progress=False)  # ty: ignore[invalid-argument-type]
     assert 0 <= score.collapse() <= 1
     assert dataset.accessor[0].dtype == dtype
 
 
-def _negative_features_dataset(*, sequences: bool) -> Dataset:
+def _negative_features_dataset(*, sequences: bool, device: torch.device) -> Dataset:
     rng = np.random.default_rng(0)
     labels = pl.DataFrame({"phone": list("aaaabbbb")})
     if not sequences:
-        return Dataset.from_numpy(-rng.random((8, 4)).astype(np.float32), labels, device=DEVICE)
+        return Dataset.from_numpy(-rng.random((8, 4)).astype(np.float32), labels, device=device)
     data = -torch.from_numpy(rng.random((24, 4)).astype(np.float32))
-    return Dataset(labels, InMemoryAccessor({i: (3 * i, 3 * i + 3) for i in range(8)}, data, DEVICE))
+    return Dataset(labels, InMemoryAccessor({i: (3 * i, 3 * i + 3) for i in range(8)}, data, device))
 
 
 @pytest.mark.parametrize("sequences", [False, True])
-def test_nan_distances_are_rejected_not_counted_as_ties(*, sequences: bool) -> None:
+def test_nan_distances_are_rejected_not_counted_as_ties(*, sequences: bool, device: torch.device) -> None:
     """``torch.sign(nan) == 0`` would count NaN distances as ties: scoring must raise instead."""
-    task = Task(_negative_features_dataset(sequences=sequences), on="phone")
+    task = Task(_negative_features_dataset(sequences=sequences, device=device), on="phone")
     with pytest.raises(NaNDistanceError, match="kl_symmetric"):
         Score(task, "kl_symmetric", progress=False)
     with pytest.raises(NaNDistanceError):
         abx_on_cell(task[0], "kl_symmetric")
 
 
-def test_nan_from_custom_distance_is_rejected() -> None:
+def test_nan_from_custom_distance_is_rejected(device: torch.device) -> None:
     def nan_distance(a1: torch.Tensor, a2: torch.Tensor) -> torch.Tensor:
         return euclidean_distance(a1, a2) * float("nan")
 
-    task = Task(_negative_features_dataset(sequences=False), on="phone")
+    task = Task(_negative_features_dataset(sequences=False, device=device), on="phone")
     with pytest.raises(NaNDistanceError):
         Score(task, nan_distance, progress=False)
 
 
 @pytest.mark.parametrize("condition", ["on", "by", "across"])
-def test_missing_condition_labels_are_rejected(condition: str) -> None:
+def test_missing_condition_labels_are_rejected(condition: str, device: torch.device) -> None:
     labels = {"phone": list("aabbaabb"), "context": ["c"] * 8, "speaker": ["s1"] * 4 + ["s2"] * 4}
     column = {"on": "phone", "by": "context", "across": "speaker"}[condition]
     labels[column] = [*labels[column][:-1], None]
-    dataset = Dataset.from_numpy(np.zeros((8, 2), dtype=np.float32), labels, device=DEVICE)
+    dataset = Dataset.from_numpy(np.zeros((8, 2), dtype=np.float32), labels, device=device)
     with pytest.raises(MissingLabelError, match=f"'{column}' \\(1 rows\\)"):
         Task(dataset, on="phone", by=["context"], across=["speaker"])
 
 
-def test_missing_labels_outside_the_conditions_are_allowed() -> None:
+def test_missing_labels_outside_the_conditions_are_allowed(device: torch.device) -> None:
     labels = {"phone": list("aabb"), "comment": [None, "x", None, None]}
-    dataset = Dataset.from_numpy(np.zeros((4, 2), dtype=np.float32), labels, device=DEVICE)
+    dataset = Dataset.from_numpy(np.zeros((4, 2), dtype=np.float32), labels, device=device)
     assert len(Task(dataset, on="phone")) == 2
 
 
 @pytest.mark.parametrize("extension", [".item", ".csv"])
-def test_item_labels_are_read_as_strings(tmp_path: Path, extension: str) -> None:
+def test_item_labels_are_read_as_strings(tmp_path: Path, extension: str, device: torch.device) -> None:
     """Labels are never type-inferred: ``01`` and ``1`` stay distinct, and a late non-numeric label is fine."""
     separator = " " if extension == ".item" else ","
     speakers = ["01", "1"] + [str(i % 3) for i in range(150)] + ["p225"]
@@ -372,7 +373,7 @@ def test_item_labels_are_read_as_strings(tmp_path: Path, extension: str) -> None
     item = tmp_path / f"data{extension}"
     item.write_text("\n".join(rows) + "\n")
     torch.save(torch.zeros(10, 2), tmp_path / "f.pt")
-    dataset = Dataset.from_item(item, tmp_path, 50, device=DEVICE, progress=False)
+    dataset = Dataset.from_item(item, tmp_path, 50, device=device, progress=False)
     assert dataset.labels["speaker"].dtype == pl.String
     assert dataset.labels["speaker"].to_list() == speakers
     assert dataset.labels["onset"].dtype == pl.Decimal

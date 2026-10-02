@@ -17,7 +17,7 @@ import torch
 from torch.testing import assert_close
 from torchdtw import dtw_batch
 
-from fastabx import Dataset, Task
+from fastabx import Dataset, InMemoryAccessor, Task
 from fastabx.constraints import constraints_all_different
 from fastabx.distance import DistanceName, abx_on_cell, distance_function
 from fastabx.group import GroupReducer, group_cells, grouped_contributions
@@ -324,3 +324,30 @@ def test_env_var_chunking_invariance_via_subprocess(tmp_path: Path) -> None:
     chunked = subprocess.check_output([sys.executable, str(script)], env=env_tiny, text=True)
     # The chunk env vars must be a no-op on the output, exactly.
     assert json.loads(baseline) == json.loads(chunked)
+
+
+def _sequence_dataset(distance: DistanceName, device: torch.device) -> Dataset:
+    """Variable-length sequences, with several items per (phone, context) so that DTW is exercised."""
+    rng = np.random.default_rng(11)
+    phones, speakers, contexts, pieces, indices, cursor = [], [], [], [], {}, 0
+    for i in range(48):
+        length = int(rng.integers(2, 7))
+        phones.append("abc"[i % 3])
+        speakers.append(f"s{(i // 6) % 2}")
+        contexts.append(f"c{(i // 3) % 2}")
+        pieces.append(_normalize_for_distance(rng.standard_normal((length, 4)), distance))
+        indices[i] = (cursor, cursor + length)
+        cursor += length
+    labels = pl.DataFrame({"phone": phones, "speaker": speakers, "context": contexts})
+    dataset = Dataset(labels, InMemoryAccessor(indices, torch.from_numpy(np.concatenate(pieces)), device))
+    if distance == "angular":
+        dataset.normalize_()
+    return dataset
+
+
+@pytest.mark.parametrize("distance", ["euclidean", "angular", "kl_symmetric"])
+def test_symmetric_groups_with_dtw_match_abx_on_cell(distance: DistanceName, device: torch.device) -> None:
+    """Within-condition groups of variable-length sequences, aligned with DTW, match the per-cell scores exactly."""
+    task = Task(_sequence_dataset(distance, device), on="phone", by=["context"])
+    scores, _ = score_task(task, distance_function(distance), alignment=dtw_batch)
+    assert scores == [float(abx_on_cell(cell, distance)) for cell in task]

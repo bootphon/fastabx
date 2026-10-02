@@ -1,18 +1,20 @@
 """Pytest configuration and shared fixtures."""
 
+from collections.abc import Iterator
+
 import numpy as np
 import polars as pl
 import pytest
 import torch
 from hypothesis import settings
 
+import fastabx.dataset
 from fastabx import Dataset
 from fastabx.accessor import InMemoryAccessor
 from fastabx.utils import resolve_device
 
-# Device used everywhere in the tests: the same default as normal usage, so the CUDA transfers
-# are exercised when a GPU is available.
-DEVICE = resolve_device(None)
+# Every test runs on CPU, and again on CUDA when a GPU is available.
+DEVICES = [torch.device("cpu")] + ([torch.device("cuda")] if torch.cuda.is_available() else [])
 
 # Run more examples than hypothesis's default (100) so adversarial cases (e.g. the cosine
 # antipodal boundary in test_distances.py) get explored harder by default. Individual tests
@@ -25,6 +27,21 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     """CLI arguments."""
     parser.addoption("--item", action="store", default=None, help="Path to the item file")
     parser.addoption("--features", action="store", default=None, help="Path to the features directory")
+
+
+@pytest.fixture(scope="session", autouse=True, params=DEVICES, ids=str)
+def device(request: pytest.FixtureRequest) -> Iterator[torch.device]:
+    """Device of the current run, also used by the ``Dataset`` constructors when no device is given.
+
+    Session-scoped so that pytest runs every test on one device before switching to the next, and so that
+    hypothesis accepts it in ``@given`` tests.
+    """
+    current: torch.device = request.param
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            fastabx.dataset, "resolve_device", lambda device: resolve_device(current if device is None else device)
+        )
+        yield current
 
 
 def accessor_data(dataset: Dataset) -> torch.Tensor:
@@ -55,7 +72,7 @@ def tiny_dataset() -> Dataset:
 
 
 @pytest.fixture
-def seq_dataset() -> Dataset:
+def seq_dataset(device: torch.device) -> Dataset:
     """Dataset with variable time lengths per item (forces needs_alignment=True)."""
     rng = np.random.default_rng(1)
     d = 3
@@ -70,4 +87,4 @@ def seq_dataset() -> Dataset:
         cursor += length
     data = torch.from_numpy(np.concatenate(pieces, axis=0))
     labels = pl.DataFrame({"phone": phones, "speaker": speakers, "context": ["c1", "c2", "c1"] * 6})
-    return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, DEVICE))
+    return Dataset(labels=labels, accessor=InMemoryAccessor(indices, data, device))
