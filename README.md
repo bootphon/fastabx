@@ -50,7 +50,7 @@ task = Task(dataset, on="phone", by=["speaker"])  # Which triplets to build
 score = Score(task, "euclidean")  # How to compare them
 
 print(score.collapse(levels=["speaker"]))  # ABX error rate
-# 0.03059999644756317
+# 0.03059999999999999
 ```
 
 On speech, build the dataset from an item file and a directory of features instead, then run the same

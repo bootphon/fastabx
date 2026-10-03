@@ -136,7 +136,7 @@ def test_pl_weighted_mean_handles_nulls() -> None:
 
 
 def test_pl_weighted_mean_all_null_returns_none() -> None:
-    df = pl.DataFrame({"score": [None, None], "size": [3, 4]}, schema={"score": pl.Float32, "size": pl.Int32})
+    df = pl.DataFrame({"score": [None, None], "size": [3, 4]}, schema={"score": pl.Float64, "size": pl.Int32})
     assert df.select(pl_weighted_mean("score", "size")).item() is None
 
 
@@ -192,7 +192,7 @@ def test_score_details_collapse_order_matters_with_unequal_subgroups() -> None:
             "phone_b": ["b"] * 5,
             "speaker": ["s1", "s1", "s2", "s2", "s2"],
             "context": ["c1", "c2", "c1", "c2", "c3"],
-            "score": pl.Series([0.0, 0.0, 1.0, 1.0, 1.0], dtype=pl.Float32),
+            "score": pl.Series([0.0, 0.0, 1.0, 1.0, 1.0], dtype=pl.Float64),
             "size": pl.Series([10] * 5, dtype=pl.Int32),
         }
     )
@@ -212,7 +212,7 @@ def test_score_details_single_level_aggregates_correctly() -> None:
             "phone": ["a", "a", "b", "b"],
             "phone_b": ["b", "b", "a", "a"],
             "speaker": ["s1", "s2", "s1", "s2"],
-            "score": pl.Series([0.1, 0.3, 0.4, 0.2], dtype=pl.Float32),
+            "score": pl.Series([0.1, 0.3, 0.4, 0.2], dtype=pl.Float64),
             "size": pl.Series([10, 10, 10, 10], dtype=pl.Int32),
         }
     )
