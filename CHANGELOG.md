@@ -27,6 +27,8 @@ Releases up to and including 0.8.0 predate this file and are documented at
   `dtype=torch.float32` for the previous behavior.
 - Item-file labels are always read as strings, so numeric speaker IDs now have the `String` dtype.
 - Cell sizes are Int64, and win/tie counts no longer lose precision beyond float32.
+- `Score.cells` stores the cell scores as Float64 instead of Float32, and `abx_on_cell` returns a float64
+  tensor.
 
 ### Fixed
 

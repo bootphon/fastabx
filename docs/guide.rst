@@ -25,7 +25,7 @@ to discriminate is which Gaussian a point came from:
    score = Score(task, "euclidean")  # How to compare them
 
    print(score.collapse(levels=["speaker"]))
-   # 0.03059999644756317
+   # 0.03059999999999999
 
 - :class:`.Dataset` holds the labels and gives access to the representations.
 - :class:`.Task` turns the ON, BY and ACROSS conditions into :class:`.Cell` objects. ``on="phone"`` asks for
@@ -62,7 +62,7 @@ It is also available through a command line interface.
        seed=0,
    )
    print(abx_error_rate)
-   # 0.033783210627340875
+   # 0.033761826954136244
 
 
 The main interface of the library consists of three classes: :class:`.Dataset`, :class:`.Task`, and :class:`.Score`.
@@ -159,7 +159,7 @@ or they can aggregate by averaging across subsequent attributes (with :code:`lev
    score = Score(task, "angular")
    abx_error_rate = score.collapse(levels=[("prev-phone", "next-phone"), "speaker"])
    print(abx_error_rate)
-   # 0.033783210627340875
+   # 0.04037150632966727
 
 CLI
 ===

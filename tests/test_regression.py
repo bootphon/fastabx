@@ -29,9 +29,9 @@ def _build_dataset(distance: DistanceName) -> Dataset:
 
 # Pinned to detect regressions.
 EXPECTED: dict[DistanceName, float] = {
-    "euclidean": 0.4913194353381793,
-    "cosine": 0.4809027786056201,
-    "kl_symmetric": 0.4340277736385663,
+    "euclidean": 0.4913194444444444,
+    "cosine": 0.48090277777777773,
+    "kl_symmetric": 0.43402777777777785,
     "identical": 0.5,
 }
 

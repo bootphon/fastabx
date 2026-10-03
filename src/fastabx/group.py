@@ -216,7 +216,7 @@ class GroupReducer:
 
     def __init__(self, num_cells: int, *, constrained: bool = False) -> None:
         self.constrained = constrained
-        self.scores = torch.full((num_cells,), float("nan"))  # per-cell score, written back by position
+        self.scores = torch.full((num_cells,), float("nan"), dtype=torch.float64)  # per-cell score, by position
         self.sizes: list[int | None] = [0] * num_cells
         self._per_b: list[torch.Tensor] = []  # per-group (sum(b_rows),) half-integer counts
         self._per_b_valid: list[torch.Tensor] = []  # per-group (sum(b_rows),) valid-triplet counts (constrained)
