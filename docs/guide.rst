@@ -123,8 +123,9 @@ conditions for a particular value.
 To control the size and number of cells, a :class:`.Task` can be instantiated with an additional
 :class:`.Subsampler`. The :class:`.Subsampler` implements the two subsampling methods done in Libri-Light.
 First, it can cap the number of :math:`a`, :math:`b` and :math:`x` independently in each cell (with :code:`max_size_group`).
-Second, when ACROSS conditions are specified, it can limit the number of distinct values
-that :math:`x` can take for the ON attribute (with :code:`max_x_across`).
+Second, when ACROSS conditions are specified, it can limit the number of distinct observed combinations
+of ACROSS values that :math:`x` can take for each fixed (A, B) group (with :code:`max_x_across`). With several
+ACROSS columns, complete tuples are sampled.
 
 .. code-block:: python
 
@@ -169,6 +170,8 @@ This package also provides a command line interface, a simple wrapper that expos
    :module: fastabx.__main__
    :func: build_parser
    :prog: fastabx
+
+Every reported score is an ABX **error rate** in the interval 0 to 1: lower is better and chance is 0.5.
 
 Motivation
 ==========
