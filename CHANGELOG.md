@@ -11,6 +11,8 @@ Releases up to and including 0.8.0 predate this file and are documented at
 ### Added
 
 - CI and releases install the wheel and source distribution in clean environments and smoke-test them.
+- Documentation on hierarchical versus triplet-weighted averaging, count precision, timestamp validation
+  and subsampling reproducibility.
 - `Dataset.from_*` constructors accept a `dtype` argument; `dtype=None` preserves the input precision.
 - Datasets, timestamps and item files are validated: row counts, feature shapes, slice boundaries, item
   intervals, frequencies and non-finite features.
