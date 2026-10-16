@@ -33,7 +33,13 @@ from fastabx.score import (
     Score,
     SymmetricCollapseError,
 )
-from fastabx.stats import InvalidResampleError, NestedBootstrapWarning
+from fastabx.stats import (
+    InvalidDesignError,
+    InvalidResampleError,
+    InvalidUnitError,
+    MismatchedScoresError,
+    NestedBootstrapWarning,
+)
 from fastabx.subsample import Subsampler
 from fastabx.task import Task
 from fastabx.utils import InvalidEnvironmentVariableError
@@ -86,6 +92,7 @@ __all__ = [
     "InputTypeError",
     "InvalidCellError",
     "InvalidDatasetError",
+    "InvalidDesignError",
     "InvalidEnvironmentVariableError",
     "InvalidFeatureDtypeError",
     "InvalidFeaturesError",
@@ -94,8 +101,10 @@ __all__ = [
     "InvalidResampleError",
     "InvalidSpeakerOrContextError",
     "InvalidTimesError",
+    "InvalidUnitError",
     "LabelReservedNameError",
     "LabelSuffixError",
+    "MismatchedScoresError",
     "MissingLabelError",
     "MissingMaxXAcrossError",
     "NaNDistanceError",

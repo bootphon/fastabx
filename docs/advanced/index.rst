@@ -4,6 +4,7 @@ Advanced
 
 .. toctree::
 
+	statistics
 	bootstrap
 	comparison
 	slicing

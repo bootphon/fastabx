@@ -58,6 +58,12 @@ See :ref:`bootstrap` for how to use it and what it does and does not measure.
 Statistics
 ----------
 
+See :ref:`statistics` and :ref:`bootstrap`.
+
+.. autofunction:: fastabx.stats.crossed_mean
+
+.. autofunction:: fastabx.stats.compare
+
 .. autofunction:: fastabx.stats.bootstrap_collapse
 
 .. autofunction:: fastabx.stats.bootstrap_details
@@ -243,6 +249,9 @@ Scoring
 .. autoexception:: fastabx.IncompatibleNormalizationError
 .. autoexception:: fastabx.InvalidLevelsError
 .. autoexception:: fastabx.InvalidResampleError
+.. autoexception:: fastabx.InvalidDesignError
+.. autoexception:: fastabx.InvalidUnitError
+.. autoexception:: fastabx.MismatchedScoresError
 .. autoexception:: fastabx.NaNDistanceError
 .. autoexception:: fastabx.NoBootstrapError
 .. autoexception:: fastabx.NoConstraintsError

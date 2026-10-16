@@ -14,6 +14,9 @@ Releases up to and including 0.8.0 predate this file and are documented at
   computations of the point estimate. `fastabx.stats.bootstrap_collapse` collapses the replicates and can also
   resample categories (speakers, contexts, phones) without rescoring. `fastabx.stats.bootstrap_details` gives
   the replicates of every group, for statistics other than a mean.
+- `fastabx.stats.crossed_mean` gives the mean of a fully crossed design (e.g. speakers x models) and the
+  unbiased estimator of its variance. `fastabx.stats.compare` compares two groups of models with it, as in
+  Schatz et al. (2021, PNAS).
 - `Score.details(symmetric=True)` merges the (a, b) and (b, a) cells of each contrast before collapsing.
 - `Score` records the `on`, `by` and `across` conditions of its task.
 - `Task.is_subsampled`.

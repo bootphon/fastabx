@@ -1,6 +1,11 @@
-"""Statistics on scored ABX tasks: bootstrap distributions over tokens and categories.
+"""Statistics on scored ABX tasks: closed-form variances of crossed designs, and bootstrap distributions.
 
-Two kinds of resampling are supported, and can be combined:
+**Closed form.** :py:func:`crossed_mean` gives the mean of a fully crossed design (e.g. speakers x models) and the
+unbiased estimator of its variance, the one of a generalized U-statistic. :py:func:`compare` uses it to compare two
+groups of models, as in Schatz et al. (PNAS, Supplementary Materials and Methods 4). Tests, p-values and corrections
+for multiple comparisons are left to SciPy or statsmodels.
+
+**Bootstrap.** Two kinds of resampling are supported, and can be combined:
 
 - **tokens**: the items inside each cell, drawn when scoring with ``Score(..., bootstrap=Bootstrap(n))``. They
   need the distances, so they are computed alongside the point estimate (see :py:mod:`fastabx.bootstrap`).
@@ -14,7 +19,10 @@ identical cells. A cell involving two values of the same condition (the ``phone`
 with one of its own copies.
 """
 
+import functools
 import hashlib
+import itertools
+import operator
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -38,10 +46,15 @@ from fastabx.utils import bootstrap_chunk_elems
 from fastabx.verify import verify_bootstrap_params
 
 __all__ = [
+    "InvalidDesignError",
     "InvalidResampleError",
+    "InvalidUnitError",
+    "MismatchedScoresError",
     "NestedBootstrapWarning",
     "bootstrap_collapse",
     "bootstrap_details",
+    "compare",
+    "crossed_mean",
 ]
 
 CONDITION_SUFFIXES = ("", "_b", "_x")
@@ -50,6 +63,27 @@ DIRECTIONS = 2
 
 class InvalidResampleError(ValueError):
     """The requested bootstrap cannot be built from this ``Score``."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+
+
+class InvalidDesignError(ValueError):
+    """The table given to :py:func:`.crossed_mean` is not a fully crossed design."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+
+
+class InvalidUnitError(ValueError):
+    """The unit of :py:func:`.compare` must be a BY condition of every ``Score``, left after ``levels``."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+
+
+class MismatchedScoresError(ValueError):
+    """The Scores given to :py:func:`.compare` do not have the same groups."""
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
@@ -373,3 +407,186 @@ def bootstrap_details(
     )
     flat = values[long["__group"].to_numpy(), long["replicate"].to_numpy()]
     return long.drop("__group").with_columns(score=pl.Series(flat, nan_to_null=True))
+
+
+def verify_design(df: pl.DataFrame, *, factors: list[str], value: str, by: list[str]) -> None:
+    """Check that the factors, value and groups are distinct columns of ``df``."""
+    if not factors:
+        msg = "`factors` is empty: give at least one factor, e.g. `factors=['speaker']`."
+        raise InvalidDesignError(msg)
+    names = [*factors, *by, value]
+    if len(set(names)) != len(names):
+        msg = f"`factors` ({factors}), `by` ({by}) and `value` ({value!r}) must be distinct columns."
+        raise InvalidDesignError(msg)
+    if missing := [c for c in names if c not in df.columns]:
+        msg = f"No column named {missing} in the table. Its columns are: {df.columns}."
+        raise InvalidDesignError(msg)
+    values = df[value]
+    if values.null_count() or (values.dtype.is_float() and values.is_nan().any()):
+        msg = f"The column {value!r} has missing values: drop them, or the cells they belong to, first."
+        raise InvalidDesignError(msg)
+
+
+def verify_crossed(groups: pl.DataFrame, *, factors: list[str], by: list[str]) -> None:
+    """Check that every group holds exactly one value per combination of the factors."""
+    counts = [pl.col(f"n_{f}") for f in factors]
+    full = functools.reduce(operator.mul, counts)
+    incomplete = groups.filter((pl.col("__rows") != pl.col("__combinations")) | (pl.col("__rows") != full))
+    if not incomplete.is_empty():
+        first = incomplete.select(*by, pl.col("__rows").alias("rows"), *counts).row(0, named=True)
+        msg = (
+            f"{len(incomplete)} group(s) are not fully crossed: each must hold exactly one value for every "
+            f"combination of {factors}. First one: {first}."
+        )
+        raise InvalidDesignError(msg)
+
+
+def crossed_mean(
+    df: pl.DataFrame, *, factors: Sequence[str], value: str = "score", by: Sequence[str] = ()
+) -> pl.DataFrame:
+    """Mean of a fully crossed design, and the unbiased estimator of its variance, for every group of ``by``.
+
+    In each group, ``df`` must hold exactly one ``value`` for every combination of the ``factors`` (e.g. every
+    speaker x model), and the levels of every factor are treated as independent samples of a population (speakers,
+    model seeds...). The mean is then a generalized U-statistic, and its variance is estimated without bias by
+    ``mean^2 - Q``, ``Q`` being the average product of two values that differ on every factor. It is computed in
+    ``O(rows x 2^len(factors))`` by inclusion-exclusion over the factors.
+
+    A factor with a single level in a group (e.g. one model) is treated as fixed: the variance is then conditional
+    on that level. The variance is ``null`` when every factor has a single level. Being unbiased, the estimate can be
+    slightly negative when the true variance is close to 0.
+
+    With a single factor, this is the usual ``var(ddof=1) / n``.
+
+    :param df: The table, in long format.
+    :param factors: Columns of the random factors, crossed with each other.
+    :param value: Column of the values to average.
+    :param by: Columns defining independent groups, each with its own mean and variance.
+    :returns: One row per group: the ``by`` columns, ``estimate``, ``variance``, and ``n_<factor>`` the number of
+        levels of each factor.
+    """
+    factors, by = list(factors), list(by)
+    verify_design(df, factors=factors, value=value, by=by)
+    key = by or ["__group"]
+    data = df.select(*by, *factors, pl.col(value).cast(pl.Float64).alias("__raw")).with_columns(__group=pl.lit(0))
+    # The estimator is invariant to a shift of the values: centering each group avoids cancellations.
+    data = data.with_columns(__centered=pl.col("__raw") - pl.col("__raw").mean().over(key))
+    subsets = [subset for r in range(len(factors) + 1) for subset in itertools.combinations(factors, r)]
+    # Sum over the groups of ``subset`` of the squared sum of their values, spread over their rows.
+    terms = [
+        (pl.col("__centered").sum().over([*key, *subset]).pow(2) / pl.len().over([*key, *subset])).alias(f"__term{i}")
+        for i, subset in enumerate(subsets)
+    ]
+    groups = (
+        data.with_columns(terms)
+        .group_by(key, maintain_order=True)
+        .agg(
+            pl.col("__raw").mean().alias("estimate"),
+            pl.len().alias("__rows"),
+            pl.struct(factors).n_unique().alias("__combinations"),
+            *[pl.col(f).n_unique().alias(f"n_{f}") for f in factors],
+            *[pl.col(f"__term{i}").sum() for i in range(len(subsets))],
+        )
+    )
+    verify_crossed(groups, factors=factors, by=by)
+    # Factors with a single level are fixed: they leave the inclusion-exclusion and the degrees of freedom.
+    is_random = {f: pl.col(f"n_{f}") > 1 for f in factors}
+    distinct_pairs = pl.sum_horizontal(
+        pl.when(pl.all_horizontal(pl.lit(value=True), *[is_random[f] for f in subset]))
+        .then((-1) ** len(subset) * pl.col(f"__term{i}"))
+        .otherwise(0)
+        for i, subset in enumerate(subsets)
+    )
+    freedom = functools.reduce(
+        operator.mul, [pl.when(is_random[f]).then(pl.col(f"n_{f}") - 1).otherwise(1) for f in factors]
+    )
+    variance = pl.when(pl.any_horizontal(*is_random.values())).then(-distinct_pairs / (pl.col("__rows") * freedom))
+    return groups.select(*by, "estimate", variance.alias("variance"), *[f"n_{f}" for f in factors])
+
+
+def verify_unit(score: Score, unit: str) -> None:
+    """Check that the unit is a BY condition of the Score."""
+    if unit in score.by:
+        return
+    if unit == score.on or unit in score.across:
+        role = "the ON" if unit == score.on else "an ACROSS"
+        msg = (
+            f"{unit!r} is {role} condition of the task, but the unit must be a BY condition: with ACROSS, every cell "
+            f"involves two {unit}s, so they are not independent units. Use `fastabx.stats.bootstrap_details` instead."
+        )
+        raise InvalidUnitError(msg)
+    msg = f"{unit!r} is not a condition of the task. Its BY conditions are: {score.by}."
+    raise InvalidUnitError(msg)
+
+
+def compare(
+    scores_1: Score | Sequence[Score],
+    scores_2: Score | Sequence[Score],
+    *,
+    unit: str = "speaker",
+    levels: Sequence[tuple[str, ...] | str] | None = None,
+    symmetric: bool = False,
+) -> pl.DataFrame:
+    """Compare two groups of models: mean difference of their ABX error rates, and its unbiased variance.
+
+    Each Score is first collapsed with ``score.details(levels=levels, symmetric=symmetric)``, which averages the
+    ``levels`` within each unit (e.g. the contexts within each speaker). With ``E1[u, m]`` and ``E2[u, m]`` the
+    resulting error rates of the models of each group, the estimate is the mean of ``E1[u, a] - E2[u, j]`` over every
+    unit ``u``, model ``a`` of the first group and model ``j`` of the second, and the variance is the one of
+    :py:func:`crossed_mean` with the factors ``unit``, ``model_1`` and ``model_2``. This is the estimator of Schatz
+    et al. (PNAS, Supplementary Materials and Methods 4), with ``symmetric=True`` and the contexts as ``levels``.
+
+    The conditions left after ``levels``, besides the unit, define one comparison per group: for instance, one per
+    contrast. Averaging the contrast as well in ``levels`` gives a single comparison.
+
+    With a single model in a group, that factor is treated as fixed: the variance is then conditional on that
+    model. For instance, comparing one model to one other gives the variance over units only. Cells with no valid
+    triplet (constraints) are left out.
+
+    The test itself is left to SciPy: ``z = estimate / sqrt(variance)`` is asymptotically normal, so
+    ``p = 2 * scipy.stats.norm.sf(abs(z))``, and ``scipy.stats.false_discovery_control`` corrects for multiple
+    comparisons.
+
+    :param scores_1: The Scores of the first group of models, or a single Score.
+    :param scores_2: The Scores of the second group of models, or a single Score. Every Score must share the same
+        groups, e.g. by being scored on the same Task.
+    :param unit: The BY condition whose values are the independent units, e.g. the speakers.
+    :param levels: The conditions to average within each unit, as in :py:meth:`.Score.details`.
+    :param symmetric: Whether to merge the two directions of each contrast first, as in :py:meth:`.Score.details`.
+    :returns: One row per group: the conditions left after ``levels`` besides the unit, ``estimate`` (group 1 minus
+        group 2), ``variance``, and the numbers of units and of models, ``n_<unit>``, ``n_model_1`` and ``n_model_2``.
+    """
+    sides = [[scores] if isinstance(scores, Score) else list(scores) for scores in (scores_1, scores_2)]
+    if not all(sides):
+        msg = "Each group needs at least one Score."
+        raise MismatchedScoresError(msg)
+    tables: list[list[pl.DataFrame]] = [[], []]
+    reference = None
+    for side, scores in enumerate(sides):
+        for model, score in enumerate(scores):
+            verify_unit(score, unit)
+            details = score.details(levels=levels, symmetric=symmetric)
+            if unit not in details.columns:
+                msg = f"The unit {unit!r} is averaged over in `levels`: keep it to compare the models unit by unit."
+                raise InvalidUnitError(msg)
+            details = details.filter(pl.col("score").is_not_null()).drop("size")
+            keys = details.drop("score")
+            if reference is None:
+                reference = keys.sort(keys.columns)
+            elif keys.columns != reference.columns or not keys.sort(keys.columns).equals(reference):
+                msg = (
+                    "The Scores do not have the same groups. They must come from Tasks with the same conditions and "
+                    "labels, and be collapsed with the same `levels`."
+                )
+                raise MismatchedScoresError(msg)
+            tables[side].append(details.with_columns(model=pl.lit(model, dtype=pl.Int64)))
+    assert reference is not None
+    keys = reference.columns
+    first = pl.concat(tables[0]).rename({"score": "__score_1", "model": "model_1"})
+    second = pl.concat(tables[1]).rename({"score": "__score_2", "model": "model_2"})
+    paired = first.join(second, on=keys, nulls_equal=True).with_columns(
+        __difference=pl.col("__score_1") - pl.col("__score_2")
+    )
+    return crossed_mean(
+        paired, factors=[unit, "model_1", "model_2"], value="__difference", by=[k for k in keys if k != unit]
+    )
