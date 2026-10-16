@@ -19,7 +19,6 @@ from fastabx.utils import display_name, hide_progress, max_score_chunk_rows, pre
 from fastabx.verify import format_score_levels, verify_score_levels
 
 __all__ = [
-    "BootstrapConstraintsError",
     "BootstrapSubsampledTaskError",
     "CollapseError",
     "EmptyScoreError",
@@ -75,16 +74,6 @@ class IncompatibleNormalizationError(Exception):
             f"The dataset has been L2-normalized (with a singularity border) by a previous cosine/angular "
             f"Score and its features are no longer in their original space. Computing {distance_name!r} on it "
             f"would be silently wrong. Build a fresh Dataset/Task for this distance."
-        )
-
-
-class BootstrapConstraintsError(Exception):
-    """Bootstrap and constraints cannot be combined yet."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            "`bootstrap` and `constraints` cannot be used together: the per-triplet constraint mask is indexed "
-            "by position in the cell, and the bootstrap reweights the items behind those positions."
         )
 
 
@@ -262,8 +251,6 @@ class Score:
             task.dataset.normalize_()
         elif task.dataset.accessor.is_normalized:
             raise IncompatibleNormalizationError(display_name(distance_name))
-        if bootstrap is not None and constraints is not None:
-            raise BootstrapConstraintsError
         if bootstrap is not None and task.is_subsampled:
             raise BootstrapSubsampledTaskError
         reducer = BootstrapReducer(len(task), bootstrap) if bootstrap is not None else None

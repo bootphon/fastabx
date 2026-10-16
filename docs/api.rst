@@ -241,7 +241,6 @@ Building a Task
 Scoring
 -------
 
-.. autoexception:: fastabx.BootstrapConstraintsError
 .. autoexception:: fastabx.BootstrapSubsampledTaskError
 .. autoexception:: fastabx.CollapseError
 .. autoexception:: fastabx.EmptyScoreError

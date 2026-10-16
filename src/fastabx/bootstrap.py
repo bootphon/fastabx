@@ -8,7 +8,9 @@ row indices. That representation is what makes the whole thing tractable:
 - excluding the degenerate ``x is a`` comparisons is automatic. When indices are duplicated instead, an item
   drawn twice lands at two positions and the ``d(x, a) = 0`` off-diagonal pairs between them survive the
   positional diagonal exclusion and are always scored correct, which biases the score. Over unique pools the
-  diagonal *is* the identity exclusion, so the estimator stays the U-statistic it is meant to be.
+  diagonal *is* the identity exclusion, so the estimator stays the U-statistic it is meant to be;
+- constraints keep working: their per-triplet mask is indexed by the same unique items, so a replicate only
+  reweights the valid triplets of the point estimate.
 
 Weights are drawn per *pool*, not per cell: cells that share an item pool (the same ``on``/``by``/``across``
 label group appears as the A pool of one cell and the B pool of another) get the same draw within a replicate.
@@ -92,7 +94,23 @@ class Bootstrap:
         return weights
 
 
-def weighted_counts(dxa: Tensor, dxb_all: Tensor, wx: Tensor, wa: Tensor) -> Tensor:
+def contract_xa(values: Tensor, wx: Tensor, wa: Tensor) -> Tensor:
+    """Contract a ``(nx, na, chunk)`` tensor against the X and A multiplicities of every replicate.
+
+    :returns: A ``(n_replicates, chunk)`` tensor: every ``(x, a)`` term counted ``wx[r, x] * wa[r, a]`` times.
+    """
+    nx, na, chunk = values.size()
+    # (n_rep, nx) @ (nx, na * chunk) -> (n_rep, na, chunk), then contract the A axis against wa.
+    over_x = (wx @ values.reshape(nx, -1)).view(wx.size(0), na, chunk)
+    return torch.bmm(wa.unsqueeze(1), over_x).squeeze(1)
+
+
+def chunk_width(nx: int, na: int, n_rep: int) -> int:
+    """Return the number of B columns per chunk, keeping the intermediates within :py:func:`.bootstrap_chunk_elems`."""
+    return max(1, bootstrap_chunk_elems() // max(1, na * max(nx, n_rep)))
+
+
+def weighted_counts(dxa: Tensor, dxb_all: Tensor, wx: Tensor, wa: Tensor, mask: Tensor | None = None) -> Tensor:
     """Per-replicate, per-B-column ABX contribution, weighted by the bootstrap multiplicities of X and A.
 
     The unweighted :py:func:`fastabx.group.grouped_contributions` sums ``0.5 * (1 - sign(dxa - dxb))`` over the
@@ -107,18 +125,39 @@ def weighted_counts(dxa: Tensor, dxb_all: Tensor, wx: Tensor, wa: Tensor) -> Ten
     :param dxb_all: The concatenation of every cell's B columns, ``(nx, sum(b_rows))``.
     :param wx: The ``(n_replicates, nx)`` X multiplicities.
     :param wa: The ``(n_replicates, na)`` A multiplicities.
+    :param mask: The optional ``(nx, na, sum(b_rows))`` constraint mask: invalid triplets contribute 0.
     :returns: A ``(n_replicates, sum(b_rows))`` tensor of weighted half-integer counts.
     """
     nx, na = dxa.size()
     nb, n_rep = dxb_all.size(1), wx.size(0)
     out = dxb_all.new_zeros((n_rep, nb))
-    width = max(1, bootstrap_chunk_elems() // max(1, na * max(nx, n_rep)))
+    width = chunk_width(nx, na, n_rep)
     for start in range(0, nb, width):
         end = min(start + width, nb)
         contribution = 0.5 * (1 - torch.sign(dxa.unsqueeze(2) - dxb_all[:, start:end].unsqueeze(1)))
-        # (n_rep, nx) @ (nx, na * chunk) -> (n_rep, na, chunk), then contract the A axis against wa.
-        over_x = (wx @ contribution.reshape(nx, -1)).view(n_rep, na, end - start)
-        out[:, start:end] = torch.bmm(wa.unsqueeze(1), over_x).squeeze(1)
+        if mask is not None:
+            contribution *= mask[:, :, start:end]
+        out[:, start:end] = contract_xa(contribution, wx, wa)
+    return out
+
+
+def weighted_valid(mask: Tensor, wx: Tensor, wa: Tensor) -> Tensor:
+    """Per-replicate, per-B-column number of valid ``(x, a)`` pairs, weighted by the multiplicities of X and A.
+
+    The constrained counterpart of the ``(x, a)`` pair count: the mask already excludes ``x is a`` in symmetric
+    groups, so copies of a drawn item never pair with each other.
+
+    :param mask: The ``(nx, na, sum(b_rows))`` constraint mask.
+    :param wx: The ``(n_replicates, nx)`` X multiplicities.
+    :param wa: The ``(n_replicates, na)`` A multiplicities.
+    :returns: A ``(n_replicates, sum(b_rows))`` tensor.
+    """
+    nx, na, nb = mask.size()
+    out = wx.new_zeros((wx.size(0), nb))
+    width = chunk_width(nx, na, wx.size(0))
+    for start in range(0, nb, width):
+        end = min(start + width, nb)
+        out[:, start:end] = contract_xa(mask[:, :, start:end].to(wx.dtype), wx, wa)
     return out
 
 
@@ -157,16 +196,20 @@ class BootstrapReducer:
             np.concatenate([self.bootstrap.weights(index_b) for index_b in index_b_blocks], axis=1)
         ).to(device=device, dtype=dtype)
 
-        counts = weighted_counts(dxa, distances[:, na:], wx, wa)
-        # Number of (x, a) pairs per replicate, excluding x is a when X and A are the same pool.
-        pairs = wx.sum(1).square() - wx.square().sum(1) if is_symmetric else wx.sum(1) * wa.sum(1)
+        counts = weighted_counts(dxa, distances[:, na:], wx, wa, group.mask)
 
         n_cells = len(group.positions)
         cell_ids = torch.from_numpy(np.repeat(np.arange(n_cells), group.rows[1:])).to(device)
         numerator = counts.new_zeros((counts.size(0), n_cells)).index_add_(1, cell_ids, counts * wb_all)
-        b_drawn = wb_all.new_zeros((wb_all.size(0), n_cells)).index_add_(1, cell_ids, wb_all)
-
-        denominator = pairs.unsqueeze(1) * b_drawn
+        if group.mask is None:
+            # Number of (x, a) pairs per replicate, excluding x is a when X and A are the same pool.
+            pairs = wx.sum(1).square() - wx.square().sum(1) if is_symmetric else wx.sum(1) * wa.sum(1)
+            b_drawn = wb_all.new_zeros((wb_all.size(0), n_cells)).index_add_(1, cell_ids, wb_all)
+            denominator = pairs.unsqueeze(1) * b_drawn
+        else:
+            # With constraints, the valid (x, a) pairs depend on b: count the valid triplets instead.
+            valid_pairs = weighted_valid(group.mask, wx, wa)
+            denominator = valid_pairs.new_zeros(numerator.size()).index_add_(1, cell_ids, valid_pairs * wb_all)
         valid = denominator > 0
         scores = torch.where(valid, 1 - numerator / denominator, torch.nan)
         sizes = torch.where(valid, denominator, torch.nan)

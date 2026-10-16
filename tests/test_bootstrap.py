@@ -6,14 +6,15 @@ import pytest
 import torch
 
 from fastabx import Bootstrap, Dataset, InMemoryAccessor, Score, Task
-from fastabx.bootstrap import pool_key, weighted_counts
-from fastabx.constraints import constraints_all_different
-from fastabx.score import BootstrapConstraintsError, BootstrapSubsampledTaskError, NoBootstrapError
+from fastabx.bootstrap import pool_key, weighted_counts, weighted_valid
+from fastabx.score import BootstrapSubsampledTaskError, NoBootstrapError
 from fastabx.stats import bootstrap_collapse
 from fastabx.subsample import Subsampler
 
 # How far the bootstrap SD may drift from the true sampling SD before the calibration test fails.
 SD_RATIO_BOUNDS = (0.5, 2.0)
+# X and A from different contexts, and B from the context of X: the valid (x, a) pairs depend on b.
+CONSTRAINTS = [pl.col("context_a") != pl.col("context_x"), pl.col("context_b") == pl.col("context_x")]
 
 
 def _dataset(n: int = 60, d: int = 8, seed: int = 0) -> Dataset:
@@ -33,21 +34,27 @@ def _brute_force_cell(
     wx: np.ndarray,
     wa: np.ndarray,
     wb: np.ndarray,
+    valid: np.ndarray | None = None,
 ) -> float:
-    """Weighted ABX error rate of one symmetric cell, computed with explicit Python loops."""
+    """Weighted ABX error rate of one symmetric cell, computed with explicit Python loops.
+
+    ``valid`` is an optional ``(na, na, nb)`` mask of the triplets allowed by constraints.
+    """
     dxa = torch.cdist(xa, xa)
     dxb = torch.cdist(xa, b)
-    num = 0.0
+    num = den = 0.0
     for x in range(len(xa)):
         for a in range(len(xa)):
             if x == a:
                 continue
             for bi in range(len(b)):
+                if valid is not None and not valid[x, a, bi]:
+                    continue
                 delta = (dxa[x, a] - dxb[x, bi]).item()
                 s = 1.0 if delta < 0 else (0.5 if delta == 0 else 0.0)
                 num += wx[x] * wa[a] * wb[bi] * s
-    pairs = sum(wx[x] * wa[a] for x in range(len(xa)) for a in range(len(xa)) if x != a)
-    return 1 - num / (pairs * wb.sum())
+                den += wx[x] * wa[a] * wb[bi]
+    return 1 - num / den if den > 0 else float("nan")
 
 
 def test_weighted_counts_matches_brute_force() -> None:
@@ -282,11 +289,69 @@ def test_bootstrap_on_subsampled_task_raises() -> None:
     assert not Task(_dataset(), on="phone", by=["speaker"], subsampler=Subsampler(None, None)).is_subsampled
 
 
-def test_bootstrap_with_constraints_raises() -> None:
-    dataset = _dataset()
+@pytest.mark.parametrize("across", [False, True])
+def test_identity_weights_with_constraints_reproduce_the_point_estimate(across: bool) -> None:  # ruff: ignore[boolean-type-hint-positional-argument]
+    """Weights of 1 everywhere must give the constrained point estimate, null cells included."""
+    by, across_ = ([], ["speaker"]) if across else (["speaker"], [])
+    task = Task(_dataset(), on="phone", by=by, across=across_)
+    # Every cell whose X comes from s2 is left with no valid triplet.
+    constraints = [*CONSTRAINTS, pl.col("speaker_x") == "s1"]
+    bootstrap = Bootstrap(2, seed=0)
+    for column in ("index_x", "index_a", "index_b"):
+        for pool in task.cells[column].to_list():
+            bootstrap._weights[pool_key(pool)] = np.ones((2, len(pool)), dtype=np.int32)  # ruff: ignore[private-member-access]
+    score = Score(task, "euclidean", constraints=constraints, bootstrap=bootstrap)
+    scores, sizes = score.replicates
+    point = score.cells.select(pl.col("score", "size").cast(pl.Float64).fill_null(np.nan)).to_numpy()
+    assert np.isnan(point[:, 0]).any()
+    assert not np.isnan(point[:, 0]).all()
+    for replicate in range(2):
+        assert np.allclose(scores[:, replicate], point[:, 0], atol=1e-6, equal_nan=True)
+        assert np.allclose(sizes[:, replicate], point[:, 1], equal_nan=True)
+
+
+def _constrained_mask(contexts: np.ndarray, index_a: list[int], index_b: list[int]) -> np.ndarray:
+    """``(na, na, nb)`` mask of :data:`CONSTRAINTS` in a symmetric cell (X is drawn from the A pool)."""
+    context_a, context_b = contexts[index_a], contexts[index_b]
+    return (context_a[:, None, None] != context_a[None, :, None]) & (
+        context_b[None, None, :] == context_a[:, None, None]
+    )
+
+
+def test_constrained_bootstrap_cell_score_matches_brute_force() -> None:
+    """End-to-end: with constraints, a replicate only reweights the valid triplets of each cell."""
+    dataset = _dataset(n=30, d=5, seed=3)
+    contexts = dataset.labels["context"].to_numpy()
     task = Task(dataset, on="phone", by=["speaker"])
-    with pytest.raises(BootstrapConstraintsError):
-        Score(task, "euclidean", constraints=constraints_all_different("context"), bootstrap=Bootstrap(2))
+    bootstrap = Bootstrap(6, seed=7)
+    scores = Score(task, "euclidean", constraints=CONSTRAINTS, bootstrap=bootstrap).replicates[0]
+
+    assert isinstance(dataset.accessor, InMemoryAccessor)
+    data = dataset.accessor.data
+    for cell in range(len(task)):
+        index_a = task.cells[cell, "index_a"].to_list()
+        index_b = task.cells[cell, "index_b"].to_list()
+        wa, wb = bootstrap.weights(tuple(index_a)), bootstrap.weights(tuple(index_b))
+        valid = _constrained_mask(contexts, index_a, index_b)
+        xa = data[index_a].squeeze(1) if data.ndim == 3 else data[index_a]
+        b = data[index_b].squeeze(1) if data.ndim == 3 else data[index_b]
+        for replicate in range(6):
+            assert scores[cell, replicate] == pytest.approx(
+                _brute_force_cell(xa, b, wa[replicate], wa[replicate], wb[replicate], valid), abs=1e-5, nan_ok=True
+            )
+
+
+def test_weighted_counts_with_a_full_mask_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    rng = np.random.default_rng(2)
+    dxa = torch.from_numpy(rng.standard_normal((4, 5)).astype(np.float32))
+    dxb = torch.from_numpy(rng.standard_normal((4, 9)).astype(np.float32))
+    wx = torch.from_numpy(rng.integers(0, 3, (3, 4)).astype(np.float32))
+    wa = torch.from_numpy(rng.integers(0, 3, (3, 5)).astype(np.float32))
+    mask = torch.ones((4, 5, 9), dtype=torch.bool)
+    monkeypatch.setenv("FASTABX_BOOTSTRAP_CHUNK_ELEMS", "1")
+    assert torch.equal(weighted_counts(dxa, dxb, wx, wa, mask), weighted_counts(dxa, dxb, wx, wa))
+    expected = (wx.sum(1) * wa.sum(1)).unsqueeze(1).expand(-1, 9)
+    assert torch.equal(weighted_valid(mask, wx, wa), expected)
 
 
 @pytest.mark.parametrize("n_replicates", [0, -1, 2.5, True])

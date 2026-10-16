@@ -108,27 +108,29 @@ every speaker ``u``, model ``a`` of the first group and model ``j`` of the secon
 Testing
 -------
 
-``z = estimate / sqrt(variance)`` is asymptotically normal. The two-sided test of the paper, with the
-Benjamini-Yekutieli correction for correlated comparisons, is:
+``z = estimate / sqrt(variance)`` is asymptotically normal, which gives a two-sided p-value. When the variance is
+negative (its unbiased estimate can fall below 0: rare with many speakers and models, common with few) or
+``null`` (no factor with two levels), there is no valid test. Count the comparison as not significant rather than
+dropping it, so that a correction for multiple comparisons still covers it:
 
 .. code-block:: python
 
+   import numpy as np
    import scipy.stats
 
-   # null when the variance is negative or null: there is no valid test
-   differences = differences.with_columns(z=(pl.col("estimate") / pl.col("variance").sqrt()).fill_nan(None))
-   # a comparison with no valid test stays in the family, with p = 1
-   p_value = 2 * scipy.stats.norm.sf(differences["z"].abs().fill_null(0).to_numpy())
+   def two_sided_p(differences: pl.DataFrame) -> np.ndarray:
+       """p-value of each comparison, 1 when its variance is negative or null."""
+       z = (differences["estimate"] / differences["variance"].sqrt()).fill_nan(None)
+       return 2 * scipy.stats.norm.sf(z.abs().fill_null(0).to_numpy())
+
+   p_value = two_sided_p(differences)
    differences = differences.with_columns(
        p_value=p_value, p_adjusted=scipy.stats.false_discovery_control(p_value, method="by")
    )
 
-The variance is negative when its unbiased estimate falls below 0, which is rare with many speakers and models
-but common with only a few, and ``null`` when no factor has two levels. ``z`` is then ``null``, and the comparison is counted as
-not significant rather than dropped, so that the correction still covers it.
-
-Which comparisons belong to the same family for the correction is up to you. In the paper, it is probably every
-contrast in every combination of training and test registers: concatenate all the comparisons before adjusting.
+Use the Benjamini-Yekutieli correction (``method="by"``) rather than Benjamini-Hochberg: comparisons that share
+models and test speakers are correlated, and BY is valid under any dependence. Which comparisons to correct
+together is up to you; the next section discusses the paper's case.
 
 .. note::
    The paper's equation divides the estimate by the variance. This is a typo: the statistic divides by its
@@ -145,36 +147,58 @@ Schatz et al. report a contrast as a *robust* prediction when, in each of the 8 
 2. the difference estimated with the models trained on the full data has the same sign and a larger absolute
    value.
 
-With one ``compare`` per combination, this is a few lines of polars:
+The paper does not say which comparisons the correction covers. Two readings are valid:
+
+- **(a) Every contrast in every combination**, 8 x N tests for N contrasts, then require all 8 to be
+  significant. This is probably the paper's procedure. It controls the false discovery rate of the 8 x N
+  individual tests, and is the more conservative reading.
+- **(b) One test per contrast.** Requiring significance in all 8 combinations is an *intersection-union test*:
+  its null hypothesis is "no difference in at least one combination", and it keeps its level when each
+  combination is tested at that level, with no correction across the 8 (Berger, 1982). The p-value of a contrast
+  is then the largest of its 8 p-values, and the correction covers the N contrasts only. It controls the false
+  discovery rate of the robust contrasts themselves, which is what the claim needs.
+
+Both take a few lines of polars, with one ``compare`` per combination:
 
 .. code-block:: python
 
    levels = [("prev-phone", "next-phone")]  # one comparison per contrast
-   tenth = pl.concat([
-       compare(en_tenth[r], jp_tenth[r], levels=levels, symmetric=True).with_columns(registers=pl.lit(r))
-       for r in combinations
-   ])
-   full = pl.concat([
-       compare(en_full[r], jp_full[r], levels=levels, symmetric=True).with_columns(registers=pl.lit(r))
-       for r in combinations
-   ])
-   z = (tenth["estimate"] / tenth["variance"].sqrt()).fill_nan(None)
-   p_value = 2 * scipy.stats.norm.sf(z.abs().fill_null(0).to_numpy())
-   tenth = tenth.with_columns(p_adjusted=scipy.stats.false_discovery_control(p_value, method="by"))
-   robust = (
-       tenth.join(full, on=["phone", "phone_b", "registers"], suffix="_full")
-       .group_by("phone", "phone_b")
+   contrast = ["phone", "phone_b"]
+
+   def compare_all(english, japanese):
+       """Compare the models of each register combination (dicts: combination -> Scores)."""
+       return pl.concat([
+           compare(english[r], japanese[r], levels=levels, symmetric=True).with_columns(registers=pl.lit(r))
+           for r in combinations
+       ])
+
+   tenth = compare_all(en_tenth, jp_tenth)
+   tenth = tenth.with_columns(p_value=two_sided_p(tenth))
+   tenth = tenth.with_columns(p_adjusted=scipy.stats.false_discovery_control(tenth["p_value"], method="by"))
+   per_contrast = (
+       tenth.join(compare_all(en_full, jp_full), on=[*contrast, "registers"], suffix="_full")
+       .group_by(contrast)
        .agg(
-           robust=(pl.len() == len(combinations))  # tested in every combination, with both data sizes
-           & (pl.col("p_adjusted") < 0.05).all()
+           # tested in every combination, with both data sizes, and the criterion 2
+           consistent=(pl.len() == len(combinations))
            & (pl.col("estimate").sign().n_unique() == 1)
            & (pl.col("estimate").sign() == pl.col("estimate_full").sign()).all()
-           & (pl.col("estimate_full").abs() > pl.col("estimate").abs()).all()
+           & (pl.col("estimate_full").abs() > pl.col("estimate").abs()).all(),
+           significant=(pl.col("p_adjusted") < 0.05).all(),  # (a)
+           # (b): 1 when a combination is missing, as the test needs all of them
+           p_max=pl.when(pl.len() == len(combinations)).then(pl.col("p_value").max()).otherwise(1.0),
        )
    )
+   # (a) one correction over every contrast and combination
+   robust_a = per_contrast.filter(pl.col("consistent") & pl.col("significant"))
+   # (b) one correction over the contrasts
+   p_contrast = scipy.stats.false_discovery_control(per_contrast["p_max"], method="by")
+   robust_b = per_contrast.filter(pl.col("consistent") & pl.Series(p_contrast < 0.05))
 
 With a single full-data model per language, the full-data comparison is conditional on those two models, and only
 its estimate is used, as in the paper.
+
+Berger, R. L. (1982). Multiparameter hypothesis testing and acceptance sampling. *Technometrics*, 24(4), 295-300.
 
 Closed form or bootstrap?
 =========================

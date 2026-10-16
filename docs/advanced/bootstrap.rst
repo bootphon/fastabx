@@ -167,9 +167,10 @@ the time, leaving no valid ``x != a`` pair. Those replicates are ``nan`` and ski
 same way constrained cells with no valid triplet are. Tasks made of very small cells, typically the "across"
 condition, therefore need more replicates to reach a given precision.
 
-**Constraints are not supported with token resampling.** :py:class:`.Constraints` and ``bootstrap`` cannot be
-combined: the per-triplet mask is indexed by position within the cell, while the bootstrap reweights the items
-behind those positions. Category resampling works with constraints.
+**Constraints restrict the triplets of every replicate.** With :py:class:`.Constraints`, a replicate reweights
+the valid triplets of each cell and ignores the others, so a cell with no valid triplet stays ``nan``. A cell can
+also lose all its valid triplets in some replicates only. Counting the valid triplets doubles the work spent on
+the replicates, but not on the distances, which are still computed once.
 
 Memory
 ======

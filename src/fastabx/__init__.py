@@ -24,7 +24,6 @@ from fastabx.distance import (
 )
 from fastabx.pooling import PooledDataset, PoolingName, PoolingNormalizedError, pool_dataset
 from fastabx.score import (
-    BootstrapConstraintsError,
     BootstrapSubsampledTaskError,
     CollapseError,
     EmptyScoreError,
@@ -70,7 +69,6 @@ __all__ = [
     "AlignmentName",
     "Batch",
     "Bootstrap",
-    "BootstrapConstraintsError",
     "BootstrapSubsampledTaskError",
     "Cell",
     "CollapseError",
