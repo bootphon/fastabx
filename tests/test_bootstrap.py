@@ -298,6 +298,8 @@ def test_invalid_n_replicates(n_replicates: object) -> None:
 def test_invalid_seed() -> None:
     with pytest.raises(TypeError):
         Bootstrap(10, seed="0")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="seed should be an integer >= 0"):
+        Bootstrap(10, seed=-1)
 
 
 def test_repr() -> None:

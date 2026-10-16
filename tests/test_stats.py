@@ -265,6 +265,8 @@ def test_invalid_requests() -> None:
         bootstrap_collapse(score, levels=LEVELS_BY, weighted=True, resample=["speaker"], n_replicates=2)
     with pytest.raises(TypeError):
         bootstrap_collapse(score, levels=LEVELS_BY, resample=["speaker"], n_replicates=0)
+    with pytest.raises(TypeError, match="seed should be an integer >= 0"):
+        bootstrap_collapse(score, levels=LEVELS_BY, resample=["speaker"], n_replicates=2, seed=-1)
     with_tokens = _by_score(bootstrap=Bootstrap(3))
     with pytest.raises(InvalidResampleError, match="set by the 3 token replicates"):
         bootstrap_collapse(with_tokens, levels=LEVELS_BY, n_replicates=3)

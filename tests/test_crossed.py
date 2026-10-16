@@ -384,6 +384,24 @@ def test_single_score_or_sequence() -> None:
     assert compare(first, second, levels=["context"]).equals(compare([first], (second,), levels=["context"]))
 
 
+def test_default_levels_compare_every_cell() -> None:
+    """Without ``levels``, every condition but the unit defines its own comparison."""
+    first, second = _model(0), _model(1, separation=0.5)
+    got = compare(first, second)
+    assert set(got.columns[:3]) == {"phone", "phone_b", "context"}
+    assert got["n_speaker"].unique().to_list() == [SPEAKERS]
+    assert got.equals(compare(first, second, levels=[]))
+
+
+def test_condition_named_model() -> None:
+    labels = _labels().rename({"context": "model"})
+    first = [_model(seed, labels=labels, by=["speaker", "model"]) for seed in range(2)]
+    second = [_model(seed, labels=labels, by=["speaker", "model"], separation=0.5) for seed in range(10, 12)]
+    got = compare(first, second, levels=["model"])
+    assert got.columns == ["phone", "phone_b", "estimate", "variance", "n_speaker", "n_model_1", "n_model_2"]
+    assert got.select("n_model_1", "n_model_2").unique().rows() == [(2, 2)]
+
+
 def test_identical_groups() -> None:
     """A group compared to itself has a zero mean difference; a single model compared to itself has no variance.
 
@@ -476,8 +494,13 @@ def test_mismatched_scores() -> None:
     with pytest.raises(MismatchedScoresError, match="at least one"):
         compare(score, [], levels=["context"])
     other_speakers = _model(1, labels=_labels().with_columns(pl.col("speaker").str.replace("s", "t")))
-    with pytest.raises(MismatchedScoresError, match="same groups"):
+    with pytest.raises(MismatchedScoresError, match="same valid cells"):
         compare(score, other_speakers, levels=["context"])
     extra = _model(1, labels=_labels().with_columns(extra=pl.lit("x")), by=["speaker", "context", "extra"])
-    with pytest.raises(MismatchedScoresError, match="same groups"):
+    with pytest.raises(MismatchedScoresError, match="same valid cells"):
         compare(score, extra, levels=["context"])
+    # Same groups once the contexts are averaged, but s0 has a single context: the two sides would average
+    # different cells within that speaker.
+    missing = _labels().filter((pl.col("speaker") != "s0") | (pl.col("context") == "c0"))
+    with pytest.raises(MismatchedScoresError, match="same valid cells"):
+        compare(score, _model(1, labels=missing), levels=["context"])

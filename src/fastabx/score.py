@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 import polars.selectors as cs
 from tqdm import tqdm
@@ -285,7 +284,9 @@ class Score:
         return self._cells
 
     @property
-    def replicates(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def replicates(
+        self,
+    ) -> tuple[np.ndarray[tuple[int, int], np.dtype[np.float64]], np.ndarray[tuple[int, int], np.dtype[np.float64]]]:
         """Per-cell token bootstrap replicates, as ``(scores, sizes)`` arrays of shape ``(num_cells, n_replicates)``.
 
         Rows follow the order of :py:attr:`cells`. Degenerate replicates (no valid ``x != a`` pair left after

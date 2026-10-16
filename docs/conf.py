@@ -55,6 +55,7 @@ nitpick_ignore = [
     ("py:class", "polars.dataframe.frame.DataFrame"),
     ("py:class", "fastabx.accessor.ArrayLike"),
     ("py:class", "numpy.int64"),
+    ("py:class", "numpy.float64"),
     ("py:class", "fastabx.verify.CellErrorType"),
     ("py:class", "fastabx.verify.LevelsErrorType"),
 ]

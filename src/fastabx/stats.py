@@ -28,7 +28,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 import polars.selectors as cs
 import torch
@@ -41,6 +40,7 @@ from fastabx.score import (
     canonical_contrast,
     collapse_levels,
     contrast_condition,
+    symmetrize_cells,
 )
 from fastabx.utils import bootstrap_chunk_elems
 from fastabx.verify import verify_bootstrap_params
@@ -93,7 +93,9 @@ class NestedBootstrapWarning(UserWarning):
     """Tokens and categories are both resampled, which counts the token variability twice."""
 
 
-def factor_weights(values: pl.Series, name: str, *, n_replicates: int, seed: int) -> npt.NDArray[np.int64]:
+def factor_weights(
+    values: pl.Series, name: str, *, n_replicates: int, seed: int
+) -> np.ndarray[tuple[int, int], np.dtype[np.int64]]:
     """Draw the ``(n_replicates, len(values))`` multiplicities of each value of a resampled condition.
 
     Each row is a with-replacement resample of the values, of the same size. The draw only depends on ``seed`` and
@@ -111,9 +113,9 @@ class Factor:
     """A resampled condition: its sorted values, and their multiplicities in every replicate."""
 
     values: pl.Series
-    weights: npt.NDArray[np.int64]
+    weights: np.ndarray[tuple[int, int], np.dtype[np.int64]]
 
-    def codes(self, column: pl.Series) -> npt.NDArray[np.int64]:
+    def codes(self, column: pl.Series) -> np.ndarray[tuple[int], np.dtype[np.int64]]:
         """Position of each label of ``column`` in ``values``."""
         return self.values.search_sorted(column).to_numpy().astype(np.int64)
 
@@ -130,7 +132,7 @@ class Step:
 
     ids: torch.Tensor
     n_groups: int
-    weights: list[tuple[str, npt.NDArray[np.int64]]]
+    weights: list[tuple[str, np.ndarray[tuple[int], np.dtype[np.int64]]]]
     rows: torch.Tensor | None = None
     complete: int = 0
 
@@ -153,7 +155,7 @@ def resolve_factors(
 
 def step_weights(
     frame: pl.DataFrame, averaged: Sequence[str], factors: dict[str, Factor], columns: dict[str, str]
-) -> list[tuple[str, npt.NDArray[np.int64]]]:
+) -> list[tuple[str, np.ndarray[tuple[int], np.dtype[np.int64]]]]:
     """Codes of the resampled columns among ``averaged``, for the rows of ``frame``."""
     return [(columns[c], factors[columns[c]].codes(frame[c])) for c in averaged if c in columns]
 
@@ -218,7 +220,10 @@ def collapse_plan(
 
 
 def row_weights(
-    weights: list[tuple[str, npt.NDArray[np.int64]]], factors: dict[str, Factor], replicates: slice, n_rows: int
+    weights: list[tuple[str, np.ndarray[tuple[int], np.dtype[np.int64]]]],
+    factors: dict[str, Factor],
+    replicates: slice,
+    n_rows: int,
 ) -> torch.Tensor:
     """``(n_rows, len(replicates))`` product of the multiplicities of each row's labels."""
     out = torch.ones((n_rows, replicates.stop - replicates.start), dtype=torch.float64)
@@ -242,7 +247,7 @@ def weighted_mean(scores: torch.Tensor, weights: torch.Tensor, step: Step) -> to
 
 def replicate_source(
     score: Score, *, resample: Sequence[str], n_replicates: int | None
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], int]:
+) -> tuple[np.ndarray[tuple[int, int], np.dtype[np.float64]], np.ndarray[tuple[int, int], np.dtype[np.float64]], int]:
     """Per-cell scores and sizes to collapse, either the token replicates or the point estimate, and their count."""
     if score.n_replicates > 0:
         if n_replicates is not None:
@@ -275,8 +280,8 @@ def replicate_source(
 class Replicates:
     """The resampling scheme of a bootstrap: what to collapse, and the draws of the resampled categories."""
 
-    scores: npt.NDArray[np.float64]
-    sizes: npt.NDArray[np.float64]
+    scores: np.ndarray[tuple[int, int], np.dtype[np.float64]]
+    sizes: np.ndarray[tuple[int, int], np.dtype[np.float64]]
     n_replicates: int
     cells: pl.DataFrame
     factors: dict[str, Factor]
@@ -291,7 +296,7 @@ class Replicates:
         factors, columns = resolve_factors(cells, resample, n_replicates=n_replicates, seed=seed)
         return cls(scores, sizes, n_replicates, cells, factors, columns)
 
-    def run(self, steps: list[Step], *, weighted: bool = False) -> npt.NDArray[np.float64]:
+    def run(self, steps: list[Step], *, weighted: bool = False) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
         """Apply the steps to every replicate, in chunks, and return the ``(n_groups, n_replicates)`` results."""
         n_cells, n_rep = len(self.cells), self.n_replicates
         out = np.empty((steps[-1].n_groups if steps else n_cells, n_rep), dtype=np.float64)
@@ -311,7 +316,7 @@ class Replicates:
         return out
 
     @staticmethod
-    def select(values: npt.NDArray[np.float64], chunk: slice, count: int) -> torch.Tensor:
+    def select(values: np.ndarray[tuple[int, int], np.dtype[np.float64]], chunk: slice, count: int) -> torch.Tensor:
         """Slice a ``chunk`` of replicates of ``values``, broadcasting a point estimate to every replicate."""
         return torch.from_numpy(values[:, chunk] if values.shape[1] > 1 else values).expand(-1, count)
 
@@ -324,7 +329,7 @@ def bootstrap_collapse(
     resample: Sequence[str] = (),
     n_replicates: int | None = None,
     seed: int = 0,
-) -> npt.NDArray[np.float64]:
+) -> np.ndarray[tuple[int], np.dtype[np.float64]]:
     """Bootstrap distribution of :py:meth:`.Score.collapse`, resampling tokens, categories, or both.
 
     Every replicate is collapsed with the same ``levels``/``weighted`` logic as the point estimate, so the returned
@@ -519,12 +524,19 @@ def verify_unit(score: Score, unit: str) -> None:
     raise InvalidUnitError(msg)
 
 
+def valid_cells(score: Score, *, symmetric: bool) -> pl.DataFrame:
+    """Sorted conditions of the cells of a Score with a valid score, after merging the two directions if asked."""
+    cells = symmetrize_cells(score.cells, contrast_condition(score.on)) if symmetric else score.cells
+    support = cells.filter(pl.col("score").is_not_null()).select(cs.exclude("score", "size") - INDEX_COLUMNS)
+    return support.sort(support.columns)
+
+
 def compare(
     scores_1: Score | Sequence[Score],
     scores_2: Score | Sequence[Score],
     *,
     unit: str = "speaker",
-    levels: Sequence[tuple[str, ...] | str] | None = None,
+    levels: Sequence[tuple[str, ...] | str] = (),
     symmetric: bool = False,
 ) -> pl.DataFrame:
     """Compare two groups of models: mean difference of their ABX error rates, and its unbiased variance.
@@ -548,10 +560,12 @@ def compare(
     comparisons.
 
     :param scores_1: The Scores of the first group of models, or a single Score.
-    :param scores_2: The Scores of the second group of models, or a single Score. Every Score must share the same
-        groups, e.g. by being scored on the same Task.
+    :param scores_2: The Scores of the second group of models, or a single Score. Every Score must have the same
+        valid cells, e.g. by being scored on the same Task with the same constraints, so that both groups average
+        the same cells within each unit.
     :param unit: The BY condition whose values are the independent units, e.g. the speakers.
-    :param levels: The conditions to average within each unit, as in :py:meth:`.Score.details`.
+    :param levels: The conditions to average within each unit, as in :py:meth:`.Score.details`. By default, nothing
+        is averaged: one comparison per cell left once the unit is set aside.
     :param symmetric: Whether to merge the two directions of each contrast first, as in :py:meth:`.Score.details`.
     :returns: One row per group: the conditions left after ``levels`` besides the unit, ``estimate`` (group 1 minus
         group 2), ``variance``, and the numbers of units and of models, ``n_<unit>``, ``n_model_1`` and ``n_model_2``.
@@ -565,25 +579,25 @@ def compare(
     for side, scores in enumerate(sides):
         for model, score in enumerate(scores):
             verify_unit(score, unit)
+            # Checked before collapsing: both sides must average the same cells, e.g. the same contexts per unit.
+            support = valid_cells(score, symmetric=symmetric)
+            if reference is None:
+                reference = support
+            elif support.columns != reference.columns or not support.equals(reference):
+                msg = (
+                    "The Scores do not have the same valid cells. They must come from Tasks with the same conditions "
+                    "and labels, scored with the same constraints."
+                )
+                raise MismatchedScoresError(msg)
             details = score.details(levels=levels, symmetric=symmetric)
             if unit not in details.columns:
                 msg = f"The unit {unit!r} is averaged over in `levels`: keep it to compare the models unit by unit."
                 raise InvalidUnitError(msg)
             details = details.filter(pl.col("score").is_not_null()).drop("size")
-            keys = details.drop("score")
-            if reference is None:
-                reference = keys.sort(keys.columns)
-            elif keys.columns != reference.columns or not keys.sort(keys.columns).equals(reference):
-                msg = (
-                    "The Scores do not have the same groups. They must come from Tasks with the same conditions and "
-                    "labels, and be collapsed with the same `levels`."
-                )
-                raise MismatchedScoresError(msg)
-            tables[side].append(details.with_columns(model=pl.lit(model, dtype=pl.Int64)))
-    assert reference is not None
-    keys = reference.columns
-    first = pl.concat(tables[0]).rename({"score": "__score_1", "model": "model_1"})
-    second = pl.concat(tables[1]).rename({"score": "__score_2", "model": "model_2"})
+            tables[side].append(details.with_columns(__model=pl.lit(model, dtype=pl.Int64)))
+    keys = tables[0][0].drop("score", "__model").columns
+    first = pl.concat(tables[0]).rename({"score": "__score_1", "__model": "model_1"})
+    second = pl.concat(tables[1]).rename({"score": "__score_2", "__model": "model_2"})
     paired = first.join(second, on=keys, nulls_equal=True).with_columns(
         __difference=pl.col("__score_1") - pl.col("__score_2")
     )

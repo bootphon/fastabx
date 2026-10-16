@@ -21,7 +21,6 @@ import hashlib
 from collections.abc import Sequence
 
 import numpy as np
-import numpy.typing as npt
 import torch
 from torch import Tensor
 
@@ -72,12 +71,12 @@ class Bootstrap:
         verify_bootstrap_params(n_replicates, seed=seed)
         self.n_replicates = n_replicates
         self.seed = seed
-        self._weights: dict[bytes, npt.NDArray[np.int32]] = {}
+        self._weights: dict[bytes, np.ndarray[tuple[int, int], np.dtype[np.int32]]] = {}
 
     def __repr__(self) -> str:
         return f"Bootstrap(n_replicates={self.n_replicates}, seed={self.seed})"
 
-    def weights(self, pool: Sequence[int]) -> npt.NDArray[np.int32]:
+    def weights(self, pool: Sequence[int]) -> np.ndarray[tuple[int, int], np.dtype[np.int32]]:
         """Draw the ``(n_replicates, len(pool))`` multiplicities of each item of ``pool`` in every replicate.
 
         Each row is a multinomial draw of ``len(pool)`` items over the pool, i.e. a with-replacement resample
@@ -175,6 +174,8 @@ class BootstrapReducer:
         self.scores[positions] = scores.T.double().cpu().numpy()
         self.sizes[positions] = sizes.T.double().cpu().numpy()
 
-    def finalize(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def finalize(
+        self,
+    ) -> tuple[np.ndarray[tuple[int, int], np.dtype[np.float64]], np.ndarray[tuple[int, int], np.dtype[np.float64]]]:
         """Return the ``(num_cells, n_replicates)`` scores and sizes, with ``nan`` for degenerate replicates."""
         return self.scores, self.sizes

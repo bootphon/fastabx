@@ -98,8 +98,10 @@ every speaker ``u``, model ``a`` of the first group and model ``j`` of the secon
 - The conditions left after ``levels``, besides the unit, define one comparison per group: here, one per
   contrast. Averaging the contrast as well, with ``levels=[("prev-phone", "next-phone"), ("phone", "phone_b")]``,
   gives a single comparison over all contrasts.
-- Every Score must have the same groups, typically by being scored on Tasks with the same labels. Otherwise
+- Every Score must have the same valid cells, typically by being scored on Tasks with the same labels and the
+  same constraints, so that both groups average the same contexts within each speaker. Otherwise
   :py:class:`.MismatchedScoresError` is raised.
+- Without ``levels``, nothing is averaged: there is one comparison per cell, the unit set aside.
 - With one model per group, the variance is over speakers only, conditional on the two models: this is the paired
   comparison of two models on the same test set.
 
@@ -111,14 +113,19 @@ Benjamini-Yekutieli correction for correlated comparisons, is:
 
 .. code-block:: python
 
-   import numpy as np
    import scipy.stats
 
-   z = differences["estimate"] / differences["variance"].sqrt()
-   p_value = 2 * scipy.stats.norm.sf(np.abs(z))
+   # null when the variance is negative or null: there is no valid test
+   differences = differences.with_columns(z=(pl.col("estimate") / pl.col("variance").sqrt()).fill_nan(None))
+   # a comparison with no valid test stays in the family, with p = 1
+   p_value = 2 * scipy.stats.norm.sf(differences["z"].abs().fill_null(0).to_numpy())
    differences = differences.with_columns(
-       z=z, p_value=p_value, p_adjusted=scipy.stats.false_discovery_control(p_value, method="by")
+       p_value=p_value, p_adjusted=scipy.stats.false_discovery_control(p_value, method="by")
    )
+
+The variance is negative when its unbiased estimate falls below 0, which is rare with many speakers and models
+but common with only a few, and ``null`` when no factor has two levels. ``z`` is then ``null``, and the comparison is counted as
+not significant rather than dropped, so that the correction still covers it.
 
 Which comparisons belong to the same family for the correction is up to you. In the paper, it is probably every
 contrast in every combination of training and test registers: concatenate all the comparisons before adjusting.
@@ -151,15 +158,15 @@ With one ``compare`` per combination, this is a few lines of polars:
        compare(en_full[r], jp_full[r], levels=levels, symmetric=True).with_columns(registers=pl.lit(r))
        for r in combinations
    ])
-   z = tenth["estimate"] / tenth["variance"].sqrt()
-   tenth = tenth.with_columns(
-       p_adjusted=scipy.stats.false_discovery_control(2 * scipy.stats.norm.sf(np.abs(z)), method="by")
-   )
+   z = (tenth["estimate"] / tenth["variance"].sqrt()).fill_nan(None)
+   p_value = 2 * scipy.stats.norm.sf(z.abs().fill_null(0).to_numpy())
+   tenth = tenth.with_columns(p_adjusted=scipy.stats.false_discovery_control(p_value, method="by"))
    robust = (
        tenth.join(full, on=["phone", "phone_b", "registers"], suffix="_full")
        .group_by("phone", "phone_b")
        .agg(
-           robust=(pl.col("p_adjusted") < 0.05).all()
+           robust=(pl.len() == len(combinations))  # tested in every combination, with both data sizes
+           & (pl.col("p_adjusted") < 0.05).all()
            & (pl.col("estimate").sign().n_unique() == 1)
            & (pl.col("estimate").sign() == pl.col("estimate_full").sign()).all()
            & (pl.col("estimate_full").abs() > pl.col("estimate").abs()).all()

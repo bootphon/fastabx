@@ -319,12 +319,15 @@ def verify_subsampler_params(*sizes: int | None, seed: int) -> None:
 
 
 def verify_bootstrap_params(n_replicates: int, *, seed: int) -> None:
-    """Check that the number of replicates is a positive integer."""
+    """Check that the number of replicates is a positive integer, and the seed a non-negative one."""
     if not isinstance(n_replicates, int) or isinstance(n_replicates, bool) or n_replicates < 1:
         msg = "n_replicates should be an integer >= 1"
         raise TypeError(msg)
     if not isinstance(seed, int):
         raise InputTypeError(int, type(seed))
+    if seed < 0:
+        msg = "seed should be an integer >= 0"
+        raise TypeError(msg)
 
 
 class CellErrorType(enum.Enum):
