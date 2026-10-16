@@ -23,8 +23,11 @@ Resampling speakers needs no extra scoring. Pass the conditions to resample to
 
 .. code-block:: python
 
+   import numpy as np
+   import polars as pl
+
    from fastabx import Dataset, Score, Task
-   from fastabx.stats import bootstrap_collapse, percentile_interval
+   from fastabx.stats import bootstrap_collapse
 
    dataset = Dataset.from_item("data.item", "features/", frequency=50)
    task = Task(dataset, on="phone", by=["speaker"])
@@ -32,11 +35,12 @@ Resampling speakers needs no extra scoring. Pass the conditions to resample to
    levels = [("phone", "phone_b"), "speaker"]
 
    replicates = bootstrap_collapse(score, levels=levels, resample=["speaker"], n_replicates=1000, seed=0)
-   print(score.collapse(levels=levels))          # the point estimate
-   print(percentile_interval(replicates))        # (lower, upper), 95% by default
+   print(score.collapse(levels=levels))              # the point estimate
+   print(np.nanpercentile(replicates, [2.5, 97.5]))  # 95% percentile interval
 
 Resampling tokens needs the distances, so it is done while scoring: pass a :py:class:`.Bootstrap` to
-:py:class:`.Score`, then collapse the replicates the same way.
+:py:class:`.Score`, then collapse the replicates the same way. Token replicates are used whenever the ``Score``
+has them. To resample categories only, use a ``Score`` built without a ``Bootstrap``.
 
 .. code-block:: python
 
@@ -49,6 +53,45 @@ In both cases each replicate is collapsed with exactly the same logic as :py:met
 ``levels``/``weighted`` have the same meaning. The result is a NumPy array, so you can compute whatever
 summary you want (``replicates.std()``, ...). A replicate left with no valid cell is ``nan``.
 
+Per-group replicates
+--------------------
+
+:py:func:`fastabx.stats.bootstrap_details` is to :py:meth:`.Score.details` what ``bootstrap_collapse`` is to
+:py:meth:`.Score.collapse`: it returns the score of every group left after ``levels``, in every replicate, as a
+long DataFrame with a ``replicate`` column. This is what statistics other than a plain mean need: a median over
+contrasts, a correlation with per-contrast behavioural data, or one interval per contrast.
+
+.. code-block:: python
+
+   from fastabx.stats import bootstrap_details
+
+   score = Score(task, "angular")  # no token replicates: resample the speakers only
+   per_contrast = bootstrap_details(
+       score,
+       levels=["speaker"],
+       symmetric=True,           # merge (a, b) and (b, a), as in Score.details
+       resample=["speaker"],
+       n_replicates=1000,
+   )
+   # One 95% interval per contrast
+   per_contrast.group_by("phone", "phone_b").agg(
+       low=pl.col("score").quantile(0.025), high=pl.col("score").quantile(0.975)
+   )
+
+Every resampled condition must be averaged over in ``levels``: a speaker left in the output would lose how many
+times it was drawn.
+
+The draws only depend on the seed, so two models collapsed with the same seed see the same speakers in each
+replicate. Joining their details on the conditions and ``replicate`` gives a paired comparison:
+
+.. code-block:: python
+
+   kwargs = dict(levels=["speaker"], symmetric=True, resample=["speaker"], n_replicates=1000, seed=0)
+   paired = bootstrap_details(score_1, **kwargs).join(
+       bootstrap_details(score_2, **kwargs), on=["phone", "phone_b", "replicate"], suffix="_2"
+   )
+   difference = paired.with_columns(delta=pl.col("score") - pl.col("score_2"))
+
 Which one should I use?
 =======================
 
@@ -56,8 +99,8 @@ Resample the **highest random level only**. Usually that means the speakers.
 
 The token variability is already part of the spread between speakers: each speaker's score is computed from
 its own tokens. Resampling speakers therefore already accounts for the tokens, and resampling both counts
-the token variability twice and overestimates the variance. ``bootstrap_collapse`` allows it, but emits a
-:py:class:`.NestedBootstrapWarning`.
+the token variability twice and overestimates the variance. Passing ``resample`` with a ``Score`` that has
+token replicates is allowed, but emits a :py:class:`.NestedBootstrapWarning`.
 
 Resampling tokens alone is the right choice when the speakers are fixed by design, for instance to compare
 two models on a fixed benchmark.
@@ -65,7 +108,8 @@ two models on a fixed benchmark.
 .. note::
    If the statistic you care about is a mean over speakers (and :py:meth:`.Score.collapse` is), its variance
    can also be computed exactly, without any resampling. The bootstrap is most useful for statistics that are
-   not means: medians, maxima, ratios, rankings, or correlations with behavioural data.
+   not means (medians, maxima, ratios, rankings, or correlations with behavioural data) and for across-speaker
+   tasks.
 
 What gets resampled
 ===================

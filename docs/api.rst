@@ -52,7 +52,6 @@ Bootstrap
 ---------
 
 .. autoclass:: fastabx.Bootstrap
-   :members: weights
 
 See :ref:`bootstrap` for how to use it and what it does and does not measure.
 
@@ -61,7 +60,7 @@ Statistics
 
 .. autofunction:: fastabx.stats.bootstrap_collapse
 
-.. autofunction:: fastabx.stats.percentile_interval
+.. autofunction:: fastabx.stats.bootstrap_details
 
 .. autoclass:: fastabx.NestedBootstrapWarning
 
@@ -247,6 +246,7 @@ Scoring
 .. autoexception:: fastabx.NaNDistanceError
 .. autoexception:: fastabx.NoBootstrapError
 .. autoexception:: fastabx.NoConstraintsError
+.. autoexception:: fastabx.SymmetricCollapseError
 .. autoexception:: fastabx.PoolingNormalizedError
 
 ZeroSpeech ABX

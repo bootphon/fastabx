@@ -27,6 +27,7 @@ __all__ = [
     "IncompatibleNormalizationError",
     "NoBootstrapError",
     "Score",
+    "SymmetricCollapseError",
 ]
 
 
@@ -103,7 +104,59 @@ class NoBootstrapError(Exception):
     """The ``Score`` was built without a ``Bootstrap``, so there are no replicates to read."""
 
     def __init__(self) -> None:
-        super().__init__("This Score has no bootstrap replicates. Build it with `Score(..., bootstrap=Bootstrap(n))`.")
+        super().__init__(
+            "This Score has no token bootstrap replicates. Build it with `Score(..., bootstrap=Bootstrap(n))`, or "
+            "resample categories instead with the `resample` argument of the `fastabx.stats` functions."
+        )
+
+
+class SymmetricCollapseError(Exception):
+    """``symmetric=True`` needs the ON condition of the task."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "`symmetric=True` merges the (a, b) and (b, a) contrasts of the ON condition, but this Score comes from "
+            "a Task built with `Task.from_cells`, which has no ON condition."
+        )
+
+
+def canonical_contrast(on: str) -> list[pl.Expr]:
+    """Sort each ``(on, on_b)`` pair, so that the ``(a, b)`` and ``(b, a)`` cells share their labels."""
+    on_b = f"{on}_b"
+    first = pl.col(on) <= pl.col(on_b)
+    return [
+        pl.when(first).then(pl.col(on)).otherwise(pl.col(on_b)).alias(on),
+        pl.when(first).then(pl.col(on_b)).otherwise(pl.col(on)).alias(on_b),
+    ]
+
+
+def contrast_condition(on: str) -> str:
+    """Return the ON condition of a task, needed to merge the two directions of each contrast."""
+    if not on:
+        raise SymmetricCollapseError
+    return on
+
+
+def symmetrize_cells(cells: pl.DataFrame, on: str) -> pl.DataFrame:
+    """Merge the ``(a, b)`` and ``(b, a)`` cells that share every other condition into one ``(min, max)`` row.
+
+    The score is the mean of the two directions, and the size their sum. A pair is dropped when one of its directions
+    does not exist, and is null when one of them is null (no valid triplet under constraints).
+    """
+    conditions = [c for c in cells.columns if c not in {"index_a", "index_b", "index_x", "score", "size"}]
+    both = pl.col("score").count() == 2
+    return (
+        cells.select(*conditions, "score", "size")
+        .with_columns(canonical_contrast(on))
+        .group_by(conditions, maintain_order=True)
+        .agg(
+            pl.when(both).then(pl.col("score").mean()).alias("score"),
+            pl.when(both).then(pl.col("size").sum()).alias("size"),
+            pl.len().alias("__directions"),
+        )
+        .filter(pl.col("__directions") == 2)
+        .drop("__directions")
+    )
 
 
 def collapse_levels(
@@ -203,6 +256,7 @@ class Score:
     ) -> None:
         self.distance_name = distance_name
         self.alignment = alignment
+        self.on, self.by, self.across = task.on, list(task.by), list(task.across)
         distance = distance_function(distance_name)
         align = alignment_function(alignment)
         if isinstance(distance_name, str) and distance_name in {"cosine", "angular"}:
@@ -264,12 +318,21 @@ class Score:
         nested = [name for name, dtype in self.cells.schema.items() if dtype == pl.List]
         (self.cells.select(cs.exclude(nested)) if nested else self.cells).write_csv(file)
 
-    def details(self, *, levels: Sequence[tuple[str, ...] | str] | None = None) -> pl.DataFrame:
+    def details(
+        self, *, levels: Sequence[tuple[str, ...] | str] | None = None, symmetric: bool = False
+    ) -> pl.DataFrame:
         """Collapse the scored cells and return the final ABX error rates and sizes for each (A, B) pairs.
 
+        With ``symmetric=True``, the ``(a, b)`` and ``(b, a)`` cells sharing every other condition are first merged
+        into one row labelled ``(min(a, b), max(a, b))``, whose score is the mean of the two directions. A pair is
+        dropped when one of its directions does not exist (for instance when ``a`` has a single item there, so it
+        cannot be both A and X). The levels are then collapsed as usual.
+
         :param levels: List of levels to collapse. The order matters a lot.
+        :param symmetric: Whether to merge the two directions of each contrast before collapsing.
         """
-        return score_details(self.cells, levels=levels)
+        cells = symmetrize_cells(self.cells, contrast_condition(self.on)) if symmetric else self.cells
+        return score_details(cells, levels=levels)
 
     def collapse(self, *, levels: Sequence[tuple[str, ...] | str] | None = None, weighted: bool = False) -> float:
         """Collapse the scored cells into the final ABX error rate.

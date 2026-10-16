@@ -31,6 +31,7 @@ from fastabx.score import (
     IncompatibleNormalizationError,
     NoBootstrapError,
     Score,
+    SymmetricCollapseError,
 )
 from fastabx.stats import InvalidResampleError, NestedBootstrapWarning
 from fastabx.subsample import Subsampler
@@ -109,6 +110,7 @@ __all__ = [
     "PrecomputedCellsError",
     "Score",
     "Subsampler",
+    "SymmetricCollapseError",
     "Task",
     "TimesArrayDimensionError",
     "TimesArrayFrontiersError",

@@ -9,7 +9,7 @@ from fastabx import Bootstrap, Dataset, InMemoryAccessor, Score, Task
 from fastabx.bootstrap import pool_key, weighted_counts
 from fastabx.constraints import constraints_all_different
 from fastabx.score import BootstrapConstraintsError, BootstrapSubsampledTaskError, NoBootstrapError
-from fastabx.stats import bootstrap_collapse, percentile_interval
+from fastabx.stats import bootstrap_collapse
 from fastabx.subsample import Subsampler
 
 # How far the bootstrap SD may drift from the true sampling SD before the calibration test fails.
@@ -213,7 +213,7 @@ def test_confidence_interval_brackets_the_point_estimate() -> None:
     task = Task(dataset, on="phone", by=["speaker"])
     score = Score(task, "euclidean", bootstrap=Bootstrap(200, seed=0))
     point = score.collapse(levels=["phone", "speaker"])
-    low, high = percentile_interval(bootstrap_collapse(score, levels=["phone", "speaker"]))
+    low, high = np.nanpercentile(bootstrap_collapse(score, levels=["phone", "speaker"]), [2.5, 97.5])
     assert low < point < high
 
 
@@ -272,8 +272,6 @@ def test_no_bootstrap_raises() -> None:
         bootstrap_collapse(score, levels=["phone", "speaker"])
     with pytest.raises(NoBootstrapError):
         _ = score.replicates
-    with pytest.raises(NoBootstrapError):
-        bootstrap_collapse(score, levels=["phone", "speaker"], tokens=True, resample=["speaker"])
 
 
 def test_bootstrap_on_subsampled_task_raises() -> None:
